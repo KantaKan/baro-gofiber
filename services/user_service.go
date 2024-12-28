@@ -7,11 +7,14 @@ import (
 	"gofiber-baro/models"
 	"gofiber-baro/utils"
 	"log"
+	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var userCollection *mongo.Collection
@@ -61,31 +64,39 @@ func CreateUser(user models.User) (*models.User, error) {
 
 // AuthenticateUser validates credentials and generates a JWT token
 func AuthenticateUser(email, password string) (string, error) {
-	// Ensure DB connection is not nil
-	if config.DB == nil {
-		return "", errors.New("MongoDB connection is not initialized")
-	}
-
-	// Find the user by email
-	filter := bson.M{"email": email}
+	// Find the user in the database
 	var user models.User
-	err := userCollection.FindOne(context.Background(), filter).Decode(&user)
+	err := config.DB.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
 	if err != nil {
-		return "", errors.New("invalid email or password")
+		return "", errors.New("invalid credentials")
 	}
 
-	// Check the password
-	if !utils.CheckPasswordHash(password, user.Password) {
-		return "", errors.New("invalid email or password")
-	}
-
-	// Generate a JWT token
-	token, err := utils.GenerateJWT(user.ID.Hex())
+	// Compare password with stored hashed password
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		return "", errors.New("failed to generate token")
+		return "", errors.New("invalid credentials")
 	}
 
-	return token, nil
+	// Generate a JWT token with role and expiration
+	claims := jwt.MapClaims{
+		"id":    user.ID,
+		"role":  user.Role, // Add the user's role to the token
+		"exp":   time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
+	}
+
+	// Secret key to sign the token
+	jwtSecret := []byte("your_jwt_secret_key") // Make sure to use an environment variable for this key
+
+	// Create token using claims and sign with HMAC
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign the token
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		return "", errors.New("could not generate token")
+	}
+
+	return tokenString, nil
 }
 
 // GetUserByID retrieves a user by their ID

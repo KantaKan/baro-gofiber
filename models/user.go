@@ -30,11 +30,12 @@ type SessionDetails struct {
 
 // User struct with reference to reflections
 type User struct {
-    ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id"`   // MongoDB generated ID
-    FirstName     string             `bson:"first_name" json:"first_name"`
-    LastName      string             `bson:"last_name" json:"last_name"`
-    Email         string             `bson:"email" json:"email"`
-    CohortNumber  int                `bson:"cohort_number" json:"cohort_number"`
-    Reflections   []Reflection       `bson:"reflections" json:"reflections"` // This is where the reflections should be
-    Password      string             `bson:"password,omitempty" json:"password,omitempty"`
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id"`        // MongoDB generated ID
+	FirstName     string             `bson:"first_name" json:"first_name"`
+	LastName      string             `bson:"last_name" json:"last_name"`
+	Email         string             `bson:"email" json:"email"`
+	CohortNumber  int                `bson:"cohort_number" json:"cohort_number"`
+	Reflections   []Reflection       `bson:"reflections" json:"reflections"`  // This is where the reflections should be
+	Password      string             `bson:"password,omitempty" json:"password,omitempty"`
+	Role          string             `bson:"role" json:"role"`                // Add role field (admin/user)
 }

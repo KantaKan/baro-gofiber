@@ -46,7 +46,7 @@ func LoginUser(c *fiber.Ctx) error {
 		Password string `json:"password"`
 	}
 
-	// Parse JSON body into loginData struct
+	// Parse the request body into the loginData struct
 	if err := c.BodyParser(&loginData); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
@@ -56,7 +56,7 @@ func LoginUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Email and password are required")
 	}
 
-	// Authenticate the user
+	// Authenticate the user (you need to modify this function to check credentials and return role)
 	token, err := services.AuthenticateUser(loginData.Email, loginData.Password)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid credentials")
