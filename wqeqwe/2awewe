@@ -1,0 +1,40 @@
+// package models
+
+// import (
+// 	"time"
+
+// 	"go.mongodb.org/mongo-driver/bson/primitive"
+// )
+
+// // Reflection represents a reflection for a user on a specific day
+// type Reflection struct {
+//     ID         primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+//     UserID     primitive.ObjectID `bson:"user_id" json:"user_id"`
+//     Date       time.Time          `bson:"date" json:"date"`
+//     Reflection struct {
+//         TechSessions struct {
+//             SessionName []string `bson:"session_name" json:"session_name"`
+//             Happy       string   `bson:"happy" json:"happy"`
+//             Improve     string   `bson:"improve" json:"improve"`
+//         } `bson:"tech_sessions" json:"tech_sessions"`
+//         NonTechSessions struct {
+//             SessionName []string `bson:"session_name" json:"session_name"`
+//             Happy       string   `bson:"happy" json:"happy"`
+//             Improve     string   `bson:"improve" json:"improve"`
+//         } `bson:"non_tech_sessions" json:"non_tech_sessions"`
+//         Barometer string `bson:"barometer" json:"barometer"`
+//     } `bson:"reflection" json:"reflection"`
+// }
+
+// // ReflectionData contains session data for the reflection
+// type ReflectionData struct {
+// 	TechSessions    SessionDetails `bson:"tech_sessions" json:"tech_sessions"`       // Tech session details
+// 	NonTechSessions SessionDetails `bson:"non_tech_sessions" json:"non_tech_sessions"` // Non-tech session details
+// }
+
+// // SessionDetails represents the session details like "Happy" and "Improve" for each session
+// type SessionDetails struct {
+// 	SessionName []string `bson:"session_name" json:"session_name"` // List of session names
+// 	Happy       string   `bson:"happy" json:"happy"`               // Positive aspect of the session
+// 	Improve     string   `bson:"improve" json:"improve"`           // What to improve based on the session
+// }
