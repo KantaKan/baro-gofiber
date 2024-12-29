@@ -6,10 +6,8 @@ import (
 	"gofiber-baro/config"
 	"gofiber-baro/models"
 	"log"
-	"os"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -196,29 +194,4 @@ func GetUsersByBarometer(barometer string) ([]models.User, error) {
 	}
 
 	return users, nil
-}
-func GenerateJWT(user models.User) (string, error) {
-	// Load JWT_SECRET_KEY from environment variables
-	jwtSecret := os.Getenv("JWT_SECRET_KEY")
-	if jwtSecret == "" {
-		return "", errors.New("JWT_SECRET_KEY not set in environment variables")
-	}
-
-	// Create JWT claims
-	claims := jwt.MapClaims{
-		"id":   user.ID,
-		"role": user.Role, // Use the user's role in the token
-		"exp":  time.Now().Add(time.Hour * 72).Unix(),
-	}
-
-	// Create the JWT token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	// Sign the token with the secret key
-	tokenString, err := token.SignedString([]byte(jwtSecret))
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
 }
