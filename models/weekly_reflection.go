@@ -11,3 +11,9 @@ type WeekID struct {
 	Week int `bson:"week" json:"week"`
 	Year int `bson:"year" json:"year"`
 }
+
+
+type BarometerCount struct {
+	ID    string `bson:"_id"`
+	Count int    `bson:"count"`
+}

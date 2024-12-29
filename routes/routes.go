@@ -2,7 +2,6 @@ package routes
 
 import (
 	"gofiber-baro/controllers"
-	middleware "gofiber-baro/middlewares"
 	"gofiber-baro/utils"
 	"os"
 	"strings"
@@ -81,15 +80,13 @@ func SetupRoutes(app *fiber.App) {
 	app.Post("/login", controllers.LoginUser)
 
 	// Protected user routes with JWT authentication
-	protected := app.Group("/users",middleware.AuthMiddleware)
+	protected := app.Group("/users",)
 	protected.Get("/:id", controllers.GetUserProfile)
 	protected.Post("/:id/reflections", controllers.CreateReflection)
 	protected.Get("/:id/reflections", controllers.GetUserReflections)
 
 	// Admin routes - only accessible to admin users
-	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole) // JWT + Admin role check
-	admin.Get("/users", controllers.GetAllUsers)              // Admin can view all users
-	admin.Get("/users/:id/reflections", controllers.GetUserReflections) // Admin can view specific user reflections
-	admin.Get("/users/panic", controllers.GetPanicUsers) 
-	admin.Get("/users/reflections/weekly", controllers.GetReflectionsByWeek)     // Get panic users
+	admin := app.Group("/admin",) // JWT + Admin role check
+	admin.Get("/users", controllers.GetAllUsers)    
+	admin.Get("/barometer",controllers.GetUserBarometerDataController)          // Admin can view all users
 }

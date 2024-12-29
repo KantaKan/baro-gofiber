@@ -8,16 +8,6 @@ import (
 )
 
 // GetReflectionsByWeek retrieves reflections by week and sorts by Panic Zone first
-func GetReflectionsByWeek(c *fiber.Ctx) error {
-	// Call service to fetch reflections by week
-	weeklyReflections, err := services.GetReflectionsByWeek()
-	if err != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error retrieving reflections")
-	}
-
-	// Send successful response with weekly reflections
-	return utils.SendResponse(c, fiber.StatusOK, "Reflections by week retrieved", weeklyReflections)
-}
 
 // GetAllUsers retrieves all users
 func GetAllUsers(c *fiber.Ctx) error {
@@ -31,16 +21,13 @@ func GetAllUsers(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "All users retrieved", users)
 }
 
-
-func GetPanicUsers(c *fiber.Ctx) error {
-	// Call the service layer to fetch users with Panic Zone reflections
-	panicUsers, err := services.GetUsersByBarometer("Panic Zone")
+func GetUserBarometerDataController(c *fiber.Ctx) error {
+	// Call service to get the barometer data (zone counts)
+	zoneCounts, err := services.GetUserBarometerData()
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching barometer data")
 	}
 
-	// Return the list of Panic Zone users
-	return c.JSON(panicUsers)
+	// Send successful response with the zone counts
+	return utils.SendResponse(c, fiber.StatusOK, "Barometer zone counts for the day", zoneCounts)
 }

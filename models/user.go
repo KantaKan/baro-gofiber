@@ -11,11 +11,11 @@ type Reflection struct {
 	Day        string         `bson:"day" json:"day"` // Custom field for day, could be a date or unique identifier
 	UserID     primitive.ObjectID `bson:"user_id" json:"user_id"` // Reference to the user
 	Date       time.Time      `bson:"date" json:"date"`
-	Reflection ReflectionData `bson:"reflection" json:"reflection"`
+	ReflectionData ReflectionContent `bson:"reflection" json:"reflection"` // Renamed for clarity
 }
 
-// ReflectionData contains session data for the reflection
-type ReflectionData struct {
+// ReflectionContent contains session data for the reflection
+type ReflectionContent struct {
 	TechSessions    SessionDetails `bson:"tech_sessions" json:"tech_sessions"`
 	NonTechSessions SessionDetails `bson:"non_tech_sessions" json:"non_tech_sessions"`
 	Barometer       string         `bson:"barometer" json:"barometer"`
