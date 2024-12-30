@@ -59,7 +59,7 @@ func LoginUser(c *fiber.Ctx) error {
 	// Authenticate the user (you need to modify this function to check credentials and return role)
 	token, err := services.AuthenticateUser(loginData.Email, loginData.Password)
 	if err != nil {
-		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid credentials")
+		return utils.SendError(c, fiber.StatusUnauthorized, "eeeInvalid credentials")
 	}
 
 	// Send successful response with JWT token

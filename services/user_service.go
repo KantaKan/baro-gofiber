@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gofiber-baro/config"
 	"gofiber-baro/models"
 	"gofiber-baro/utils"
 	"log"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -64,40 +66,63 @@ func CreateUser(user models.User) (*models.User, error) {
 
 // AuthenticateUser validates credentials and generates a JWT token
 func AuthenticateUser(email, password string) (string, error) {
-	// Find the user in the database
-	var user models.User
-	err := config.DB.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
-	if err != nil {
-		return "", errors.New("invalid credentials")
-	}
+    // Find the user in the database
+    var user models.User
+    err := config.DB.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+    if err != nil {
+        // Log error for debugging
+        fmt.Println("Error retrieving user:", err)
+        return "", errors.New("invalid credentials")
+    }
 
-	// Compare password with stored hashed password
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-	if err != nil {
-		return "", errors.New("invalid credentials")
-	}
+    // Log user details (for debugging purposes, you may want to remove this in production)
+    fmt.Println("User retrieved:", user)
 
-	// Generate a JWT token with role and expiration
-	claims := jwt.MapClaims{
-		"id":    user.ID,
-		"role":  user.Role, // Add the user's role to the token
-		"exp":   time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
-	}
+    // Compare the provided password with the stored hashed password
+    err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+    if err != nil {
+        // Log error for debugging
+        fmt.Println("Password comparison failed:", err)
+        return "", errors.New("invalid credentials")
+    }
 
-	// Secret key to sign the token
-	jwtSecret := []byte("your_jwt_secret_key") // Make sure to use an environment variable for this key
+    // Log successful password comparison
+    fmt.Println("Password comparison succeeded")
 
-	// Create token using claims and sign with HMAC
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    // Generate JWT token
+    claims := jwt.MapClaims{
+        "id":    user.ID,
+        "role":  user.Role, // Add the user's role to the token
+        "exp":   time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
+    }
 
-	// Sign the token
-	tokenString, err := token.SignedString(jwtSecret)
-	if err != nil {
-		return "", errors.New("could not generate token")
-	}
+    // Fetch the JWT secret from environment variables
+    jwtSecret := os.Getenv("JWT_SECRET_KEY")
+    if jwtSecret == "" {
+        // Log error if secret key is missing
+        return "", errors.New("missing JWT secret key")
+    }
 
-	return tokenString, nil
+    // Log JWT secret loading (for debugging purposes, avoid printing sensitive data in production)
+    fmt.Println("JWT secret loaded")
+
+    // Create the token using the claims and sign it with HMAC
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+    // Sign the token
+    tokenString, err := token.SignedString([]byte(jwtSecret))
+    if err != nil {
+        // Log error if token signing fails
+        fmt.Println("Error signing token:", err)
+        return "", errors.New("could not generate token")
+    }
+
+    // Log successful token generation (for debugging)
+    fmt.Println("JWT token generated:", tokenString)
+
+    return tokenString, nil
 }
+
 
 // GetUserByID retrieves a user by their ID
 func GetUserByID(userID string) (*models.User, error) {
