@@ -12,7 +12,8 @@ func SetupRoutes(app *fiber.App) {
 	// Public routes
 	app.Post("/register", controllers.RegisterUser)
 	app.Post("/login", controllers.LoginUser)
-
+// Verify token route
+	app.Get("/api/verify-token", middleware.AuthMiddleware, controllers.VerifyToken)
 	// Protected user routes with JWT authentication
 	protected := app.Group("/users", middleware.AuthMiddleware)
 	protected.Get("/:id", controllers.GetUserProfile)

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	middleware "gofiber-baro/middlewares"
 	"gofiber-baro/models"
 	"gofiber-baro/services"
 	"gofiber-baro/utils"
@@ -56,15 +57,28 @@ func LoginUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Email and password are required")
 	}
 
-	// Authenticate the user (you need to modify this function to check credentials and return role)
-	token, err := services.AuthenticateUser(loginData.Email, loginData.Password)
+	// Authenticate the user (now returns token and role)
+	token, role, err := services.AuthenticateUser(loginData.Email, loginData.Password)
 	if err != nil {
-		return utils.SendError(c, fiber.StatusUnauthorized, "eeeInvalid credentials")
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid credentials")
 	}
 
-	// Send successful response with JWT token
-	return utils.SendResponse(c, fiber.StatusOK, "Login successful", map[string]string{
+	// Send successful response with JWT token and role
+	return utils.SendResponse(c, fiber.StatusOK, "Login successful", map[string]interface{}{
 		"token": token,
+		"role":  role,
+	})
+}
+
+// VerifyToken verifies the validity of the token
+func VerifyToken(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Token is valid", map[string]string{
+		"role": claims.Role,
 	})
 }
 

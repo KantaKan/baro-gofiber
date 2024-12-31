@@ -65,62 +65,63 @@ func CreateUser(user models.User) (*models.User, error) {
 }
 
 // AuthenticateUser validates credentials and generates a JWT token
-func AuthenticateUser(email, password string) (string, error) {
-    // Find the user in the database
-    var user models.User
-    err := config.DB.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
-    if err != nil {
-        // Log error for debugging
-        fmt.Println("Error retrieving user:", err)
-        return "", errors.New("invalid credentials")
-    }
+func AuthenticateUser(email, password string) (string, string, error) {
+	// Find the user in the database
+	var user models.User
+	err := config.DB.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
+	if err != nil {
+		// Log error for debugging
+		fmt.Println("Error retrieving user:", err)
+		return "", "", errors.New("invalid credentials")
+	}
 
-    // Log user details (for debugging purposes, you may want to remove this in production)
-    fmt.Println("User retrieved:", user)
+	// Log user details (for debugging purposes, you may want to remove this in production)
+	fmt.Println("User retrieved:", user)
 
-    // Compare the provided password with the stored hashed password
-    err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
-    if err != nil {
-        // Log error for debugging
-        fmt.Println("Password comparison failed:", err)
-        return "", errors.New("invalid credentials")
-    }
+	// Compare the provided password with the stored hashed password
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		// Log error for debugging
+		fmt.Println("Password comparison failed:", err)
+		return "", "", errors.New("invalid credentials")
+	}
 
-    // Log successful password comparison
-    fmt.Println("Password comparison succeeded")
+	// Log successful password comparison
+	fmt.Println("Password comparison succeeded")
 
-    // Generate JWT token
-    claims := jwt.MapClaims{
-        "id":    user.ID,
-        "role":  user.Role, // Add the user's role to the token
-        "exp":   time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
-    }
+	// Generate JWT token
+	claims := jwt.MapClaims{
+		"id":    user.ID,
+		"role":  user.Role, // Add the user's role to the token
+		"exp":   time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
+	}
 
-    // Fetch the JWT secret from environment variables
-    jwtSecret := os.Getenv("JWT_SECRET_KEY")
-    if jwtSecret == "" {
-        // Log error if secret key is missing
-        return "", errors.New("missing JWT secret key")
-    }
+	// Fetch the JWT secret from environment variables
+	jwtSecret := os.Getenv("JWT_SECRET_KEY")
+	if jwtSecret == "" {
+		// Log error if secret key is missing
+		return "", "", errors.New("missing JWT secret key")
+	}
 
-    // Log JWT secret loading (for debugging purposes, avoid printing sensitive data in production)
-    fmt.Println("JWT secret loaded")
+	// Log JWT secret loading (for debugging purposes, avoid printing sensitive data in production)
+	fmt.Println("JWT secret loaded")
 
-    // Create the token using the claims and sign it with HMAC
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	// Create the token using the claims and sign it with HMAC
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-    // Sign the token
-    tokenString, err := token.SignedString([]byte(jwtSecret))
-    if err != nil {
-        // Log error if token signing fails
-        fmt.Println("Error signing token:", err)
-        return "", errors.New("could not generate token")
-    }
+	// Sign the token
+	tokenString, err := token.SignedString([]byte(jwtSecret))
+	if err != nil {
+		// Log error if token signing fails
+		fmt.Println("Error signing token:", err)
+		return "", "", errors.New("could not generate token")
+	}
 
-    // Log successful token generation (for debugging)
-    fmt.Println("JWT token generated:", tokenString)
+	// Log successful token generation (for debugging)
+	fmt.Println("JWT token generated:", tokenString)
 
-    return tokenString, nil
+	// Return the generated token and the user's role
+	return tokenString, user.Role, nil
 }
 
 

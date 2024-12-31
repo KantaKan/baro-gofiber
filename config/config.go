@@ -37,3 +37,4 @@ func InitializeDB(mongoURI, databaseName string) error {
     DB = client.Database(databaseName)
     return nil
 }
+
