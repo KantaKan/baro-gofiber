@@ -33,17 +33,28 @@ func GetUserBarometerDataController(c *fiber.Ctx) error {
 }
 
 func GetAllReflectionsController(c *fiber.Ctx) error {
-	reflections, err := services.GetAllReflectionsWithUserInfo()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Failed to fetch reflections",
-			"error":   err.Error(),
-		})
-	}
+    page := c.QueryInt("page", 1)
+    if page < 1 {
+        page = 1
+    }
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"data":    reflections,
-	})
+    limit := c.QueryInt("limit", 10)
+    if limit < 1 {
+        limit = 10
+    }
+
+    reflections, total, err := services.GetAllReflectionsWithUserInfo(page, limit)
+    if err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Failed to fetch reflections",
+            "error":   err.Error(),
+        })
+    }
+
+    return c.JSON(fiber.Map{
+        "success": true,
+        "data":    reflections,
+        "total":   total,
+    })
 }

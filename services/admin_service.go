@@ -104,50 +104,84 @@ func GetUserBarometerData() (map[string]int, error) {
 	return zoneCounts, nil
 }
 
-func GetAllReflectionsWithUserInfo() ([]models.ReflectionWithUser, error) {
-	if config.DB == nil {
-		return nil, errors.New("MongoDB connection is not initialized")
-	}
+func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWithUser, int, error) {
+    offset := (page - 1) * limit
 
-	// Create a pipeline to join user info with reflections
-	pipeline := []bson.M{
-		{
-			"$unwind": bson.M{
-				"path": "$reflections",
-				"preserveNullAndEmptyArrays": false,
-			},
-		},
-		{
-			"$project": bson.M{
-				"_id":         "$reflections._id",
-				"user_id":     "$_id",
-				"first_name":  "$first_name",
-				"last_name":   "$last_name",
-				"jsd_number":  "$jsd_number",
-				"date":        "$reflections.date",
-				"reflection":  "$reflections.reflection",
-			},
-		},
-		{
-			"$sort": bson.M{
-				"date": -1,
-			},
-		},
-	}
+    pipeline := []bson.M{
+        {
+            "$unwind": "$reflections",
+        },
+        {
+            "$project": bson.M{
+                "first_name":  "$first_name",
+                "last_name":   "$last_name",
+                "jsd_number":  "$jsd_number",
+                "date":        "$reflections.date",
+                "reflection":  "$reflections.reflection",
+            },
+        },
+        {
+            "$sort": bson.M{
+                "date": -1,
+            },
+        },
+        {
+            "$skip": offset,
+        },
+        {
+            "$limit": limit,
+        },
+    }
 
-	// Execute the aggregation pipeline
-	cursor, err := config.DB.Collection("users").Aggregate(context.Background(), pipeline, options.Aggregate())
-	if err != nil {
-		log.Printf("Error executing aggregation: %v", err)
-		return nil, errors.New("error fetching reflections with user info")
-	}
-	defer cursor.Close(context.Background())
+    log.Printf("Executing pipeline: %+v", pipeline)
 
-	var reflectionsWithUser []models.ReflectionWithUser
-	if err := cursor.All(context.Background(), &reflectionsWithUser); err != nil {
-		log.Printf("Error decoding reflections: %v", err)
-		return nil, errors.New("error processing reflection data")
-	}
+    // Execute the aggregation pipeline
+    cursor, err := config.DB.Collection("users").Aggregate(context.Background(), pipeline, options.Aggregate())
+    if err != nil {
+        log.Printf("Error executing aggregation: %v", err)
+        return nil, 0, errors.New("error fetching reflections with user info")
+    }
+    defer cursor.Close(context.Background())
 
-	return reflectionsWithUser, nil
+    var reflectionsWithUser []models.ReflectionWithUser
+    if err := cursor.All(context.Background(), &reflectionsWithUser); err != nil {
+        log.Printf("Error decoding reflections: %v", err)
+        return nil, 0, errors.New("error processing reflection data")
+    }
+
+    log.Printf("Reflections with user info: %+v", reflectionsWithUser)
+
+    // Get the total count of reflections
+    countPipeline := []bson.M{
+        {
+            "$unwind": "$reflections",
+        },
+        {
+            "$count": "total",
+        },
+    }
+
+    log.Printf("Executing count pipeline: %+v", countPipeline)
+
+    countCursor, err := config.DB.Collection("users").Aggregate(context.Background(), countPipeline, options.Aggregate())
+    if err != nil {
+        log.Printf("Error executing count aggregation: %v", err)
+        return nil, 0, errors.New("error fetching total count of reflections")
+    }
+    defer countCursor.Close(context.Background())
+
+    var countResult []bson.M
+    if err := countCursor.All(context.Background(), &countResult); err != nil {
+        log.Printf("Error decoding count result: %v", err)
+        return nil, 0, errors.New("error processing count data")
+    }
+
+    total := 0
+    if len(countResult) > 0 {
+        total = int(countResult[0]["total"].(int32))
+    }
+
+    log.Printf("Total reflections count: %d", total)
+
+    return reflectionsWithUser, total, nil
 }
