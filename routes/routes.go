@@ -24,4 +24,6 @@ func SetupRoutes(app *fiber.App) {
 	admin := app.Group("/admin",middleware.AuthMiddleware) // JWT + Admin role check
 	admin.Get("/users", controllers.GetAllUsers)    
 	admin.Get("/barometer",controllers.GetUserBarometerDataController)          // Admin can view all users
+	admin.Get("/reflections", controllers.GetAllReflectionsController) // Admin can view all reflections
+
 }

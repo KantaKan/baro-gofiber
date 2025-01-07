@@ -31,3 +31,19 @@ func GetUserBarometerDataController(c *fiber.Ctx) error {
 	// Send successful response with the zone counts
 	return utils.SendResponse(c, fiber.StatusOK, "Barometer zone counts for the day", zoneCounts)
 }
+
+func GetAllReflectionsController(c *fiber.Ctx) error {
+	reflections, err := services.GetAllReflectionsWithUserInfo()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to fetch reflections",
+			"error":   err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"data":    reflections,
+	})
+}

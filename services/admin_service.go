@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // GetAllUsers fetches all users in the database.
@@ -101,4 +102,52 @@ func GetUserBarometerData() (map[string]int, error) {
 	}
 
 	return zoneCounts, nil
+}
+
+func GetAllReflectionsWithUserInfo() ([]models.ReflectionWithUser, error) {
+	if config.DB == nil {
+		return nil, errors.New("MongoDB connection is not initialized")
+	}
+
+	// Create a pipeline to join user info with reflections
+	pipeline := []bson.M{
+		{
+			"$unwind": bson.M{
+				"path": "$reflections",
+				"preserveNullAndEmptyArrays": false,
+			},
+		},
+		{
+			"$project": bson.M{
+				"_id":         "$reflections._id",
+				"user_id":     "$_id",
+				"first_name":  "$first_name",
+				"last_name":   "$last_name",
+				"jsd_number":  "$jsd_number",
+				"date":        "$reflections.date",
+				"reflection":  "$reflections.reflection",
+			},
+		},
+		{
+			"$sort": bson.M{
+				"date": -1,
+			},
+		},
+	}
+
+	// Execute the aggregation pipeline
+	cursor, err := config.DB.Collection("users").Aggregate(context.Background(), pipeline, options.Aggregate())
+	if err != nil {
+		log.Printf("Error executing aggregation: %v", err)
+		return nil, errors.New("error fetching reflections with user info")
+	}
+	defer cursor.Close(context.Background())
+
+	var reflectionsWithUser []models.ReflectionWithUser
+	if err := cursor.All(context.Background(), &reflectionsWithUser); err != nil {
+		log.Printf("Error decoding reflections: %v", err)
+		return nil, errors.New("error processing reflection data")
+	}
+
+	return reflectionsWithUser, nil
 }
