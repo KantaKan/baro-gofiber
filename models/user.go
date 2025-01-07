@@ -31,7 +31,7 @@ type SessionDetails struct {
 // User struct with reference to reflections
 type User struct {
 	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id"`        // MongoDB generated ID
-	JSDNumber    string             `bson:"jsd_number" json:"jsd_number"`    // JSD Number เลขที่นักเรียน
+	JSDNumber     string             `bson:"jsd_number" json:"jsd_number"`    // JSD Number เลขที่นักเรียน
 	FirstName     string             `bson:"first_name" json:"first_name"`
 	LastName      string             `bson:"last_name" json:"last_name"`
 	Email         string             `bson:"email" json:"email"`
