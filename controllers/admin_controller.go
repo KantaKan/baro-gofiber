@@ -58,3 +58,31 @@ func GetAllReflectionsController(c *fiber.Ctx) error {
         "total":   total,
     })
 }
+
+func GetChartData(c *fiber.Ctx) error {
+    chartData, err := services.GetChartData()
+    if err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch chart data"})
+    }
+
+    return c.JSON(chartData)
+}
+
+func GetBarometerData(c *fiber.Ctx) error {
+    timeRange := c.Query("timeRange", "90d")
+    // Validate timeRange
+    if timeRange != "90d" && timeRange != "30d" && timeRange != "7d" {
+        return c.Status(400).JSON(fiber.Map{
+            "error": "Invalid timeRange. Must be one of: 90d, 30d, 7d",
+        })
+    }
+
+    chartData, err := services.GetAllUsersBarometerData(timeRange)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Failed to fetch barometer data",
+        })
+    }
+
+    return c.JSON(chartData)
+}
