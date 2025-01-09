@@ -1,12 +1,15 @@
 package main
 
 import (
-	"log"
-	"os"
-
 	"gofiber-baro/config"
 	"gofiber-baro/routes"
 	"gofiber-baro/services"
+	"log"
+	"os"
+	"time"
+
+	"github.com/gofiber/fiber/v2/middleware/helmet"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -33,7 +36,25 @@ func main() {
     services.InitUserService()
 
     app := fiber.New()
+    app.Use(helmet.New(helmet.Config{
+		ContentSecurityPolicy: "default-src 'self';",
+		XSSProtection:        "1; mode=block",
+		ContentTypeNosniff:   "nosniff",
+		ReferrerPolicy:       "no-referrer",
+	}))
 
+    app.Use(limiter.New(limiter.Config{
+		Max:        100,              // Max number of requests
+		Expiration: 1 * time.Minute,  // Per minute
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP() // Rate limit by IP
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Too many requests",
+			})
+		},
+	}))
     // Configure CORS to allow localhost:5173
     app.Use(cors.New(cors.Config{
         AllowOrigins:     "http://localhost:5173", // Allow Vite development server
