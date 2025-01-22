@@ -56,6 +56,7 @@ type SessionData struct {
 	Improve    string   `json:"improve" bson:"improve"`
 }
 type ReflectionWithUser struct {
+	ID         primitive.ObjectID `json:"id" bson:"_id"`
     FirstName  string    `bson:"first_name"`
     LastName   string    `bson:"last_name"`
     JsdNumber  string    `bson:"jsd_number"`

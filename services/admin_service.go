@@ -132,6 +132,7 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 		},
 		{
 			"$project": bson.M{
+				"_id":        "$_id", // Include the ID
 				"first_name": "$first_name",
 				"last_name":  "$last_name",
 				"jsd_number": "$jsd_number",
@@ -204,6 +205,7 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 
 	return reflectionsWithUser, total, nil
 }
+
 
 func GetChartData() ([]map[string]interface{}, error) {
 	// Connect to the database
