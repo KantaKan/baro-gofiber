@@ -5,6 +5,7 @@ import (
 	"gofiber-baro/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // GetReflectionsByWeek retrieves reflections by week and sorts by Panic Zone first
@@ -85,4 +86,21 @@ func GetBarometerData(c *fiber.Ctx) error {
     }
 
     return c.JSON(chartData)
+}
+
+func GetUserWithReflections(c *fiber.Ctx) error {
+    userID := c.Params("id") // Get user ID from route parameters
+    objectID, err := primitive.ObjectIDFromHex(userID)
+    if err != nil {
+        return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+    }
+
+    // Call service to get user and reflections
+    userWithReflections, err := services.GetUserWithReflections(objectID)
+    if err != nil {
+        return utils.SendError(c, fiber.StatusInternalServerError, "Error retrieving user and reflections")
+    }
+
+    // Send successful response with user and reflections
+    return utils.SendResponse(c, fiber.StatusOK, "User and reflections retrieved", userWithReflections)
 }

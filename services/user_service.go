@@ -207,3 +207,30 @@ func GetReflections(userID primitive.ObjectID) ([]models.Reflection, error) {
 	// Return the reflections
 	return user.Reflections, nil
 }
+
+// UserWithReflections struct to hold user data and reflections
+type UserWithReflections struct {
+    User        models.User          `json:"user"`
+    Reflections []models.Reflection  `json:"reflections"`
+}
+
+func GetUserWithReflections(userID primitive.ObjectID) (*UserWithReflections, error) {
+    // Ensure DB connection is not nil
+    if config.DB == nil {
+        return nil, errors.New("MongoDB connection is not initialized")
+    }
+
+    // Find the user and retrieve reflections
+    filter := bson.M{"_id": userID}
+    var user models.User
+    err := userCollection.FindOne(context.Background(), filter).Decode(&user)
+    if err != nil {
+        return nil, errors.New("user not found")
+    }
+
+    // Return the user and reflections
+    return &UserWithReflections{
+        User:        user,
+        Reflections: user.Reflections,
+    }, nil
+}
