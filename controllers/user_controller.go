@@ -122,8 +122,11 @@ func CreateReflection(c *fiber.Ctx) error {
 	reflection.Day = reflection.Date.Format("2006-01-02")
 
 	// Call service to create the reflection
-	createdReflection, err := services.CreateReflection(objectID, reflection) // Pass both userID and reflection
+	createdReflection, err := services.CreateReflection(objectID, reflection)
 	if err != nil {
+		if err.Error() == "user has already created a reflection today" {
+			return utils.SendError(c, fiber.StatusConflict, "You have already submitted a reflection today. Please try again tomorrow.")
+		}
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error creating reflection")
 	}
 

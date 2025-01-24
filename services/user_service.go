@@ -164,10 +164,17 @@ func CreateReflection(userID primitive.ObjectID, reflection models.Reflection) (
 		return nil, errors.New("user not found")
 	}
 
-	// Initialize reflections array if not present
-	if user.Reflections == nil {
-		user.Reflections = []models.Reflection{} // Initialize as empty array
+	// Check if user has already created a reflection today
+	today := time.Now().Truncate(24 * time.Hour)
+	for _, r := range user.Reflections {
+		reflectionDate := r.CreatedAt.Truncate(24 * time.Hour)
+		if reflectionDate.Equal(today) {
+			return nil, errors.New("user has already created a reflection today")
+		}
 	}
+
+	// Set creation timestamp
+	reflection.CreatedAt = time.Now()
 
 	// Add new reflection to the user's reflections
 	user.Reflections = append(user.Reflections, reflection)

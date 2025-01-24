@@ -168,7 +168,7 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 		return nil, 0, errors.New("error processing reflection data")
 	}
 
-	log.Printf("Reflections with user info: %+v", reflectionsWithUser)
+	
 
 	// Get the total count of reflections
 	countPipeline := []bson.M{

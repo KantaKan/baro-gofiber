@@ -11,6 +11,7 @@ type Reflection struct {
 	Day        string         `bson:"day" json:"day"` // Custom field for day, could be a date or unique identifier
 	UserID     primitive.ObjectID `bson:"user_id" json:"user_id"` // Reference to the user
 	Date       time.Time      `bson:"date" json:"date"`
+	CreatedAt  time.Time      `bson:"createdAt" json:"createdAt"` // Added for daily reflection limit
 	ReflectionData ReflectionContent `bson:"reflection" json:"reflection"` // Renamed for clarity
 }
 
