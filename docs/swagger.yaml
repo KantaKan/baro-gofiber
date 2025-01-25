@@ -1,0 +1,21 @@
+basePath: /
+host: 127.0.0.1:3000
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: This is the API documentation for the Barometer application
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Barometer API
+  version: "1.0"
+paths: {}
+securityDefinitions:
+  ApiKeyAuth:
+    description: 'Enter your Bearer token in the format: Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
