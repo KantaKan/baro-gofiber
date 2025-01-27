@@ -17,33 +17,46 @@ import (
 )
 
 func main() {
-    if err := godotenv.Load(); err != nil {
-        log.Fatal("Error loading .env file")
-    }
+	// Load environment variables
+	if os.Getenv("ENVIRONMENT") != "production" {
+		// Only try to load .env file in non-production environment
+		if err := godotenv.Load(); err != nil {
+			log.Println("No .env file found, using environment variables")
+		}
+	}
 
-    mongoURI := os.Getenv("MONGO_URI")
-    databaseName := os.Getenv("DATABASE_NAME")
+	// Verify that required environment variables are set
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		log.Fatal("MONGO_URI environment variable is not set")
+	}
 
-    if mongoURI == "" || databaseName == "" {
-        log.Fatal("MONGO_URI or DATABASE_NAME not set in environment variables")
-    }
+	dbName := os.Getenv("DATABASE_NAME")
+	if dbName == "" {
+		log.Fatal("DATABASE_NAME environment variable is not set")
+	}
 
-    if err := config.InitializeDB(mongoURI, databaseName); err != nil {
-        log.Fatal("Failed to initialize database:", err)
-    }
-    log.Println("Successfully connected to MongoDB")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000" // default port
+	}
 
-    services.InitUserService()
+	if err := config.InitializeDB(mongoURI, dbName); err != nil {
+		log.Fatal("Failed to initialize database:", err)
+	}
+	log.Println("Successfully connected to MongoDB")
 
-    app := fiber.New()
-    app.Use(helmet.New(helmet.Config{
+	services.InitUserService()
+
+	app := fiber.New()
+	app.Use(helmet.New(helmet.Config{
 		ContentSecurityPolicy: "default-src 'self';",
 		XSSProtection:        "1; mode=block",
 		ContentTypeNosniff:   "nosniff",
 		ReferrerPolicy:       "no-referrer",
 	}))
 
-    app.Use(limiter.New(limiter.Config{
+	app.Use(limiter.New(limiter.Config{
 		Max:        100,              // Max number of requests
 		Expiration: 1 * time.Minute,  // Per minute
 		KeyGenerator: func(c *fiber.Ctx) string {
@@ -55,26 +68,21 @@ func main() {
 			})
 		},
 	}))
-    // Configure CORS to allow localhost:5173
-    app.Use(cors.New(cors.Config{
-        AllowOrigins:     "http://localhost:5173", // Allow Vite development server
-        AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-        AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-        AllowCredentials: true,
-        MaxAge:           3600, // Cache preflight response for 1 hour
-    }))
+	// Configure CORS to allow localhost:5173
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "http://localhost:5173", // Allow Vite development server
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowCredentials: true,
+		MaxAge:           3600, // Cache preflight response for 1 hour
+	}))
 
-    routes.SetupRoutes(app)
+	routes.SetupRoutes(app)
 
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "3000"
-    }
-
-    log.Printf("🚀 Server is running on http://localhost:%s", port)
-    log.Printf("Environment: %s", os.Getenv("ENVIRONMENT"))
-    log.Printf("MongoDB URI: %s", mongoURI[:10]+"...") // Only log the beginning for security
-    log.Printf("Database Name: %s", databaseName)
-    log.Printf("Port: %s", port)
-    log.Fatal(app.Listen(":" + port))
+	log.Printf("🚀 Server is running on http://localhost:%s", port)
+	log.Printf("Environment: %s", os.Getenv("ENVIRONMENT"))
+	log.Printf("MongoDB URI: %s", mongoURI[:10]+"...") // Only log the beginning for security
+	log.Printf("Database Name: %s", dbName)
+	log.Printf("Port: %s", port)
+	log.Fatal(app.Listen(":" + port))
 }
