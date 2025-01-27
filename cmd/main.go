@@ -80,7 +80,7 @@ func main() {
 
 	// Configure CORS
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "https://react-gen-baro.vercel.app/",        // Use environment variable
+		AllowOrigins:     "https://generation-barometer.vercel.app/",        // Use environment variable
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowCredentials: true,
