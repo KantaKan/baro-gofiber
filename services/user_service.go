@@ -93,7 +93,7 @@ func AuthenticateUser(email, password string) (string, string, error) {
 	claims := jwt.MapClaims{
 		"id":    user.ID,
 		"role":  user.Role, // Add the user's role to the token
-		"exp":   time.Now().Add(time.Hour * 72).Unix(), // Token expires in 72 hours
+		"exp":   time.Now().Add(time.Hour * 24 * 30).Unix(), // Token expires in 30 days
 	}
 
 	// Fetch the JWT secret from environment variables
