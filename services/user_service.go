@@ -52,6 +52,9 @@ func CreateUser(user models.User) (*models.User, error) {
 	}
 	user.Password = hashedPassword
 
+	// Set default role to "learner"
+	user.Role = "learner"
+
 	// Insert new user into the database
 	result, err := userCollection.InsertOne(context.Background(), user)
 	if err != nil {
