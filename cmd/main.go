@@ -68,6 +68,12 @@ func main() {
 			})
 		},
 	}))
+
+	// Add health check route before CORS middleware
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
 	// Get CORS allowed origins from environment variable, default to localhost if not set
 
 
