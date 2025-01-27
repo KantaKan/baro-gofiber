@@ -1,0 +1,561 @@
+basePath: /
+definitions:
+  models.BarometerData:
+    properties:
+      Comfort Zone:
+        type: integer
+      Panic Zone:
+        type: integer
+      Stretch Zone - Enjoying the Challenges:
+        type: integer
+      Stretch Zone - Overwhelmed:
+        type: integer
+      date:
+        type: string
+    type: object
+  models.Reflection:
+    properties:
+      createdAt:
+        description: Added for daily reflection limit
+        type: string
+      date:
+        type: string
+      day:
+        description: Custom field for day, could be a date or unique identifier
+        type: string
+      reflection:
+        allOf:
+        - $ref: '#/definitions/models.ReflectionContent'
+        description: Renamed for clarity
+      user_id:
+        description: Reference to the user
+        type: string
+    type: object
+  models.ReflectionContent:
+    properties:
+      barometer:
+        type: string
+      non_tech_sessions:
+        $ref: '#/definitions/models.SessionDetails'
+      tech_sessions:
+        $ref: '#/definitions/models.SessionDetails'
+    type: object
+  models.ReflectionWithUser:
+    properties:
+      date:
+        type: string
+      firstName:
+        type: string
+      id:
+        type: string
+      jsdNumber:
+        type: string
+      lastName:
+        type: string
+      reflection:
+        properties:
+          barometer:
+            type: string
+          nonTechSessions:
+            properties:
+              happy:
+                type: string
+              improve:
+                type: string
+              sessionName:
+                items:
+                  type: string
+                type: array
+            type: object
+          techSessions:
+            properties:
+              happy:
+                type: string
+              improve:
+                type: string
+              sessionName:
+                items:
+                  type: string
+                type: array
+            type: object
+        type: object
+    type: object
+  models.SessionDetails:
+    properties:
+      happy:
+        type: string
+      improve:
+        type: string
+      session_name:
+        items:
+          type: string
+        type: array
+    type: object
+  models.User:
+    properties:
+      _id:
+        description: MongoDB generated ID
+        type: string
+      cohort_number:
+        type: integer
+      email:
+        type: string
+      first_name:
+        type: string
+      jsd_number:
+        description: JSD Number เลขที่นักเรียน
+        type: string
+      last_name:
+        type: string
+      password:
+        type: string
+      reflections:
+        description: This is where the reflections should be
+        items:
+          $ref: '#/definitions/models.Reflection'
+        type: array
+      role:
+        description: Add role field (admin/user)
+        type: string
+    type: object
+  services.UserWithReflections:
+    properties:
+      reflections:
+        items:
+          $ref: '#/definitions/models.Reflection'
+        type: array
+      user:
+        $ref: '#/definitions/models.User'
+    type: object
+  utils.StandardResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+host: localhost:3000
+info:
+  contact:
+    email: generationth@generation.org
+    name: API Support
+  description: API Server for Generation Barometer Application
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Generation Barometer API
+  version: "1.0"
+paths:
+  /admin/barometer:
+    get:
+      description: Get statistics about user barometer data (Admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Barometer statistics retrieved
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+        "500":
+          description: Error fetching data
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get barometer statistics
+      tags:
+      - admin
+  /admin/chart-data:
+    get:
+      description: Get data for charts (Admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Chart data retrieved
+          schema:
+            items:
+              properties:
+                DailyReflection:
+                  type: integer
+                day:
+                  type: string
+              type: object
+            type: array
+        "500":
+          description: Failed to fetch chart data
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get chart data
+      tags:
+      - admin
+  /admin/reflections:
+    get:
+      description: Get all user reflections with pagination (Admin only)
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Reflections retrieved
+          schema:
+            properties:
+              data:
+                items:
+                  $ref: '#/definitions/models.ReflectionWithUser'
+                type: array
+              success:
+                type: boolean
+              total:
+                type: integer
+            type: object
+        "500":
+          description: Failed to fetch reflections
+          schema:
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+              success:
+                type: boolean
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get all reflections
+      tags:
+      - admin
+  /admin/reflections/chartday:
+    get:
+      description: Get daily barometer statistics (Admin only)
+      parameters:
+      - default: 90d
+        description: Time range (90d, 30d, 7d)
+        in: query
+        name: timeRange
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Barometer data retrieved
+          schema:
+            items:
+              $ref: '#/definitions/models.BarometerData'
+            type: array
+        "400":
+          description: Invalid time range
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+        "500":
+          description: Failed to fetch data
+          schema:
+            properties:
+              error:
+                type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get daily barometer data
+      tags:
+      - admin
+  /admin/userreflections/{id}:
+    get:
+      description: Get a specific user with all their reflections (Admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User and reflections retrieved
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/services.UserWithReflections'
+              type: object
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+        "500":
+          description: Error retrieving data
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user with reflections
+      tags:
+      - admin
+  /admin/users:
+    get:
+      description: Get a list of all users (Admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Users retrieved
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.User'
+                  type: array
+              type: object
+        "403":
+          description: Access denied
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get all users
+      tags:
+      - admin
+  /api/verify-token:
+    get:
+      description: Verify if the provided JWT token is valid
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token is valid
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  properties:
+                    role:
+                      type: string
+                  type: object
+              type: object
+        "401":
+          description: Invalid token claims
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Verify JWT token
+      tags:
+      - auth
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and get JWT token
+      parameters:
+      - description: Login credentials
+        in: body
+        name: loginData
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+            password:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Login successful
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  properties:
+                    role:
+                      type: string
+                    token:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      summary: Login user
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user in the system
+      parameters:
+      - description: User registration details
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/models.User'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User successfully registered
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+        "500":
+          description: Error creating user
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      summary: Register new user
+      tags:
+      - auth
+  /users/{id}:
+    get:
+      description: Get user profile by ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User profile retrieved
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - users
+  /users/{id}/reflections:
+    get:
+      description: Get all reflections for a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Reflections retrieved
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Reflection'
+                  type: array
+              type: object
+        "500":
+          description: Error retrieving reflections
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user reflections
+      tags:
+      - reflections
+    post:
+      consumes:
+      - application/json
+      description: Create a new reflection for a user
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Reflection data
+        in: body
+        name: reflection
+        required: true
+        schema:
+          $ref: '#/definitions/models.Reflection'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Reflection created
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Reflection'
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+        "409":
+          description: Already submitted reflection today
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Create reflection
+      tags:
+      - reflections
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: Enter your bearer token in the format **Bearer <token>**
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -42,8 +42,6 @@ type User struct {
 	Role          string             `bson:"role" json:"role"`                // Add role field (admin/user)
 }
 
-
-
 // Existing ReflectionData structure
 type ReflectionData struct {
 	Barometer       string         `json:"barometer" bson:"barometer"`
@@ -56,6 +54,7 @@ type SessionData struct {
 	Happy      string   `json:"happy" bson:"happy"`
 	Improve    string   `json:"improve" bson:"improve"`
 }
+
 type ReflectionWithUser struct {
 	ID         primitive.ObjectID `json:"id" bson:"_id"`
     FirstName  string    `bson:"first_name"`
@@ -75,6 +74,15 @@ type ReflectionWithUser struct {
         } `bson:"non_tech_sessions"`
         Barometer string `bson:"barometer"`
     } `bson:"reflection"`
+}
+
+// BarometerData represents daily barometer statistics
+type BarometerData struct {
+    Date                             string `json:"date"`
+    ComfortZone                      int    `json:"Comfort Zone"`
+    PanicZone                        int    `json:"Panic Zone"`
+    StretchZoneEnjoyingTheChallenges int    `json:"Stretch Zone - Enjoying the Challenges"`
+    StretchZoneOverwhelmed           int    `json:"Stretch Zone - Overwhelmed"`
 }
 
 

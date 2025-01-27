@@ -11,10 +11,33 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 
+	_ "gofiber-baro/docs" // This will be generated
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/swagger"
 	"github.com/joho/godotenv"
 )
+
+// @title Generation Barometer API
+// @version 1.0
+// @description API Server for Generation Barometer Application
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.email generationth@generation.org
+
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host localhost:3000
+// @BasePath /
+// @schemes http https
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter your bearer token in the format **Bearer <token>**
 
 func main() {
 	// Load environment variables
@@ -50,7 +73,7 @@ func main() {
 
 	app := fiber.New()
 	app.Use(helmet.New(helmet.Config{
-		ContentSecurityPolicy: "default-src 'self';",
+		ContentSecurityPolicy: "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:",
 		XSSProtection:        "1; mode=block",
 		ContentTypeNosniff:   "nosniff",
 		ReferrerPolicy:       "no-referrer",
@@ -88,6 +111,9 @@ func main() {
 	}))
 
 	routes.SetupRoutes(app)
+
+	// Add Swagger documentation route
+	app.Get("/swagger/*", swagger.HandlerDefault)
 
 	log.Printf("🚀 Server is running on http://localhost:%s", port)
 	log.Printf("Environment: %s", os.Getenv("ENVIRONMENT"))
