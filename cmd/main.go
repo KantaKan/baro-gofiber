@@ -69,14 +69,11 @@ func main() {
 		},
 	}))
 	// Get CORS allowed origins from environment variable, default to localhost if not set
-	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
-	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:5173" // default for local development
-	}
+
 
 	// Configure CORS
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigins,        // Use environment variable
+		AllowOrigins:     "https://react-gen-baro.vercel.app/",        // Use environment variable
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowCredentials: true,
