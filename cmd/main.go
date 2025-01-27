@@ -72,5 +72,9 @@ func main() {
     }
 
     log.Printf("🚀 Server is running on http://localhost:%s", port)
+    log.Printf("Environment: %s", os.Getenv("ENVIRONMENT"))
+    log.Printf("MongoDB URI: %s", mongoURI[:10]+"...") // Only log the beginning for security
+    log.Printf("Database Name: %s", databaseName)
+    log.Printf("Port: %s", port)
     log.Fatal(app.Listen(":" + port))
 }
