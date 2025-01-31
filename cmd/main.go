@@ -103,7 +103,7 @@ func main() {
 
 	// Configure CORS
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:5173",        // Use environment variable
+		AllowOrigins:     "https://generation-barometer.vercel.app/",        // Use environment variable
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowCredentials: true,
