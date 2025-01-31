@@ -14,6 +14,7 @@ func SetupRoutes(app *fiber.App) {
 	app.Post("/login", controllers.LoginUser)
 // Verify token route
 	app.Get("/api/verify-token", middleware.AuthMiddleware, controllers.VerifyToken)
+	
 	// Protected user routes with JWT authentication
 	protected := app.Group("/users", middleware.AuthMiddleware)
 	
@@ -26,11 +27,10 @@ func SetupRoutes(app *fiber.App) {
 	admin := app.Group("/admin",middleware.AuthMiddleware) // JWT + Admin role check
 	admin.Get("/userreflections/:id", controllers.GetUserWithReflections) // New route
 	admin.Get("/users", controllers.GetAllUsers)    
-	admin.Get("/spreadsheet-data", controllers.GetSpreadsheetData)
 	admin.Get("/barometer",controllers.GetUserBarometerDataController)          // Admin can view all users
 	admin.Get("/reflections", controllers.GetAllReflectionsController) // Admin can view all reflections
 	admin.Get("/chart-data", controllers.GetChartData)
 	admin.Get("/reflections/chartday", controllers.GetBarometerData)
-
+	
 	
 }
