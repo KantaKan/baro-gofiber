@@ -57,9 +57,30 @@ func GetSpreadsheetData() ([]models.SpreadsheetData, error) {
 
 		log.Printf("Decoded user: %+v", user) // Log the decoded user
 
+		// Initialize default values for the spreadsheet data
+		defaultData := models.SpreadsheetData{
+			ID:             user.ID.Hex(),
+			JSDNumber:      user.JSDNumber,
+			FirstName:      user.FirstName,
+			LastName:       user.LastName,
+			Email:          user.Email,
+			CohortNumber:   user.CohortNumber,
+			Password:       user.Password,
+			Role:          user.Role,
+			ReflectionDay: "N/A", // Default value if no reflection
+			ReflectionDate: "N/A", // Default value if no reflection
+			TechHappy:     "N/A", // Default value if no reflection
+			TechImprove:   "N/A", // Default value if no reflection
+			NonTechHappy:  "N/A", // Default value if no reflection
+			NonTechImprove: "N/A", // Default value if no reflection
+			Barometer:     "N/A", // Default value if no reflection
+		}
+
 		// Check if reflections are present
 		if len(user.Reflections) == 0 {
 			log.Println("No reflections found for user:", user.ID.Hex())
+			// Add the default data to the spreadsheetData
+			spreadsheetData = append(spreadsheetData, defaultData)
 			continue
 		}
 
