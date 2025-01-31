@@ -31,15 +31,18 @@ type SessionDetails struct {
 
 // User struct with reference to reflections
 type User struct {
-	ID            primitive.ObjectID `bson:"_id,omitempty" json:"_id"`        // MongoDB generated ID
-	JSDNumber     string             `bson:"jsd_number" json:"jsd_number"`    // JSD Number เลขที่นักเรียน
-	FirstName     string             `bson:"first_name" json:"first_name"`
-	LastName      string             `bson:"last_name" json:"last_name"`
-	Email         string             `bson:"email" json:"email"`
-	CohortNumber  int                `bson:"cohort_number" json:"cohort_number"`
-	Reflections   []Reflection       `bson:"reflections" json:"reflections"`  // This is where the reflections should be
-	Password      string             `bson:"password,omitempty" json:"password,omitempty"`
-	Role          string             `bson:"role" json:"role"`                // Add role field (admin/user)
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"_id"`        // MongoDB generated ID
+	JSDNumber      string             `bson:"jsd_number" json:"jsd_number"`    // JSD Number เลขที่นักเรียน
+	FirstName      string             `bson:"first_name" json:"first_name"`
+	LastName       string             `bson:"last_name" json:"last_name"`
+	Email          string             `bson:"email" json:"email"`
+	CohortNumber   int                `bson:"cohort_number" json:"cohort_number"`
+	Reflections    []Reflection       `bson:"reflections" json:"reflections"`  // This is where the reflections should be
+	Password       string             `bson:"password,omitempty" json:"password,omitempty"`
+	Role           string             `bson:"role" json:"role"`                // Add role field (admin/user)
+	ProjectGroup   string             `bson:"project_group" json:"project_group"`   // New field for project group
+	GenmateGroup   string             `bson:"genmate_group" json:"genmate_group"`   // New field for genmate group
+	ZoomName       string             `bson:"zoom_name" json:"zoom_name"`           // New field for Zoom name
 }
 
 // Existing ReflectionData structure
