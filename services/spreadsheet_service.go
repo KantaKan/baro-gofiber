@@ -4,6 +4,7 @@ import (
 	"context"
 	"gofiber-baro/config"
 	"gofiber-baro/models"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -27,6 +28,7 @@ func GetSpreadsheetData() ([]models.SpreadsheetData, error) {
 
 	cursor, err := config.DB.Collection("users").Aggregate(ctx, pipeline)
 	if err != nil {
+		log.Printf("Error during aggregation: %v", err)
 		return nil, err
 	}
 	defer cursor.Close(ctx)
@@ -47,6 +49,7 @@ func GetSpreadsheetData() ([]models.SpreadsheetData, error) {
 		}
 
 		if err := cursor.Decode(&user); err != nil {
+			log.Printf("Error decoding user: %v", err)
 			return nil, err
 		}
 
@@ -71,6 +74,10 @@ func GetSpreadsheetData() ([]models.SpreadsheetData, error) {
 			}
 			spreadsheetData = append(spreadsheetData, data)
 		}
+	}
+
+	if len(spreadsheetData) == 0 {
+		log.Println("No spreadsheet data found")
 	}
 
 	return spreadsheetData, nil
