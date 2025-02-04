@@ -88,4 +88,16 @@ type BarometerData struct {
     StretchZoneOverwhelmed           int    `json:"Stretch Zone - Overwhelmed"`
 }
 
+// EmojiZoneEntry represents a reflection entry for a specific date and its simplified zone value.
+type EmojiZoneEntry struct {
+	Date string `json:"date"`
+	Zone string `json:"zone"`
+}
+
+// EmojiZoneTableData represents one user's data with a zoomname and a list of day/zone entries.
+type EmojiZoneTableData struct {
+	ZoomName string           `json:"zoomname"`
+	Entries  []EmojiZoneEntry `json:"entries"`
+}
+
 

@@ -163,3 +163,21 @@ func GetUserWithReflections(c *fiber.Ctx) error {
 	// Send successful response with user and reflections
 	return utils.SendResponse(c, fiber.StatusOK, "User and reflections retrieved", userWithReflections)
 }
+
+// GetEmojiZoneTableDataController retrieves emoji zone table data (Admin only)
+// @Summary Get emoji zone table data
+// @Description Get users' zone reflections by date for the emoji zone table component (Admin only)
+// @Tags admin
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} utils.StandardResponse{data=[]models.EmojiZoneTableData} "Emoji zone table data retrieved"
+// @Failure 500 {object} utils.StandardResponse "Error fetching data"
+// @Router /admin/emoji-zone-table [get]
+func GetEmojiZoneTableDataController(c *fiber.Ctx) error {
+	tableData, err := services.GetEmojiZoneTableData()
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching emoji zone table data")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Emoji zone table data retrieved", tableData)
+}

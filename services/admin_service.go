@@ -7,6 +7,7 @@ import (
 	"gofiber-baro/models"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,6 +30,23 @@ type aggregateResult struct {
 		Barometer string `bson:"barometer"`
 	} `bson:"_id"`
 	Count int `bson:"count"`
+}
+
+// mapBarometerToZone converts the raw barometer string (from user reflections)
+// into one of the simplified zone IDs expected by the frontend.
+func mapBarometerToZone(barometer string) string {
+	switch strings.ToLower(barometer) {
+	case "comfort zone":
+		return "comfort"
+	case "stretch zone - enjoying the challenges":
+		return "stretch-enjoying"
+	case "stretch zone - overwhelmed":
+		return "stretch-overwhelmed"
+	case "panic zone":
+		return "panic"
+	default:
+		return "no-data"
+	}
 }
 
 // GetAllUsers fetches all users in the database.
@@ -443,5 +461,47 @@ func GetBarometerData(cursor *mongo.Cursor, startDate, endDate time.Time) (map[s
 	log.Println("Final dataMap:", dataMap)
 
 	return dataMap, nil
+}
+
+// GetEmojiZoneTableData fetches all users and processes their reflections 
+// to create a table of dates (entries) and the corresponding zone for each user.
+func GetEmojiZoneTableData() ([]models.EmojiZoneTableData, error) {
+	users, err := GetAllUsers()
+	if err != nil {
+		return nil, err
+	}
+
+	var tableData []models.EmojiZoneTableData
+	for _, user := range users {
+		// Use the user's ZoomName as their identifier.
+		data := models.EmojiZoneTableData{
+			ZoomName: user.ZoomName,
+		}
+		// Use a map to ensure that each date only has one entry per user.
+		entriesMap := make(map[string]string)
+		for _, reflection := range user.Reflections {
+			// Format the reflection date as YYYY-MM-DD.
+			dateStr := reflection.Date.Format("2006-01-02")
+			if _, exists := entriesMap[dateStr]; !exists {
+				entriesMap[dateStr] = mapBarometerToZone(reflection.ReflectionData.Barometer)
+			}
+		}
+
+		// Convert the map to a slice and sort by date.
+		var entries []models.EmojiZoneEntry
+		for date, zone := range entriesMap {
+			entries = append(entries, models.EmojiZoneEntry{
+				Date: date,
+				Zone: zone,
+			})
+		}
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Date < entries[j].Date
+		})
+		data.Entries = entries
+		tableData = append(tableData, data)
+	}
+
+	return tableData, nil
 }
 

@@ -32,5 +32,6 @@ func SetupRoutes(app *fiber.App) {
 	admin.Get("/chart-data", controllers.GetChartData)
 	admin.Get("/reflections/chartday", controllers.GetBarometerData)
 	
-	
+	// New route for the emoji zone table API
+	admin.Get("/emoji-zone-table", controllers.GetEmojiZoneTableDataController)
 }
