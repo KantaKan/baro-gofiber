@@ -20,14 +20,35 @@ import (
 // @Failure 403 {object} utils.StandardResponse "Access denied"
 // @Router /admin/users [get]
 func GetAllUsers(c *fiber.Ctx) error {
-	// Call service to fetch all users
-	users, err := services.GetAllUsers()
+	cohort := c.QueryInt("cohort", 0)
+	role := c.Query("role", "")
+	email := c.Query("email", "")
+	search := c.Query("search", "")
+	sort := c.Query("sort", "") // e.g., "first_name", "email", "created_at"
+	sortDir := c.QueryInt("sortDir", 1) // 1 for ascending, -1 for descending
+	page := c.QueryInt("page", 1)
+	if page < 1 {
+		page = 1
+	}
+	limit := c.QueryInt("limit", 40)
+	if limit < 1 {
+		limit = 40
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	users, total, err := services.GetAllUsers(cohort, role, email, search, sort, sortDir, page, limit)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error retrieving users")
 	}
 
-	// Send successful response with all users
-	return utils.SendResponse(c, fiber.StatusOK, "All users retrieved", users)
+	return utils.SendResponse(c, fiber.StatusOK, "All users retrieved", fiber.Map{
+		"users": users,
+		"total": total,
+		"page": page,
+		"limit": limit,
+	})
 }
 
 // GetUserBarometerDataController retrieves barometer statistics

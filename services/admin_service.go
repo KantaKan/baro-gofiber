@@ -49,17 +49,50 @@ func mapBarometerToZone(barometer string) string {
 	}
 }
 
-// GetAllUsers fetches all users in the database.
-func GetAllUsers() ([]models.User, error) {
+// GetAllUsers fetches users with optional filters, search, sorting, and pagination.
+func GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int) ([]models.User, int, error) {
 	if config.DB == nil {
-		return nil, errors.New("MongoDB connection is not initialized")
+		return nil, 0, errors.New("MongoDB connection is not initialized")
 	}
 
-	// Fetch all users from the database.
-	cursor, err := config.DB.Collection("users").Find(context.Background(), bson.M{})
+	filter := bson.M{}
+	if cohort > 0 {
+		filter["cohort_number"] = cohort
+	}
+	if role != "" {
+		filter["role"] = role
+	}
+	if email != "" {
+		filter["email"] = email
+	}
+	if search != "" {
+		filter["$or"] = []bson.M{
+			{"first_name": bson.M{"$regex": search, "$options": "i"}},
+			{"last_name": bson.M{"$regex": search, "$options": "i"}},
+			{"email": bson.M{"$regex": search, "$options": "i"}},
+		}
+	}
+
+	findOptions := options.Find()
+	if limit > 0 {
+		findOptions.SetLimit(int64(limit))
+	}
+	if page > 1 {
+		skip := int64((page - 1) * limit)
+		findOptions.SetSkip(skip)
+	}
+	if sort != "" {
+		direction := 1
+		if sortDir == -1 {
+			direction = -1
+		}
+		findOptions.SetSort(bson.D{{Key: sort, Value: direction}})
+	}
+
+	cursor, err := config.DB.Collection("users").Find(context.Background(), filter, findOptions)
 	if err != nil {
 		log.Printf("Error fetching users: %v", err)
-		return nil, errors.New("Error fetching users")
+		return nil, 0, errors.New("Error fetching users")
 	}
 	defer cursor.Close(context.Background())
 
@@ -75,10 +108,16 @@ func GetAllUsers() ([]models.User, error) {
 
 	if err := cursor.Err(); err != nil {
 		log.Printf("Cursor error: %v", err)
-		return nil, errors.New("Error processing cursor data")
+		return nil, 0, errors.New("Error processing cursor data")
 	}
 
-	return users, nil
+	total, err := config.DB.Collection("users").CountDocuments(context.Background(), filter)
+	if err != nil {
+		log.Printf("Error counting users: %v", err)
+		return users, 0, nil // Return users with total 0 if count fails
+	}
+
+	return users, int(total), nil
 }
 
 // GetAllReflections fetches all reflections from all users in the database.
@@ -88,7 +127,7 @@ func GetAllReflections() ([]models.Reflection, error) {
 	}
 
 	// Fetch all users to extract their reflections.
-	users, err := GetAllUsers()
+	users, _, err := GetAllUsers(0, "", "", "", "", 0, 0, 0)
 	if err != nil {
 		log.Printf("Error fetching users: %v", err)
 		return nil, errors.New("Error fetching users for reflections")
@@ -105,7 +144,7 @@ func GetAllReflections() ([]models.Reflection, error) {
 
 // GetUserBarometerData fetches and transforms user reflection data into the 4 zone counts.
 func GetUserBarometerData() (map[string]int, error) {
-	users, err := GetAllUsers()
+	users, _, err := GetAllUsers(0, "", "", "", "", 0, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +505,7 @@ func GetBarometerData(cursor *mongo.Cursor, startDate, endDate time.Time) (map[s
 // GetEmojiZoneTableData fetches all users and processes their reflections 
 // to create a table of dates (entries) and the corresponding zone for each user.
 func GetEmojiZoneTableData() ([]models.EmojiZoneTableData, error) {
-	users, err := GetAllUsers()
+	users, _, err := GetAllUsers(0, "", "", "", "", 0, 0, 0)
 	if err != nil {
 		return nil, err
 	}
