@@ -30,9 +30,9 @@ func GetAllUsers(c *fiber.Ctx) error {
 	if page < 1 {
 		page = 1
 	}
-	limit := c.QueryInt("limit", 40)
+	limit := c.QueryInt("limit", 50)
 	if limit < 1 {
-		limit = 40
+		limit = 50
 	}
 	if limit > 100 {
 		limit = 100
