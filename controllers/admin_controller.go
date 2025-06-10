@@ -16,7 +16,7 @@ import (
 // @Tags admin
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} utils.StandardResponse{data=[]models.User} "Users retrieved"
+// @Success 200 {object} object{status=string,message=string,data=object{users=[]models.User,total=integer,page=integer,limit=integer}} "Users retrieved"
 // @Failure 403 {object} utils.StandardResponse "Access denied"
 // @Router /admin/users [get]
 func GetAllUsers(c *fiber.Ctx) error {
