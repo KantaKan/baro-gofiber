@@ -123,6 +123,17 @@ func VerifyToken(c *fiber.Ctx) error {
 func GetUserProfile(c *fiber.Ctx) error {
 	userID := c.Params("id") // Get user ID from route parameters
 
+	// Extract claims from context
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	// Only allow if user is admin or accessing their own profile
+	if claims.Role != "admin" && claims.UserID.Hex() != userID {
+		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to access this user's data")
+	}
+
 	// Call the service to get user by ID
 	user, err := services.GetUserByID(userID)
 	if err != nil {
@@ -151,6 +162,17 @@ func CreateReflection(c *fiber.Ctx) error {
 	objectID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	// Extract claims from context
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	// Only allow if user is admin or posting for themselves
+	if claims.Role != "admin" && claims.UserID.Hex() != userID {
+		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to post reflection for this user")
 	}
 
 	// Parse reflection data from the request body
@@ -198,6 +220,17 @@ func GetUserReflections(c *fiber.Ctx) error {
 	objectID, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	// Extract claims from context
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	// Only allow if user is admin or accessing their own reflections
+	if claims.Role != "admin" && claims.UserID.Hex() != userID {
+		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to access this user's reflections")
 	}
 
 	// Call service to get all reflections for the user
