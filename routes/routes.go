@@ -10,7 +10,7 @@ import (
 func SetupRoutes(app *fiber.App) {
 
 	// Public routes
-	app.Post("/register", controllers.RegisterUser)
+	// app.Post("/register", controllers.RegisterUser)
 	app.Post("/login", controllers.LoginUser)
 // Verify token route
 	app.Get("/api/verify-token", middleware.AuthMiddleware, controllers.VerifyToken)
@@ -24,7 +24,7 @@ func SetupRoutes(app *fiber.App) {
 	
 	
 	// Admin routes - only accessible to admin users
-	admin := app.Group("/admin",middleware.AuthMiddleware) // JWT + Admin role check
+	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole)
 	admin.Get("/userreflections/:id", controllers.GetUserWithReflections) // New route
 	admin.Get("/users", controllers.GetAllUsers)    
 	admin.Get("/barometer",controllers.GetUserBarometerDataController)          // Admin can view all users
