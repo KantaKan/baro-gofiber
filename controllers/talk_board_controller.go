@@ -167,3 +167,22 @@ func GetPost(c *fiber.Ctx) error {
 
 	return utils.SendResponse(c, fiber.StatusOK, "Post retrieved successfully", post)
 }
+
+func RemoveReactionFromPost(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	postId, err := primitive.ObjectIDFromHex(c.Params("postId"))
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
+	}
+
+	updatedPost, err := services.RemoveReactionFromPost(postId, claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error removing reaction")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Reaction removed successfully", updatedPost)
+}

@@ -138,3 +138,27 @@ func AddReactionToComment(postId, commentId primitive.ObjectID, reaction *models
 
 	return &post, nil
 }
+
+func RemoveReactionFromPost(postId, userId primitive.ObjectID) (*models.Post, error) {
+	update := bson.M{
+		"$pull": bson.M{"reactions": bson.M{"userId": userId}},
+		"$set":  bson.M{"updatedAt": time.Now()},
+	}
+
+	result, err := talkBoardCollection.UpdateOne(context.Background(), bson.M{"_id": postId}, update)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.MatchedCount == 0 {
+		return nil, errors.New("post not found")
+	}
+
+	var post models.Post
+	err = talkBoardCollection.FindOne(context.Background(), bson.M{"_id": postId}).Decode(&post)
+	if err != nil {
+		return nil, err
+	}
+
+	return &post, nil
+}

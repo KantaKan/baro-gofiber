@@ -43,5 +43,6 @@ func SetupRoutes(app *fiber.App) {
 	board.Post("/posts", controllers.CreatePost)
 	board.Post("/posts/:postId/comments", controllers.AddComment)
 	board.Post("/posts/:postId/reactions", controllers.AddReactionToPost)
+	board.Delete("/posts/:postId/reactions", controllers.RemoveReactionFromPost)
 	board.Post("/posts/:postId/comments/:commentId/reactions", controllers.AddReactionToComment)
 }
