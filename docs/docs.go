@@ -101,6 +101,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/emoji-zone-table": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get users' zone reflections by date for the emoji zone table component (Admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get emoji zone table data",
+                "responses": {
+                    "200": {
+                        "description": "Emoji zone table data retrieved",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.StandardResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.EmojiZoneTableData"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "500": {
+                        "description": "Error fetching data",
+                        "schema": {
+                            "$ref": "#/definitions/utils.StandardResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/reflections": {
             "get": {
                 "security": [
@@ -232,6 +278,52 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/reflections/weekly": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a weekly summary of students in stressed or panic zones",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get weekly summary",
+                "responses": {
+                    "200": {
+                        "description": "Weekly summary retrieved",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.StandardResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.WeeklySummary"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "500": {
+                        "description": "Error retrieving data",
+                        "schema": {
+                            "$ref": "#/definitions/utils.StandardResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/userreflections/{id}": {
             "get": {
                 "security": [
@@ -329,6 +421,40 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Access denied",
+                        "schema": {
+                            "$ref": "#/definitions/utils.StandardResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/spreadsheet-data": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all user and reflection data formatted for spreadsheet export (Admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get spreadsheet data",
+                "responses": {
+                    "200": {
+                        "description": "Spreadsheet data retrieved",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.SpreadsheetData"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Error retrieving data",
                         "schema": {
                             "$ref": "#/definitions/utils.StandardResponse"
                         }
@@ -713,6 +839,31 @@ const docTemplate = `{
                 }
             }
         },
+        "models.EmojiZoneEntry": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "zone": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.EmojiZoneTableData": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.EmojiZoneEntry"
+                    }
+                },
+                "zoomname": {
+                    "type": "string"
+                }
+            }
+        },
         "models.Reflection": {
             "type": "object",
             "properties": {
@@ -834,6 +985,79 @@ const docTemplate = `{
                 }
             }
         },
+        "models.SpreadsheetData": {
+            "type": "object",
+            "properties": {
+                "barometer": {
+                    "type": "string"
+                },
+                "cohortNumber": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "firstName": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "jsdNumber": {
+                    "type": "string"
+                },
+                "lastName": {
+                    "type": "string"
+                },
+                "nonTechHappy": {
+                    "type": "string"
+                },
+                "nonTechImprove": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                },
+                "reflectionDate": {
+                    "type": "string"
+                },
+                "reflectionDay": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "techHappy": {
+                    "type": "string"
+                },
+                "techImprove": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.StudentInfo": {
+            "type": "object",
+            "properties": {
+                "barometer": {
+                    "type": "string"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "first_name": {
+                    "type": "string"
+                },
+                "jsd_number": {
+                    "type": "string"
+                },
+                "last_name": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
         "models.User": {
             "type": "object",
             "properties": {
@@ -850,6 +1074,10 @@ const docTemplate = `{
                 "first_name": {
                     "type": "string"
                 },
+                "genmate_group": {
+                    "description": "New field for genmate group",
+                    "type": "string"
+                },
                 "jsd_number": {
                     "description": "JSD Number เลขที่นักเรียน",
                     "type": "string"
@@ -858,6 +1086,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
+                    "type": "string"
+                },
+                "project_group": {
+                    "description": "New field for project group",
                     "type": "string"
                 },
                 "reflections": {
@@ -869,6 +1101,33 @@ const docTemplate = `{
                 },
                 "role": {
                     "description": "Add role field (admin/user)",
+                    "type": "string"
+                },
+                "zoom_name": {
+                    "description": "New field for Zoom name",
+                    "type": "string"
+                }
+            }
+        },
+        "models.WeeklySummary": {
+            "type": "object",
+            "properties": {
+                "overwhelmed_students": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.StudentInfo"
+                    }
+                },
+                "stressed_students": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.StudentInfo"
+                    }
+                },
+                "week_end_date": {
+                    "type": "string"
+                },
+                "week_start_date": {
                     "type": "string"
                 }
             }

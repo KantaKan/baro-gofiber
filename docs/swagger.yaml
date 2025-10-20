@@ -13,6 +13,22 @@ definitions:
       date:
         type: string
     type: object
+  models.EmojiZoneEntry:
+    properties:
+      date:
+        type: string
+      zone:
+        type: string
+    type: object
+  models.EmojiZoneTableData:
+    properties:
+      entries:
+        items:
+          $ref: '#/definitions/models.EmojiZoneEntry'
+        type: array
+      zoomname:
+        type: string
+    type: object
   models.Reflection:
     properties:
       createdAt:
@@ -91,6 +107,54 @@ definitions:
           type: string
         type: array
     type: object
+  models.SpreadsheetData:
+    properties:
+      barometer:
+        type: string
+      cohortNumber:
+        type: string
+      email:
+        type: string
+      firstName:
+        type: string
+      id:
+        type: string
+      jsdNumber:
+        type: string
+      lastName:
+        type: string
+      nonTechHappy:
+        type: string
+      nonTechImprove:
+        type: string
+      password:
+        type: string
+      reflectionDate:
+        type: string
+      reflectionDay:
+        type: string
+      role:
+        type: string
+      techHappy:
+        type: string
+      techImprove:
+        type: string
+    type: object
+  models.StudentInfo:
+    properties:
+      barometer:
+        type: string
+      date:
+        type: string
+      first_name:
+        type: string
+      jsd_number:
+        type: string
+      last_name:
+        type: string
+      user_id:
+        type: string
+    type: object
   models.User:
     properties:
       _id:
@@ -102,12 +166,18 @@ definitions:
         type: string
       first_name:
         type: string
+      genmate_group:
+        description: New field for genmate group
+        type: string
       jsd_number:
         description: JSD Number เลขที่นักเรียน
         type: string
       last_name:
         type: string
       password:
+        type: string
+      project_group:
+        description: New field for project group
         type: string
       reflections:
         description: This is where the reflections should be
@@ -116,6 +186,24 @@ definitions:
         type: array
       role:
         description: Add role field (admin/user)
+        type: string
+      zoom_name:
+        description: New field for Zoom name
+        type: string
+    type: object
+  models.WeeklySummary:
+    properties:
+      overwhelmed_students:
+        items:
+          $ref: '#/definitions/models.StudentInfo'
+        type: array
+      stressed_students:
+        items:
+          $ref: '#/definitions/models.StudentInfo'
+        type: array
+      week_end_date:
+        type: string
+      week_start_date:
         type: string
     type: object
   services.UserWithReflections:
@@ -194,6 +282,33 @@ paths:
       security:
       - BearerAuth: []
       summary: Get chart data
+      tags:
+      - admin
+  /admin/emoji-zone-table:
+    get:
+      description: Get users' zone reflections by date for the emoji zone table component
+        (Admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Emoji zone table data retrieved
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.EmojiZoneTableData'
+                  type: array
+              type: object
+        "500":
+          description: Error fetching data
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get emoji zone table data
       tags:
       - admin
   /admin/reflections:
@@ -279,6 +394,32 @@ paths:
       summary: Get daily barometer data
       tags:
       - admin
+  /admin/reflections/weekly:
+    get:
+      description: Get a weekly summary of students in stressed or panic zones
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Weekly summary retrieved
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.StandardResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.WeeklySummary'
+                  type: array
+              type: object
+        "500":
+          description: Error retrieving data
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get weekly summary
+      tags:
+      - admin
   /admin/userreflections/{id}:
     get:
       description: Get a specific user with all their reflections (Admin only)
@@ -337,6 +478,28 @@ paths:
       security:
       - BearerAuth: []
       summary: Get all users
+      tags:
+      - admin
+  /api/spreadsheet-data:
+    get:
+      description: Get all user and reflection data formatted for spreadsheet export
+        (Admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Spreadsheet data retrieved
+          schema:
+            items:
+              $ref: '#/definitions/models.SpreadsheetData'
+            type: array
+        "500":
+          description: Error retrieving data
+          schema:
+            $ref: '#/definitions/utils.StandardResponse'
+      security:
+      - BearerAuth: []
+      summary: Get spreadsheet data
       tags:
       - admin
   /api/verify-token:

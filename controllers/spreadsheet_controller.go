@@ -15,7 +15,7 @@ import (
 // @Tags admin
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {array} SpreadsheetData "Spreadsheet data retrieved"
+// @Success 200 {array} models.SpreadsheetData "Spreadsheet data retrieved"
 // @Failure 500 {object} utils.StandardResponse "Error retrieving data"
 // @Router /api/spreadsheet-data [get]
 func GetSpreadsheetData(c *fiber.Ctx) error {

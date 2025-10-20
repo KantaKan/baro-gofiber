@@ -31,6 +31,7 @@ func SetupRoutes(app *fiber.App) {
 	admin.Get("/reflections", controllers.GetAllReflectionsController) // Admin can view all reflections
 	admin.Get("/chart-data", controllers.GetChartData)
 	admin.Get("/reflections/chartday", controllers.GetBarometerData)
+	admin.Get("/reflections/weekly", controllers.GetWeeklySummary)
 	
 	// New route for the emoji zone table API
 	admin.Get("/emoji-zone-table", controllers.GetEmojiZoneTableDataController)

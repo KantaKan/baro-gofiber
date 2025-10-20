@@ -202,3 +202,29 @@ func GetEmojiZoneTableDataController(c *fiber.Ctx) error {
 
 	return utils.SendResponse(c, fiber.StatusOK, "Emoji zone table data retrieved", tableData)
 }
+
+// GetWeeklySummary retrieves weekly summary of stressed students
+// @Summary Get weekly summary
+// @Description Get a weekly summary of students in stressed or panic zones
+// @Tags admin
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} utils.StandardResponse{data=[]models.WeeklySummary} "Weekly summary retrieved"
+// @Failure 500 {object} utils.StandardResponse "Error retrieving data"
+// @Router /admin/reflections/weekly [get]
+func GetWeeklySummary(c *fiber.Ctx) error {
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 5) // Default to 5 weeks per page
+
+	summaries, total, err := services.GetWeeklySummary(page, limit)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Failed to get weekly summary")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Weekly summary retrieved successfully", fiber.Map{
+		"summaries": summaries,
+		"total":     total,
+		"page":      page,
+		"limit":     limit,
+	})
+}

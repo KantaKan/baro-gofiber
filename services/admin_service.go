@@ -544,3 +544,136 @@ func GetEmojiZoneTableData() ([]models.EmojiZoneTableData, error) {
 	return tableData, nil
 }
 
+func GetWeeklySummary(page, limit int) ([]models.WeeklySummary, int, error) {
+	if config.DB == nil {
+		return nil, 0, errors.New("MongoDB connection is not initialized")
+	}
+
+	collection := config.DB.Collection("users")
+
+	// Common stages for both pipelines
+	unwindStage := bson.D{{Key: "$unwind", Value: "$reflections"}}
+	matchStage := bson.D{{Key: "$match", Value: bson.D{
+		{Key: "reflections.reflection.barometer", Value: bson.D{
+			{Key: "$in", Value: bson.A{"Stretch zone - Overwhelmed", "Panic Zone"}},
+		}},
+	}}}
+	groupStage := bson.D{{Key: "$group", Value: bson.D{
+		{Key: "_id", Value: bson.D{
+			{Key: "year", Value: bson.D{{Key: "$year", Value: "$reflections.date"}}},
+			{Key: "week", Value: bson.D{{Key: "$isoWeek", Value: "$reflections.date"}}},
+		}},
+	}}}
+	countStage := bson.D{{Key: "$count", Value: "total"}}
+
+	// Pipeline to count total weeks
+	countPipeline := mongo.Pipeline{unwindStage, matchStage, groupStage, countStage}
+	countCursor, err := collection.Aggregate(context.Background(), countPipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	var countResult []bson.M
+	if err = countCursor.All(context.Background(), &countResult); err != nil {
+		return nil, 0, err
+	}
+	total := 0
+	if len(countResult) > 0 {
+		total = int(countResult[0]["total"].(int32))
+	}
+	countCursor.Close(context.Background())
+
+	// Paginated pipeline to get the actual data
+	paginatedPipeline := mongo.Pipeline{
+		unwindStage,
+		matchStage,
+		bson.D{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "year", Value: bson.D{{Key: "$year", Value: "$reflections.date"}}},
+				{Key: "week", Value: bson.D{{Key: "$isoWeek", Value: "$reflections.date"}}},
+			}},
+			{Key: "students", Value: bson.D{{Key: "$push", Value: bson.D{
+				{Key: "user_id", Value: bson.D{{Key: "$toString", Value: "$_id"}}},
+				{Key: "first_name", Value: "$first_name"},
+				{Key: "last_name", Value: "$last_name"},
+				{Key: "zoom_name", Value: "$zoom_name"},
+				{Key: "jsd_number", Value: "$jsd_number"},
+				{Key: "barometer", Value: "$reflections.reflection.barometer"},
+				{Key: "date", Value: "$reflections.date"},
+			}}}},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "_id.year", Value: -1},
+			{Key: "_id.week", Value: -1},
+		}}},
+		bson.D{{Key: "$skip", Value: (page - 1) * limit}},
+		bson.D{{Key: "$limit", Value: limit}},
+	}
+
+	cursor, err := collection.Aggregate(context.Background(), paginatedPipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(context.Background())
+
+	var results []struct {
+		ID struct {
+			Year int `bson:"year"`
+			Week int `bson:"week"`
+		} `bson:"_id"`
+		Students []models.StudentInfo `bson:"students"`
+	}
+
+	if err = cursor.All(context.Background(), &results); err != nil {
+		return nil, 0, err
+	}
+
+	var weeklySummaries []models.WeeklySummary
+	for _, result := range results {
+		year, week := result.ID.Year, result.ID.Week
+		startDate, endDate := weekToDate(year, week)
+
+		var stressedStudents []models.StudentInfo
+		var overwhelmedStudents []models.StudentInfo
+
+		for _, student := range result.Students {
+			if student.Barometer == "Stretch zone - Overwhelmed" {
+				stressedStudents = append(stressedStudents, student)
+			} else if student.Barometer == "Panic Zone" {
+				overwhelmedStudents = append(overwhelmedStudents, student)
+			}
+		}
+
+		summary := models.WeeklySummary{
+			WeekStartDate:      startDate.Format("2006-01-02"),
+			WeekEndDate:        endDate.Format("2006-01-02"),
+			StressedStudents:   stressedStudents,
+			OverwhelmedStudents: overwhelmedStudents,
+		}
+		weeklySummaries = append(weeklySummaries, summary)
+	}
+
+	return weeklySummaries, total, nil
+}
+
+func weekToDate(year, week int) (time.Time, time.Time) {
+	// ISO 8601 weeks start on Monday.
+	// The first week of the year is the one that contains the first Thursday.
+	// Or equivalently, the one that contains January 4.
+	t := time.Date(year, 1, 4, 0, 0, 0, 0, time.UTC)
+	
+	// Adjust to the Monday of that week.
+	weekday := t.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	t = t.AddDate(0, 0, int(time.Monday-weekday))
+
+	// Add the number of weeks.
+	t = t.AddDate(0, 0, (week-1)*7)
+
+	startDate := t
+	endDate := t.AddDate(0, 0, 6)
+
+	return startDate, endDate
+}
+
