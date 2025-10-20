@@ -68,14 +68,14 @@ func CreateUser(user models.User) (*models.User, error) {
 }
 
 // AuthenticateUser validates credentials and generates a JWT token
-func AuthenticateUser(email, password string) (string, string, error) {
+func AuthenticateUser(email, password string) (string, string, string, error) {
 	// Find the user in the database
 	var user models.User
 	err := config.DB.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
 	if err != nil {
 		// Log error for debugging
 		fmt.Println("Error retrieving user:", err)
-		return "", "", errors.New("invalid credentials")
+		return "", "", "", errors.New("invalid credentials")
 	}
 
 	// Log user details (for debugging purposes, you may want to remove this in production)
@@ -86,7 +86,7 @@ func AuthenticateUser(email, password string) (string, string, error) {
 	if err != nil {
 		// Log error for debugging
 		fmt.Println("Password comparison failed:", err)
-		return "", "", errors.New("invalid credentials")
+		return "", "", "", errors.New("invalid credentials")
 	}
 
 	// Log successful password comparison
@@ -103,7 +103,7 @@ func AuthenticateUser(email, password string) (string, string, error) {
 	jwtSecret := os.Getenv("JWT_SECRET_KEY")
 	if jwtSecret == "" {
 		// Log error if secret key is missing
-		return "", "", errors.New("missing JWT secret key")
+		return "", "", "", errors.New("missing JWT secret key")
 	}
 
 	// Log JWT secret loading (for debugging purposes, avoid printing sensitive data in production)
@@ -117,14 +117,14 @@ func AuthenticateUser(email, password string) (string, string, error) {
 	if err != nil {
 		// Log error if token signing fails
 		fmt.Println("Error signing token:", err)
-		return "", "", errors.New("could not generate token")
+		return "", "", "", errors.New("could not generate token")
 	}
 
 	// Log successful token generation (for debugging)
 	fmt.Println("JWT token generated:", tokenString)
 
 	// Return the generated token and the user's role
-	return tokenString, user.Role, nil
+	return tokenString, user.Role, user.ID.Hex(), nil
 }
 
 

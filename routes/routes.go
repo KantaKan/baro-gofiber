@@ -12,7 +12,7 @@ func SetupRoutes(app *fiber.App) {
 	// Public routes
 	// app.Post("/register", controllers.RegisterUser)
 	app.Post("/login", controllers.LoginUser)
-// Verify token route
+	// Verify token route
 	app.Get("/api/verify-token", middleware.AuthMiddleware, controllers.VerifyToken)
 	
 	// Protected user routes with JWT authentication
@@ -35,4 +35,13 @@ func SetupRoutes(app *fiber.App) {
 	
 	// New route for the emoji zone table API
 	admin.Get("/emoji-zone-table", controllers.GetEmojiZoneTableDataController)
+
+	// Talk Board routes
+	board := app.Group("/board", middleware.AuthMiddleware)
+	board.Get("/posts", controllers.GetPosts)
+	board.Get("/posts/:postId", controllers.GetPost) // Add this line
+	board.Post("/posts", controllers.CreatePost)
+	board.Post("/posts/:postId/comments", controllers.AddComment)
+	board.Post("/posts/:postId/reactions", controllers.AddReactionToPost)
+	board.Post("/posts/:postId/comments/:commentId/reactions", controllers.AddReactionToComment)
 }

@@ -77,16 +77,17 @@ func LoginUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Email and password are required")
 	}
 
-	// Authenticate the user (now returns token and role)
-	token, role, err := services.AuthenticateUser(loginData.Email, loginData.Password)
+	// Authenticate the user (now returns token, role, and userId)
+	token, role, userId, err := services.AuthenticateUser(loginData.Email, loginData.Password)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid credentials")
 	}
 
-	// Send successful response with JWT token and role
+	// Send successful response with JWT token, role, and userId
 	return utils.SendResponse(c, fiber.StatusOK, "Login successful", map[string]interface{}{
-		"token": token,
-		"role":  role,
+		"token":  token,
+		"role":   role,
+		"userId": userId,
 	})
 }
 
@@ -106,7 +107,8 @@ func VerifyToken(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Token is valid", map[string]string{
-		"role": claims.Role,
+		"role":   claims.Role,
+		"userId": claims.UserID.Hex(),
 	})
 }
 

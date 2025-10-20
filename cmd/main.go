@@ -71,6 +71,7 @@ func main() {
 	log.Println("Successfully connected to MongoDB")
 
 	services.InitUserService()
+	services.InitTalkBoardService()
 
 	app := fiber.New()
 	app.Use(helmet.New(helmet.Config{
