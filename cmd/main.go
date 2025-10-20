@@ -74,6 +74,25 @@ func main() {
 	services.InitTalkBoardService()
 
 	app := fiber.New()
+	// Configure CORS early so it applies to all routes and preflight requests
+	// Get CORS allowed origins from environment variable
+	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "http://localhost:5173,https://generation-barometer.vercel.app" // Fallback to default origins
+	}
+
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     allowedOrigins,
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With",
+		AllowCredentials: true,
+		MaxAge:           3600, // Cache preflight response for 1 hour
+	}))
+
+	// Ensure OPTIONS preflight requests return quickly
+	app.Options("/*", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusNoContent)
+	})
 	app.Use(helmet.New(helmet.Config{
 		ContentSecurityPolicy: "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:",
 		XSSProtection:        "1; mode=block",
@@ -94,26 +113,12 @@ func main() {
 		},
 	}))
 
-	// Add health check route before CORS middleware
+	// Add health check route
 	app.Get("/health", func(c *fiber.Ctx) error {
 		log.Println("Health check route called")
 		return c.SendString("OK ")
 	})
 	app.Get("/spreadsheet-data", controllers.GetSpreadsheetData)
-	// Get CORS allowed origins from environment variable
-	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
-	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:5173,https://generation-barometer.vercel.app" // Fallback to default origins
-	}
-
-	// Configure CORS
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigins,
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowCredentials: true,
-		MaxAge:           3600, // Cache preflight response for 1 hour
-	}))
 
 	routes.SetupRoutes(app)
 
