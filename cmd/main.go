@@ -99,12 +99,15 @@ func main() {
 		return c.SendString("OK ")
 	})
 	app.Get("/spreadsheet-data", controllers.GetSpreadsheetData)
-	// Get CORS allowed origins from environment variable, default to localhost if not set
-
+	// Get CORS allowed origins from environment variable
+	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "http://localhost:5173,https://generation-barometer.vercel.app" // Fallback to default origins
+	}
 
 	// Configure CORS
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "https://generation-barometer.vercel.app/,http://localhost:5173",        // Use environment variable
+		AllowOrigins:     allowedOrigins,
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowCredentials: true,
