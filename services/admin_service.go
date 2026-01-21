@@ -12,16 +12,17 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type BarometerData struct {
-	Date                              string `json:"date"`
-	ComfortZone                       int    `json:"Comfort Zone"`
-	PanicZone                         int    `json:"Panic Zone"`
-	StretchZoneEnjoyingTheChallenges  int    `json:"Stretch Zone - Enjoying the Challenges"`
-	StretchZoneOverwhelmed            int    `json:"Stretch Zone - Overwhelmed"`
+	Date                             string `json:"date"`
+	ComfortZone                      int    `json:"Comfort Zone"`
+	PanicZone                        int    `json:"Panic Zone"`
+	StretchZoneEnjoyingTheChallenges int    `json:"Stretch Zone - Enjoying the Challenges"`
+	StretchZoneOverwhelmed           int    `json:"Stretch Zone - Overwhelmed"`
 }
 
 type aggregateResult struct {
@@ -151,10 +152,10 @@ func GetUserBarometerData() (map[string]int, error) {
 
 	// Initialize counters for each zone.
 	zoneCounts := map[string]int{
-		"Comfort Zone":                          0,
+		"Comfort Zone":                           0,
 		"Stretch Zone - Enjoying the Challenges": 0,
-		"Stretch Zone - Overwhelmed":            0,
-		"Panic Zone":                            0,
+		"Stretch Zone - Overwhelmed":             0,
+		"Panic Zone":                             0,
 	}
 
 	for _, user := range users {
@@ -225,8 +226,6 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 		return nil, 0, errors.New("error processing reflection data")
 	}
 
-	
-
 	// Get the total count of reflections
 	countPipeline := []bson.M{
 		{
@@ -261,7 +260,6 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 
 	return reflectionsWithUser, total, nil
 }
-
 
 func GetChartData() ([]map[string]interface{}, error) {
 	// Connect to the database
@@ -331,128 +329,128 @@ func GetChartData() ([]map[string]interface{}, error) {
 }
 
 func GetAllUsersBarometerData(timeRange string) ([]BarometerData, error) {
-    // Calculate date range
-    endDate := time.Now()
-    startDate := time.Now()
-    
-    switch timeRange {
-    case "90d":
-        startDate = endDate.AddDate(0, 0, -90)
-    case "30d":
-        startDate = endDate.AddDate(0, 0, -30)
-    case "7d":
-        startDate = endDate.AddDate(0, 0, -7)
-    default:
-        startDate = endDate.AddDate(0, 0, -90)
-    }
+	// Calculate date range
+	endDate := time.Now()
+	startDate := time.Now()
 
-    // Create pipeline for aggregation
-    pipeline := []bson.M{
-        {
-            "$unwind": "$reflections",
-        },
-        {
-            "$match": bson.M{
-                "reflections.date": bson.M{
-                    "$gte": startDate,
-                    "$lte": endDate,
-                },
-            },
-        },
-        {
-            "$group": bson.M{
-                "_id": bson.M{
-                    "date": bson.M{
-                        "$dateToString": bson.M{
-                            "format": "%Y-%m-%d",
-                            "date": "$reflections.date",
-                        },
-                    },
-                    "barometer": "$reflections.reflection.barometer",
-                },
-                "count": bson.M{"$sum": 1},
-            },
-        },
-        {
-            "$sort": bson.M{
-                "_id.date": 1,
-            },
-        },
-    }
+	switch timeRange {
+	case "90d":
+		startDate = endDate.AddDate(0, 0, -90)
+	case "30d":
+		startDate = endDate.AddDate(0, 0, -30)
+	case "7d":
+		startDate = endDate.AddDate(0, 0, -7)
+	default:
+		startDate = endDate.AddDate(0, 0, -90)
+	}
 
-    // Log the pipeline
-    log.Println("Aggregation pipeline:", pipeline)
+	// Create pipeline for aggregation
+	pipeline := []bson.M{
+		{
+			"$unwind": "$reflections",
+		},
+		{
+			"$match": bson.M{
+				"reflections.date": bson.M{
+					"$gte": startDate,
+					"$lte": endDate,
+				},
+			},
+		},
+		{
+			"$group": bson.M{
+				"_id": bson.M{
+					"date": bson.M{
+						"$dateToString": bson.M{
+							"format": "%Y-%m-%d",
+							"date":   "$reflections.date",
+						},
+					},
+					"barometer": "$reflections.reflection.barometer",
+				},
+				"count": bson.M{"$sum": 1},
+			},
+		},
+		{
+			"$sort": bson.M{
+				"_id.date": 1,
+			},
+		},
+	}
 
-    // Execute aggregation
-    cursor, err := config.DB.Collection("users").Aggregate(context.Background(), pipeline)
-    if err != nil {
-        return nil, err
-    }
-    defer cursor.Close(context.Background())
+	// Log the pipeline
+	log.Println("Aggregation pipeline:", pipeline)
 
-    // Process results
-    type aggregateResult struct {
-        ID struct {
-            Date      string `bson:"date"`
-            Barometer string `bson:"barometer"`
-        } `bson:"_id"`
-        Count int `bson:"count"`
-    }
+	// Execute aggregation
+	cursor, err := config.DB.Collection("users").Aggregate(context.Background(), pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
 
-    var results []aggregateResult
-    if err := cursor.All(context.Background(), &results); err != nil {
-        return nil, err
-    }
+	// Process results
+	type aggregateResult struct {
+		ID struct {
+			Date      string `bson:"date"`
+			Barometer string `bson:"barometer"`
+		} `bson:"_id"`
+		Count int `bson:"count"`
+	}
 
-    // Log the raw results
-    log.Println("Raw aggregation results:", results)
+	var results []aggregateResult
+	if err := cursor.All(context.Background(), &results); err != nil {
+		return nil, err
+	}
 
-    // Transform into chart data format
-    dataMap := make(map[string]*BarometerData)
-    
-    // Initialize all dates in the range
-    for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
-        dateStr := d.Format("2006-01-02")
-        dataMap[dateStr] = &BarometerData{
-            Date:                              dateStr,
-            ComfortZone:                       0,
-            PanicZone:                         0,
-            StretchZoneEnjoyingTheChallenges: 0,
-            StretchZoneOverwhelmed:           0,
-        }
-    }
+	// Log the raw results
+	log.Println("Raw aggregation results:", results)
 
-    // Fill in the actual data
-    for _, result := range results {
-        data, exists := dataMap[result.ID.Date]
-        if !exists {
-            log.Printf("Date %s not found in dataMap", result.ID.Date)
-            continue
-        }
+	// Transform into chart data format
+	dataMap := make(map[string]*BarometerData)
 
-        log.Printf("Processing result: Date=%s, Barometer=%s, Count=%d", result.ID.Date, result.ID.Barometer, result.Count)
+	// Initialize all dates in the range
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+		dataMap[dateStr] = &BarometerData{
+			Date:                             dateStr,
+			ComfortZone:                      0,
+			PanicZone:                        0,
+			StretchZoneEnjoyingTheChallenges: 0,
+			StretchZoneOverwhelmed:           0,
+		}
+	}
 
-        switch result.ID.Barometer {
-        case "Comfort Zone":
-            data.ComfortZone = result.Count
-        case "Panic Zone":
-            data.PanicZone = result.Count
-        case "Stretch zone - Enjoying the challenges":
-            data.StretchZoneEnjoyingTheChallenges = result.Count
-        case "Stretch zone - Overwhelmed":
-            data.StretchZoneOverwhelmed = result.Count
-        default:
-            log.Printf("Unknown barometer value: %s", result.ID.Barometer)
-        }
-    }
+	// Fill in the actual data
+	for _, result := range results {
+		data, exists := dataMap[result.ID.Date]
+		if !exists {
+			log.Printf("Date %s not found in dataMap", result.ID.Date)
+			continue
+		}
 
-    // Convert map to slice
-    var chartData []BarometerData
-    for _, data := range dataMap {
-        chartData = append(chartData, *data)
-    }
+		log.Printf("Processing result: Date=%s, Barometer=%s, Count=%d", result.ID.Date, result.ID.Barometer, result.Count)
 
-    return chartData, nil
+		switch result.ID.Barometer {
+		case "Comfort Zone":
+			data.ComfortZone = result.Count
+		case "Panic Zone":
+			data.PanicZone = result.Count
+		case "Stretch zone - Enjoying the challenges":
+			data.StretchZoneEnjoyingTheChallenges = result.Count
+		case "Stretch zone - Overwhelmed":
+			data.StretchZoneOverwhelmed = result.Count
+		default:
+			log.Printf("Unknown barometer value: %s", result.ID.Barometer)
+		}
+	}
+
+	// Convert map to slice
+	var chartData []BarometerData
+	for _, data := range dataMap {
+		chartData = append(chartData, *data)
+	}
+
+	return chartData, nil
 }
 
 func GetBarometerData(cursor *mongo.Cursor, startDate, endDate time.Time) (map[string]*BarometerData, error) {
@@ -502,7 +500,7 @@ func GetBarometerData(cursor *mongo.Cursor, startDate, endDate time.Time) (map[s
 	return dataMap, nil
 }
 
-// GetEmojiZoneTableData fetches all users and processes their reflections 
+// GetEmojiZoneTableData fetches all users and processes their reflections
 // to create a table of dates (entries) and the corresponding zone for each user.
 func GetEmojiZoneTableData() ([]models.EmojiZoneTableData, error) {
 	users, _, err := GetAllUsers(0, "", "", "", "", 0, 0, 0)
@@ -644,9 +642,9 @@ func GetWeeklySummary(page, limit int) ([]models.WeeklySummary, int, error) {
 		}
 
 		summary := models.WeeklySummary{
-			WeekStartDate:      startDate.Format("2006-01-02"),
-			WeekEndDate:        endDate.Format("2006-01-02"),
-			StressedStudents:   stressedStudents,
+			WeekStartDate:       startDate.Format("2006-01-02"),
+			WeekEndDate:         endDate.Format("2006-01-02"),
+			StressedStudents:    stressedStudents,
 			OverwhelmedStudents: overwhelmedStudents,
 		}
 		weeklySummaries = append(weeklySummaries, summary)
@@ -660,7 +658,7 @@ func weekToDate(year, week int) (time.Time, time.Time) {
 	// The first week of the year is the one that contains the first Thursday.
 	// Or equivalently, the one that contains January 4.
 	t := time.Date(year, 1, 4, 0, 0, 0, 0, time.UTC)
-	
+
 	// Adjust to the Monday of that week.
 	weekday := t.Weekday()
 	if weekday == time.Sunday {
@@ -677,3 +675,87 @@ func weekToDate(year, week int) (time.Time, time.Time) {
 	return startDate, endDate
 }
 
+// AwardBadgeToUser adds a badge to a user's profile, ensuring uniqueness.
+func AwardBadgeToUser(userID primitive.ObjectID, badgeType, badgeName, emoji, imageUrl string) error {
+	if config.DB == nil {
+		return errors.New("MongoDB connection is not initialized")
+	}
+
+	collection := config.DB.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Find the user
+	var user models.User
+	err := collection.FindOne(ctx, bson.M{"_id": userID}).Decode(&user)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return errors.New("user not found")
+		}
+		log.Printf("Error finding user %s: %v", userID.Hex(), err)
+		return errors.New("error finding user")
+	}
+
+	// Create new badge object
+	newBadge := models.Badge{
+		ID:        primitive.NewObjectID(),
+		Type:      badgeType,
+		Name:      badgeName,
+		Emoji:     emoji,
+		ImageUrl:  imageUrl,
+		AwardedAt: time.Now(),
+	}
+
+	// Add the new badge to the badges array
+	user.Badges = append(user.Badges, newBadge)
+
+	// Update the user in the database
+	_, err = collection.UpdateOne(
+		ctx,
+		bson.M{"_id": userID},
+		bson.M{"$set": bson.M{"badges": user.Badges}},
+	)
+	if err != nil {
+		log.Printf("Error updating user %s with badge %s: %v", userID.Hex(), badgeName, err)
+		return errors.New("error awarding badge")
+	}
+
+	return nil
+}
+
+// UpdateReflectionFeedback updates the admin feedback for a specific reflection of a user.
+func UpdateReflectionFeedback(userID, reflectionID primitive.ObjectID, feedbackText string) error {
+	if config.DB == nil {
+		return errors.New("MongoDB connection is not initialized")
+	}
+
+	collection := config.DB.Collection("users")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Use an aggregation pipeline to find the user and then update the specific reflection
+	// This approach is more robust than fetching the whole user, modifying locally, and then saving.
+	// It directly targets the subdocument for update.
+	filter := bson.M{
+		"_id":             userID,
+		"reflections._id": reflectionID,
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"reflections.$.admin_feedback": feedbackText, // The positional operator '$' targets the matched element in the array
+		},
+	}
+
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		log.Printf("Error updating reflection feedback for user %s, reflection %s: %v", userID.Hex(), reflectionID.Hex(), err)
+		return errors.New("error updating reflection feedback")
+	}
+
+	if result.ModifiedCount == 0 {
+		return errors.New("user or reflection not found")
+	}
+
+	return nil
+}

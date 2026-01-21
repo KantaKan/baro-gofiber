@@ -24,7 +24,7 @@ func GetAllUsers(c *fiber.Ctx) error {
 	role := c.Query("role", "")
 	email := c.Query("email", "")
 	search := c.Query("search", "")
-	sort := c.Query("sort", "") // e.g., "first_name", "email", "created_at"
+	sort := c.Query("sort", "")         // e.g., "first_name", "email", "created_at"
 	sortDir := c.QueryInt("sortDir", 1) // 1 for ascending, -1 for descending
 	page := c.QueryInt("page", 1)
 	if page < 1 {
@@ -46,7 +46,7 @@ func GetAllUsers(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "All users retrieved", fiber.Map{
 		"users": users,
 		"total": total,
-		"page": page,
+		"page":  page,
 		"limit": limit,
 	})
 }
@@ -183,6 +183,109 @@ func GetUserWithReflections(c *fiber.Ctx) error {
 
 	// Send successful response with user and reflections
 	return utils.SendResponse(c, fiber.StatusOK, "User and reflections retrieved", userWithReflections)
+}
+
+// AwardBadgeRequest defines the structure for the request body when awarding a badge
+type AwardBadgeRequest struct {
+	Type     string `json:"type" example:"Problem Solver"`
+	Name     string `json:"name" example:"For debugging the login flow"`
+	Emoji    string `json:"emoji" example:"🐛"`
+	ImageUrl string `json:"imageUrl,omitempty" example:"https://example.com/badge.png"`
+}
+
+// AwardBadgeToUser awards a badge to a specific user
+// @Summary Award a badge to a user
+// @Description Allows an admin to award a specified badge to a user
+// @Tags admin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID"
+// @Param badge body AwardBadgeRequest true "Badge details"
+// @Success 200 {object} utils.StandardResponse "Badge awarded successfully"
+// @Failure 400 {object} utils.StandardResponse "Invalid user ID or Bad request"
+// @Failure 404 {object} utils.StandardResponse "User not found"
+// @Failure 500 {object} utils.StandardResponse "Internal server error"
+// @Router /admin/users/{id}/badges [post]
+func AwardBadgeToUser(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	var req AwardBadgeRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if req.Type == "" || req.Name == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Badge type and name are required")
+	}
+
+	if req.Emoji == "" && req.ImageUrl == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Either emoji or image URL is required")
+	}
+
+	err = services.AwardBadgeToUser(objectID, req.Type, req.Name, req.Emoji, req.ImageUrl)
+	if err != nil {
+		// Differentiate between user not found and other errors
+		if err.Error() == "user not found" { // Assuming service returns this specific error message
+			return utils.SendError(c, fiber.StatusNotFound, "User not found")
+		}
+		return utils.SendError(c, fiber.StatusInternalServerError, "Failed to award badge")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Badge awarded successfully", nil)
+}
+
+// UpdateFeedbackRequest defines the structure for the request body when updating reflection feedback
+type UpdateFeedbackRequest struct {
+	FeedbackText string `json:"feedback_text" example:"Great work on this reflection!"`
+}
+
+// UpdateReflectionFeedback updates the admin feedback for a specific reflection of a user
+// @Summary Update reflection feedback
+// @Description Allows an admin to add or update feedback for a specific reflection
+// @Tags admin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param userId path string true "User ID"
+// @Param reflectionId path string true "Reflection ID"
+// @Param feedback body UpdateFeedbackRequest true "Feedback text"
+// @Success 200 {object} utils.StandardResponse "Feedback updated successfully"
+// @Failure 400 {object} utils.StandardResponse "Invalid IDs or Bad request"
+// @Failure 404 {object} utils.StandardResponse "User or Reflection not found"
+// @Failure 500 {object} utils.StandardResponse "Internal server error"
+// @Router /admin/users/{userId}/reflections/{reflectionId}/feedback [put]
+func UpdateReflectionFeedback(c *fiber.Ctx) error {
+	userID := c.Params("userId")
+	reflectionID := c.Params("reflectionId")
+
+	userObjectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	reflectionObjectID, err := primitive.ObjectIDFromHex(reflectionID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reflection ID")
+	}
+
+	var req UpdateFeedbackRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	err = services.UpdateReflectionFeedback(userObjectID, reflectionObjectID, req.FeedbackText)
+	if err != nil {
+		if err.Error() == "user or reflection not found" {
+			return utils.SendError(c, fiber.StatusNotFound, "User or Reflection not found")
+		}
+		return utils.SendError(c, fiber.StatusInternalServerError, "Failed to update reflection feedback")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Feedback updated successfully", nil)
 }
 
 // GetEmojiZoneTableDataController retrieves emoji zone table data (Admin only)

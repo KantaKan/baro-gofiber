@@ -26,6 +26,8 @@ func SetupRoutes(app *fiber.App) {
 	// Admin routes - only accessible to admin users
 	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole)
 	admin.Get("/userreflections/:id", controllers.GetUserWithReflections) // New route
+	admin.Post("/users/:id/badges", controllers.AwardBadgeToUser) // New route to award badges
+	admin.Put("/users/:userId/reflections/:reflectionId/feedback", controllers.UpdateReflectionFeedback) // New route to update reflection feedback
 	admin.Get("/users", controllers.GetAllUsers)    
 	admin.Get("/barometer",controllers.GetUserBarometerDataController)          // Admin can view all users
 	admin.Get("/reflections", controllers.GetAllReflectionsController) // Admin can view all reflections
