@@ -676,7 +676,7 @@ func weekToDate(year, week int) (time.Time, time.Time) {
 }
 
 // AwardBadgeToUser adds a badge to a user's profile, ensuring uniqueness.
-func AwardBadgeToUser(userID primitive.ObjectID, badgeType, badgeName, emoji, imageUrl string) error {
+func AwardBadgeToUser(userID primitive.ObjectID, badgeType, badgeName, emoji, imageUrl, color, style string) error {
 	if config.DB == nil {
 		return errors.New("MongoDB connection is not initialized")
 	}
@@ -703,6 +703,8 @@ func AwardBadgeToUser(userID primitive.ObjectID, badgeType, badgeName, emoji, im
 		Name:      badgeName,
 		Emoji:     emoji,
 		ImageUrl:  imageUrl,
+		Color:     color, // Add custom color
+		Style:     style, // Add custom style
 		AwardedAt: time.Now(),
 	}
 

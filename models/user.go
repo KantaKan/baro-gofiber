@@ -38,6 +38,8 @@ type Badge struct {
 	Name      string             `bson:"name" json:"name"` // Custom name for the badge, e.g., "For debugging the login flow"
 	Emoji     string             `bson:"emoji" json:"emoji"`
 	ImageUrl  string             `bson:"imageUrl,omitempty" json:"imageUrl,omitempty"`
+	Color     string             `bson:"color,omitempty" json:"color,omitempty"` // Custom badge color
+	Style     string             `bson:"style,omitempty" json:"style,omitempty"` // Badge display style: pixel, rounded, minimal
 	AwardedAt time.Time          `bson:"awardedAt" json:"awardedAt"`
 }
 

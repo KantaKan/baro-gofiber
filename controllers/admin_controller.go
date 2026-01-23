@@ -191,6 +191,8 @@ type AwardBadgeRequest struct {
 	Name     string `json:"name" example:"For debugging the login flow"`
 	Emoji    string `json:"emoji" example:"🐛"`
 	ImageUrl string `json:"imageUrl,omitempty" example:"https://example.com/badge.png"`
+	Color    string `json:"color,omitempty" example:"#3B82F6"` // Custom badge color
+	Style    string `json:"style,omitempty" example:"pixel"`   // Badge display style: pixel, rounded, minimal
 }
 
 // AwardBadgeToUser awards a badge to a specific user
@@ -227,7 +229,7 @@ func AwardBadgeToUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Either emoji or image URL is required")
 	}
 
-	err = services.AwardBadgeToUser(objectID, req.Type, req.Name, req.Emoji, req.ImageUrl)
+	err = services.AwardBadgeToUser(objectID, req.Type, req.Name, req.Emoji, req.ImageUrl, req.Color, req.Style)
 	if err != nil {
 		// Differentiate between user not found and other errors
 		if err.Error() == "user not found" { // Assuming service returns this specific error message
