@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
 	"gofiber-baro/config"
 	"gofiber-baro/models"
 	"gofiber-baro/utils"
@@ -26,7 +25,7 @@ func InitUserService() {
 	if config.DB != nil {
 		userCollection = config.DB.Collection("users")
 	} else {
-		log.Fatal("Failed to initialize user service: database connection is nil")
+		log.Println("Warning: Failed to initialize user service: database connection is nil")
 	}
 }
 
@@ -73,24 +72,16 @@ func AuthenticateUser(email, password string) (string, string, string, error) {
 	var user models.User
 	err := config.DB.Collection("users").FindOne(context.Background(), bson.M{"email": email}).Decode(&user)
 	if err != nil {
-		// Log error for debugging
-		fmt.Println("Error retrieving user:", err)
+		log.Printf("Error retrieving user: %v", err)
 		return "", "", "", errors.New("invalid credentials")
 	}
-
-	// Log user details (for debugging purposes, you may want to remove this in production)
-	fmt.Println("User retrieved:", user)
 
 	// Compare the provided password with the stored hashed password
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		// Log error for debugging
-		fmt.Println("Password comparison failed:", err)
+		log.Printf("Password comparison failed: %v", err)
 		return "", "", "", errors.New("invalid credentials")
 	}
-
-	// Log successful password comparison
-	fmt.Println("Password comparison succeeded")
 
 	// Generate JWT token
 	claims := jwt.MapClaims{
@@ -102,12 +93,8 @@ func AuthenticateUser(email, password string) (string, string, string, error) {
 	// Fetch the JWT secret from environment variables
 	jwtSecret := os.Getenv("JWT_SECRET_KEY")
 	if jwtSecret == "" {
-		// Log error if secret key is missing
 		return "", "", "", errors.New("missing JWT secret key")
 	}
-
-	// Log JWT secret loading (for debugging purposes, avoid printing sensitive data in production)
-	fmt.Println("JWT secret loaded")
 
 	// Create the token using the claims and sign it with HMAC
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -115,13 +102,9 @@ func AuthenticateUser(email, password string) (string, string, string, error) {
 	// Sign the token
 	tokenString, err := token.SignedString([]byte(jwtSecret))
 	if err != nil {
-		// Log error if token signing fails
-		fmt.Println("Error signing token:", err)
+		log.Printf("Error signing token: %v", err)
 		return "", "", "", errors.New("could not generate token")
 	}
-
-	// Log successful token generation (for debugging)
-	fmt.Println("JWT token generated:", tokenString)
 
 	// Return the generated token and the user's role
 	return tokenString, user.Role, user.ID.Hex(), nil

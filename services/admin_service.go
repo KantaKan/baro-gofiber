@@ -210,8 +210,6 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 		},
 	}
 
-	log.Printf("Executing pipeline: %+v", pipeline)
-
 	// Execute the aggregation pipeline
 	cursor, err := config.DB.Collection("users").Aggregate(context.Background(), pipeline, options.Aggregate())
 	if err != nil {
@@ -236,8 +234,6 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 		},
 	}
 
-	log.Printf("Executing count pipeline: %+v", countPipeline)
-
 	countCursor, err := config.DB.Collection("users").Aggregate(context.Background(), countPipeline, options.Aggregate())
 	if err != nil {
 		log.Printf("Error executing count aggregation: %v", err)
@@ -255,8 +251,6 @@ func GetAllReflectionsWithUserInfo(page int, limit int) ([]models.ReflectionWith
 	if len(countResult) > 0 {
 		total = int(countResult[0]["total"].(int32))
 	}
-
-	log.Printf("Total reflections count: %d", total)
 
 	return reflectionsWithUser, total, nil
 }
@@ -378,9 +372,6 @@ func GetAllUsersBarometerData(timeRange string) ([]BarometerData, error) {
 		},
 	}
 
-	// Log the pipeline
-	log.Println("Aggregation pipeline:", pipeline)
-
 	// Execute aggregation
 	cursor, err := config.DB.Collection("users").Aggregate(context.Background(), pipeline)
 	if err != nil {
@@ -402,9 +393,6 @@ func GetAllUsersBarometerData(timeRange string) ([]BarometerData, error) {
 		return nil, err
 	}
 
-	// Log the raw results
-	log.Println("Raw aggregation results:", results)
-
 	// Transform into chart data format
 	dataMap := make(map[string]*BarometerData)
 
@@ -424,11 +412,8 @@ func GetAllUsersBarometerData(timeRange string) ([]BarometerData, error) {
 	for _, result := range results {
 		data, exists := dataMap[result.ID.Date]
 		if !exists {
-			log.Printf("Date %s not found in dataMap", result.ID.Date)
 			continue
 		}
-
-		log.Printf("Processing result: Date=%s, Barometer=%s, Count=%d", result.ID.Date, result.ID.Barometer, result.Count)
 
 		switch result.ID.Barometer {
 		case "Comfort Zone":
@@ -439,8 +424,6 @@ func GetAllUsersBarometerData(timeRange string) ([]BarometerData, error) {
 			data.StretchZoneEnjoyingTheChallenges = result.Count
 		case "Stretch zone - Overwhelmed":
 			data.StretchZoneOverwhelmed = result.Count
-		default:
-			log.Printf("Unknown barometer value: %s", result.ID.Barometer)
 		}
 	}
 
@@ -458,9 +441,6 @@ func GetBarometerData(cursor *mongo.Cursor, startDate, endDate time.Time) (map[s
 	if err := cursor.All(context.Background(), &results); err != nil {
 		return nil, err
 	}
-
-	// Log the raw results
-	log.Println("Raw aggregation results:", results)
 
 	// Transform into chart data format
 	dataMap := make(map[string]*BarometerData)
@@ -493,9 +473,6 @@ func GetBarometerData(cursor *mongo.Cursor, startDate, endDate time.Time) (map[s
 			}
 		}
 	}
-
-	// Log the final dataMap
-	log.Println("Final dataMap:", dataMap)
 
 	return dataMap, nil
 }

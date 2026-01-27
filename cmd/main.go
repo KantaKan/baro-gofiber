@@ -11,7 +11,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 
-	"gofiber-baro/controllers"
 	_ "gofiber-baro/docs" // This will be generated
 
 	"github.com/gofiber/fiber/v2"
@@ -118,7 +117,6 @@ func main() {
 		log.Println("Health check route called")
 		return c.SendString("OK ")
 	})
-	app.Get("/spreadsheet-data", controllers.GetSpreadsheetData)
 
 	routes.SetupRoutes(app)
 
