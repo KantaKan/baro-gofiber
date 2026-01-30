@@ -322,7 +322,7 @@ func GetChartData() ([]map[string]interface{}, error) {
 	return chartData, nil
 }
 
-func GetAllUsersBarometerData(timeRange string) ([]BarometerData, error) {
+func GetAllUsersBarometerData(timeRange string, cohort int) ([]BarometerData, error) {
 	// Calculate date range
 	endDate := time.Now()
 	startDate := time.Now()
@@ -338,18 +338,24 @@ func GetAllUsersBarometerData(timeRange string) ([]BarometerData, error) {
 		startDate = endDate.AddDate(0, 0, -90)
 	}
 
+	// Create match filter
+	matchFilter := bson.M{
+		"reflections.date": bson.M{
+			"$gte": startDate,
+			"$lte": endDate,
+		},
+	}
+	if cohort > 0 {
+		matchFilter["cohort_number"] = cohort
+	}
+
 	// Create pipeline for aggregation
 	pipeline := []bson.M{
 		{
 			"$unwind": "$reflections",
 		},
 		{
-			"$match": bson.M{
-				"reflections.date": bson.M{
-					"$gte": startDate,
-					"$lte": endDate,
-				},
-			},
+			"$match": matchFilter,
 		},
 		{
 			"$group": bson.M{
@@ -519,20 +525,26 @@ func GetEmojiZoneTableData() ([]models.EmojiZoneTableData, error) {
 	return tableData, nil
 }
 
-func GetWeeklySummary(page, limit int) ([]models.WeeklySummary, int, error) {
+func GetWeeklySummary(page, limit, cohort int) ([]models.WeeklySummary, int, error) {
 	if config.DB == nil {
 		return nil, 0, errors.New("MongoDB connection is not initialized")
 	}
 
 	collection := config.DB.Collection("users")
 
+	// Add cohort filter if specified
+	matchFilter := bson.M{
+		"reflections.reflection.barometer": bson.M{
+			"$in": bson.A{"Stretch zone - Overwhelmed", "Panic Zone"},
+		},
+	}
+	if cohort > 0 {
+		matchFilter["cohort_number"] = cohort
+	}
+
 	// Common stages for both pipelines
 	unwindStage := bson.D{{Key: "$unwind", Value: "$reflections"}}
-	matchStage := bson.D{{Key: "$match", Value: bson.D{
-		{Key: "reflections.reflection.barometer", Value: bson.D{
-			{Key: "$in", Value: bson.A{"Stretch zone - Overwhelmed", "Panic Zone"}},
-		}},
-	}}}
+	matchStage := bson.D{{Key: "$match", Value: matchFilter}}
 	groupStage := bson.D{{Key: "$group", Value: bson.D{
 		{Key: "_id", Value: bson.D{
 			{Key: "year", Value: bson.D{{Key: "$year", Value: "$reflections.date"}}},

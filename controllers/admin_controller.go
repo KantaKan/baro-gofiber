@@ -34,8 +34,8 @@ func GetAllUsers(c *fiber.Ctx) error {
 	if limit < 1 {
 		limit = 50
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > 500 {
+		limit = 500
 	}
 
 	users, total, err := services.GetAllUsers(cohort, role, email, search, sort, sortDir, page, limit)
@@ -133,6 +133,7 @@ func GetChartData(c *fiber.Ctx) error {
 // @Tags admin
 // @Security BearerAuth
 // @Param timeRange query string false "Time range (90d, 30d, 7d)" default(90d)
+// @Param cohort query integer false "Filter by cohort number"
 // @Produce json
 // @Success 200 {array} models.BarometerData "Barometer data retrieved"
 // @Failure 400 {object} object{error=string} "Invalid time range"
@@ -140,6 +141,7 @@ func GetChartData(c *fiber.Ctx) error {
 // @Router /admin/reflections/chartday [get]
 func GetBarometerData(c *fiber.Ctx) error {
 	timeRange := c.Query("timeRange", "90d")
+	cohort := c.QueryInt("cohort", 0)
 	// Validate timeRange
 	if timeRange != "90d" && timeRange != "30d" && timeRange != "7d" {
 		return c.Status(400).JSON(fiber.Map{
@@ -147,7 +149,7 @@ func GetBarometerData(c *fiber.Ctx) error {
 		})
 	}
 
-	chartData, err := services.GetAllUsersBarometerData(timeRange)
+	chartData, err := services.GetAllUsersBarometerData(timeRange, cohort)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch barometer data",
@@ -313,6 +315,9 @@ func GetEmojiZoneTableDataController(c *fiber.Ctx) error {
 // @Description Get a weekly summary of students in stressed or panic zones
 // @Tags admin
 // @Security BearerAuth
+// @Param cohort query integer false "Filter by cohort number"
+// @Param page query integer false "Page number" default(1)
+// @Param limit query integer false "Items per page" default(5)
 // @Produce json
 // @Success 200 {object} utils.StandardResponse{data=[]models.WeeklySummary} "Weekly summary retrieved"
 // @Failure 500 {object} utils.StandardResponse "Error retrieving data"
@@ -320,8 +325,9 @@ func GetEmojiZoneTableDataController(c *fiber.Ctx) error {
 func GetWeeklySummary(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 5) // Default to 5 weeks per page
+	cohort := c.QueryInt("cohort", 0)
 
-	summaries, total, err := services.GetWeeklySummary(page, limit)
+	summaries, total, err := services.GetWeeklySummary(page, limit, cohort)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Failed to get weekly summary")
 	}
