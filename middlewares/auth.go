@@ -28,37 +28,38 @@ func init() {
 
 // AuthMiddleware handles JWT authentication
 func AuthMiddleware(c *fiber.Ctx) error {
-    // Get the secret key from environment variables
-    secretKey := os.Getenv("JWT_SECRET_KEY")
+	// Get the secret key from environment variables
+	secretKey := os.Getenv("JWT_SECRET_KEY")
 	if secretKey == "" {
 		return fiber.NewError(fiber.StatusInternalServerError, "Secret key not configured")
-    }
+	}
 
-    // Extract token from the Authorization header
-    authHeader := c.Get("Authorization")
-    if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-        return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: No token provided")
-    }
-    tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	// Extract token from the Authorization header
+	authHeader := c.Get("Authorization")
+	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: No token provided")
+	}
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-    // Parse and validate the token
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return []byte(secretKey), nil
-    })
-    if err != nil || !token.Valid {
-        return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: Invalid token")
-    }
+	// Parse and validate the token
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secretKey), nil
+	})
+	if err != nil || !token.Valid {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: Invalid token")
+	}
 
-    // Check token expiration
-    if claims.ExpiresAt != nil && claims.ExpiresAt.Before(time.Now()) {
-        return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: Token expired")
-    }
+	// Check token expiration
+	if claims.ExpiresAt != nil && claims.ExpiresAt.Before(time.Now()) {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: Token expired")
+	}
 
-    // Store the claims in the context for later use
-    c.Locals("user", claims)
+	// Store the claims in the context for later use
+	c.Locals("user", claims)
+	c.Locals("user_id", claims.UserID.Hex())
 
-    return c.Next()
+	return c.Next()
 }
 
 // CheckAdminRole middleware to validate that the user is an admin
