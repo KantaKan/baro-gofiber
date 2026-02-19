@@ -15,6 +15,7 @@ var DB *mongo.Database
 var AttendanceCodesCollection *mongo.Collection
 var AttendanceRecordsCollection *mongo.Collection
 var LeaveRequestsCollection *mongo.Collection
+var HolidaysCollection *mongo.Collection
 
 func InitializeDB(mongoURI, databaseName string) error {
 	// Add debug logging
@@ -42,6 +43,7 @@ func InitializeDB(mongoURI, databaseName string) error {
 	AttendanceCodesCollection = DB.Collection("attendance_codes")
 	AttendanceRecordsCollection = DB.Collection("attendance_records")
 	LeaveRequestsCollection = DB.Collection("leave_requests")
+	HolidaysCollection = DB.Collection("holidays")
 
 	return nil
 }

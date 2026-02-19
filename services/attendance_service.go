@@ -425,6 +425,23 @@ func GetAttendanceStats(cohort int) ([]models.AttendanceStats, error) {
 		return nil, err
 	}
 
+	// Get all holidays to exclude from stats
+	holidays, _ := GetHolidays()
+	holidayDates := make(map[string]bool)
+	for _, h := range holidays {
+		start, err := time.Parse("2006-01-02", h.StartDate)
+		if err != nil {
+			continue
+		}
+		end, err := time.Parse("2006-01-02", h.EndDate)
+		if err != nil {
+			continue
+		}
+		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+			holidayDates[d.Format("2006-01-02")] = true
+		}
+	}
+
 	// Group by user and date
 	type dayKey struct {
 		userID       string
@@ -446,6 +463,10 @@ func GetAttendanceStats(cohort int) ([]models.AttendanceStats, error) {
 	dayMap := make(map[dayKey]map[string]bool)
 	for _, r := range records {
 		if r.Deleted {
+			continue
+		}
+		// Skip holidays
+		if holidayDates[r.Date] {
 			continue
 		}
 		key := dayKey{

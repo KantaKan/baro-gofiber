@@ -108,7 +108,7 @@ func VerifyToken(c *fiber.Ctx) error {
 
 	return utils.SendResponse(c, fiber.StatusOK, "Token is valid", map[string]string{
 		"role":   claims.Role,
-		"userId": claims.UserID.Hex(),
+		"userId": claims.UserID,
 	})
 }
 
@@ -132,7 +132,7 @@ func GetUserProfile(c *fiber.Ctx) error {
 	}
 
 	// Only allow if user is admin or accessing their own profile
-	if claims.Role != "admin" && claims.UserID.Hex() != userID {
+	if claims.Role != "admin" && claims.UserID != userID {
 		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to access this user's data")
 	}
 
@@ -173,7 +173,7 @@ func CreateReflection(c *fiber.Ctx) error {
 	}
 
 	// Only allow if user is admin or posting for themselves
-	if claims.Role != "admin" && claims.UserID.Hex() != userID {
+	if claims.Role != "admin" && claims.UserID != userID {
 		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to post reflection for this user")
 	}
 
@@ -231,7 +231,7 @@ func GetUserReflections(c *fiber.Ctx) error {
 	}
 
 	// Only allow if user is admin or accessing their own reflections
-	if claims.Role != "admin" && claims.UserID.Hex() != userID {
+	if claims.Role != "admin" && claims.UserID != userID {
 		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to access this user's reflections")
 	}
 

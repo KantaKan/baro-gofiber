@@ -9,13 +9,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Custom claims structure
 type Claims struct {
-	UserID primitive.ObjectID `json:"user_id"`
-	Role   string             `json:"role"`
+	UserID string `json:"user_id"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -57,7 +56,7 @@ func AuthMiddleware(c *fiber.Ctx) error {
 
 	// Store the claims in the context for later use
 	c.Locals("user", claims)
-	c.Locals("user_id", claims.UserID.Hex())
+	c.Locals("userID", claims.UserID)
 
 	return c.Next()
 }

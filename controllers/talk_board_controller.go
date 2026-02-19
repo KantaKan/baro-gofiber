@@ -24,13 +24,18 @@ func CreatePost(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	user, err := services.GetUserByID(claims.UserID.Hex())
+	user, err := services.GetUserByID(claims.UserID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
 
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid User ID format")
+	}
+
 	post := &models.Post{
-		UserID:   claims.UserID,
+		UserID:   userID,
 		ZoomName: user.ZoomName,
 		Cohort:   user.CohortNumber,
 		Content:  input.Content,
@@ -71,13 +76,18 @@ func AddComment(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	user, err := services.GetUserByID(claims.UserID.Hex())
+	user, err := services.GetUserByID(claims.UserID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
 
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid User ID format")
+	}
+
 	comment := &models.Comment{
-		UserID:   claims.UserID,
+		UserID:   userID,
 		ZoomName: user.ZoomName,
 		Cohort:   user.CohortNumber,
 		Content:  input.Content,
@@ -110,8 +120,13 @@ func AddReactionToPost(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid User ID format")
+	}
+
 	reaction := models.Reaction{
-		UserID: claims.UserID,
+		UserID: userID,
 		Type:   "image", // Assuming all reactions from this endpoint are images
 		Value:  input.Reaction,
 	}
@@ -144,7 +159,11 @@ func AddReactionToComment(c *fiber.Ctx) error {
 	if err := c.BodyParser(&reaction); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	reaction.UserID = claims.UserID
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid User ID format")
+	}
+	reaction.UserID = userID
 
 	updatedPost, err := services.AddReactionToComment(postId, commentId, &reaction)
 	if err != nil {
@@ -179,7 +198,12 @@ func RemoveReactionFromPost(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
 	}
 
-	updatedPost, err := services.RemoveReactionFromPost(postId, claims.UserID)
+	userID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid User ID format")
+	}
+
+	updatedPost, err := services.RemoveReactionFromPost(postId, userID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error removing reaction")
 	}

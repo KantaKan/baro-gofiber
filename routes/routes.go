@@ -65,6 +65,11 @@ func SetupRoutes(app *fiber.App) {
 	admin.Post("/attendance/bulk", controllers.BulkMarkAttendance)
 	admin.Delete("/attendance/:id", controllers.DeleteAttendanceRecord)
 
+	// Holiday routes
+	admin.Post("/holidays", controllers.CreateHoliday)
+	admin.Get("/holidays", controllers.GetHolidays)
+	admin.Delete("/holidays/:id", controllers.DeleteHoliday)
+
 	// Student attendance routes
 	student := app.Group("/attendance", middleware.AuthMiddleware)
 	student.Post("/submit", controllers.SubmitAttendance)
