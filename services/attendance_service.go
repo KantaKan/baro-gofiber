@@ -324,6 +324,9 @@ func ManualMarkAttendance(userID primitive.ObjectID, date, session string, statu
 				"marked_by":      models.MarkedByAdmin,
 				"marked_by_user": markedBy,
 				"submitted_at":   time.Now(),
+				"deleted":        false,
+				"deleted_at":     nil,
+				"deleted_by":     "",
 			},
 		}
 		_, err = config.AttendanceRecordsCollection.UpdateOne(ctx, filter, update)
@@ -333,6 +336,7 @@ func ManualMarkAttendance(userID primitive.ObjectID, date, session string, statu
 		existing.Status = status
 		existing.MarkedBy = models.MarkedByAdmin
 		existing.MarkedByUser = markedBy
+		existing.Deleted = false
 		return &existing, nil
 	}
 
@@ -547,6 +551,7 @@ func GetTodayAttendanceOverview(cohort int, session models.AttendanceSession) (*
 	filter := bson.M{
 		"cohort_number": cohort,
 		"date":          today,
+		"deleted":       bson.M{"$ne": true},
 	}
 	if session != "" {
 		filter["session"] = session
@@ -563,13 +568,20 @@ func GetTodayAttendanceOverview(cohort int, session models.AttendanceSession) (*
 		return nil, err
 	}
 
-	submittedMap := make(map[string]map[string]string)
+	type sessionInfo struct {
+		Status string
+		ID     string
+	}
+	submittedMap := make(map[string]map[string]sessionInfo)
 	for _, r := range records {
 		key := r.UserID.Hex()
 		if submittedMap[key] == nil {
-			submittedMap[key] = make(map[string]string)
+			submittedMap[key] = make(map[string]sessionInfo)
 		}
-		submittedMap[key][string(r.Session)] = string(r.Status)
+		submittedMap[key][string(r.Session)] = sessionInfo{
+			Status: string(r.Status),
+			ID:     r.ID.Hex(),
+		}
 	}
 
 	users, _, err := GetAllUsers(cohort, "", "", "", "first_name", 1, 1, 500)
@@ -590,10 +602,12 @@ func GetTodayAttendanceOverview(cohort int, session models.AttendanceSession) (*
 
 		if sessionData, ok := submittedMap[user.ID.Hex()]; ok {
 			if m, ok := sessionData["morning"]; ok {
-				row.Morning = m
+				row.Morning = m.Status
+				row.MorningRecordID = m.ID
 			}
 			if a, ok := sessionData["afternoon"]; ok {
-				row.Afternoon = a
+				row.Afternoon = a.Status
+				row.AfternoonRecordID = a.ID
 			}
 		}
 
@@ -631,6 +645,7 @@ func GetAttendanceOverviewByDate(cohort int, session models.AttendanceSession, d
 	filter := bson.M{
 		"cohort_number": cohort,
 		"date":          targetDate,
+		"deleted":       bson.M{"$ne": true},
 	}
 	if session != "" {
 		filter["session"] = session
@@ -647,13 +662,20 @@ func GetAttendanceOverviewByDate(cohort int, session models.AttendanceSession, d
 		return nil, err
 	}
 
-	submittedMap := make(map[string]map[string]string)
+	type sessionInfo struct {
+		Status string
+		ID     string
+	}
+	submittedMap := make(map[string]map[string]sessionInfo)
 	for _, r := range records {
 		key := r.UserID.Hex()
 		if submittedMap[key] == nil {
-			submittedMap[key] = make(map[string]string)
+			submittedMap[key] = make(map[string]sessionInfo)
 		}
-		submittedMap[key][string(r.Session)] = string(r.Status)
+		submittedMap[key][string(r.Session)] = sessionInfo{
+			Status: string(r.Status),
+			ID:     r.ID.Hex(),
+		}
 	}
 
 	users, _, err := GetAllUsers(cohort, "", "", "", "first_name", 1, 1, 500)
@@ -674,10 +696,12 @@ func GetAttendanceOverviewByDate(cohort int, session models.AttendanceSession, d
 
 		if sessionData, ok := submittedMap[user.ID.Hex()]; ok {
 			if m, ok := sessionData["morning"]; ok {
-				row.Morning = m
+				row.Morning = m.Status
+				row.MorningRecordID = m.ID
 			}
 			if a, ok := sessionData["afternoon"]; ok {
-				row.Afternoon = a
+				row.Afternoon = a.Status
+				row.AfternoonRecordID = a.ID
 			}
 		}
 
@@ -935,6 +959,9 @@ func BulkMarkAttendance(userIDs []primitive.ObjectID, date string, session model
 					"marked_by":      models.MarkedByAdmin,
 					"marked_by_user": markedBy,
 					"submitted_at":   time.Now(),
+					"deleted":        false,
+					"deleted_at":     nil,
+					"deleted_by":     "",
 				},
 			}
 			_, err = config.AttendanceRecordsCollection.UpdateOne(ctx, filter, update)
@@ -944,6 +971,7 @@ func BulkMarkAttendance(userIDs []primitive.ObjectID, date string, session model
 			existing.Status = status
 			existing.MarkedBy = models.MarkedByAdmin
 			existing.MarkedByUser = markedBy
+			existing.Deleted = false
 			records = append(records, existing)
 		} else {
 			record := models.AttendanceRecord{

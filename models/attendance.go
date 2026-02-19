@@ -85,10 +85,12 @@ type TodayAttendanceOverview struct {
 }
 
 type StudentAttendanceRow struct {
-	UserID    primitive.ObjectID `json:"user_id"`
-	JSDNumber string             `json:"jsd_number"`
-	FirstName string             `json:"first_name"`
-	LastName  string             `json:"last_name"`
-	Morning   string             `json:"morning"`
-	Afternoon string             `json:"afternoon"`
+	UserID            primitive.ObjectID `json:"user_id"`
+	JSDNumber         string             `json:"jsd_number"`
+	FirstName         string             `json:"first_name"`
+	LastName          string             `json:"last_name"`
+	Morning           string             `json:"morning"`
+	Afternoon         string             `json:"afternoon"`
+	MorningRecordID   string             `json:"morning_record_id,omitempty"`
+	AfternoonRecordID string             `json:"afternoon_record_id,omitempty"`
 }

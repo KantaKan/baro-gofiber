@@ -3,8 +3,10 @@ package routes
 import (
 	"gofiber-baro/controllers"
 	middleware "gofiber-baro/middlewares"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 )
 
 func SetupRoutes(app *fiber.App) {
@@ -22,8 +24,20 @@ func SetupRoutes(app *fiber.App) {
 	protected.Post("/:id/reflections", controllers.CreateReflection)
 	protected.Get("/:id/reflections", controllers.GetUserReflections)
 
-	// Admin routes - only accessible to admin users
-	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole)
+	// Admin routes - only accessible to admin users with higher rate limit (300 req/min)
+	adminLimiter := limiter.New(limiter.Config{
+		Max:        300,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Too many requests",
+			})
+		},
+	})
+	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole, adminLimiter)
 	admin.Get("/userreflections/:id", controllers.GetUserWithReflections)                                // New route
 	admin.Post("/users/:id/badges", controllers.AwardBadgeToUser)                                        // New route to award badges
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", controllers.UpdateReflectionFeedback) // New route to update reflection feedback
