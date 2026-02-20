@@ -2,8 +2,6 @@ package main
 
 import (
 	"gofiber-baro/config"
-	"gofiber-baro/routes"
-	"gofiber-baro/services"
 	"log"
 	"os"
 	"time"
@@ -11,7 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 
-	_ "gofiber-baro/docs" // This will be generated
+	_ "gofiber-baro/docs"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -40,15 +38,12 @@ import (
 // @description Enter your bearer token in the format **Bearer <token>**
 
 func main() {
-	// Load environment variables
 	if os.Getenv("ENVIRONMENT") != "production" {
-		// Only try to load .env file in non-production environment
 		if err := godotenv.Load(); err != nil {
 			log.Println("No .env file found, using environment variables")
 		}
 	}
 
-	// Verify that required environment variables are set
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
 		log.Fatal("MONGO_URI environment variable is not set")
@@ -61,7 +56,7 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3000" // default port
+		port = "3000"
 	}
 
 	if err := config.InitializeDB(mongoURI, dbName); err != nil {
@@ -69,15 +64,13 @@ func main() {
 	}
 	log.Println("Successfully connected to MongoDB")
 
-	services.InitUserService()
-	services.InitTalkBoardService()
+	container := NewContainer(config.DB)
 
 	app := fiber.New()
-	// Configure CORS early so it applies to all routes and preflight requests
-	// Get CORS allowed origins from environment variable
+
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
-		allowedOrigins = "http://localhost:5173,https://generation-barometer.vercel.app" // Fallback to default origins
+		allowedOrigins = "http://localhost:5173,https://generation-barometer.vercel.app"
 	}
 
 	app.Use(cors.New(cors.Config{
@@ -85,10 +78,9 @@ func main() {
 		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With",
 		AllowCredentials: true,
-		MaxAge:           3600, // Cache preflight response for 1 hour
+		MaxAge:           3600,
 	}))
 
-	// Ensure OPTIONS preflight requests return quickly
 	app.Options("/*", func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
@@ -100,10 +92,10 @@ func main() {
 	}))
 
 	app.Use(limiter.New(limiter.Config{
-		Max:        100,             // Max number of requests
-		Expiration: 1 * time.Minute, // Per minute
+		Max:        100,
+		Expiration: 1 * time.Minute,
 		KeyGenerator: func(c *fiber.Ctx) string {
-			return c.IP() // Rate limit by IP
+			return c.IP()
 		},
 		LimitReached: func(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
@@ -112,20 +104,27 @@ func main() {
 		},
 	}))
 
-	// Add health check route
 	app.Get("/health", func(c *fiber.Ctx) error {
 		log.Println("Health check route called")
 		return c.SendString("OK ")
 	})
 
-	routes.SetupRoutes(app)
+	handlers := Handlers{
+		User:       container.UserHandler,
+		Admin:      container.AdminHandler,
+		Attendance: container.AttendanceHandler,
+		Leave:      container.LeaveHandler,
+		Holiday:    container.HolidayHandler,
+		TalkBoard:  container.TalkBoardHandler,
+	}
 
-	// Add Swagger documentation route
+	setupRoutes(app, handlers)
+
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
 	log.Printf("🚀 Server is running on http://localhost:%s", port)
 	log.Printf("Environment: %s", os.Getenv("ENVIRONMENT"))
-	log.Printf("MongoDB URI: %s", mongoURI[:10]+"...") // Only log the beginning for security
+	log.Printf("MongoDB URI: %s", mongoURI[:10]+"...")
 	log.Printf("Database Name: %s", dbName)
 	log.Printf("Port: %s", port)
 	log.Fatal(app.Listen(":" + port))
