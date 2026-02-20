@@ -53,7 +53,7 @@ func GenerateCode(cohort int, session models.AttendanceSession, generatedBy stri
 	code := generateRandomCode(string(session))
 
 	now := GetThailandTime()
-	expiresAt := now.Add(10 * time.Minute)
+	expiresAt := now.Add(120 * time.Minute) // 2 hours for students to submit
 
 	fmt.Printf("Generating code: cohort=%d, session=%s, code=%s, expiresAt=%v\n", cohort, session, code, expiresAt)
 
@@ -402,19 +402,30 @@ func GetAttendanceLogs(cohort int, date string, page, limit int) ([]models.Atten
 	return records, int(total), nil
 }
 
-func GetAttendanceStats(cohort int) ([]models.AttendanceStats, error) {
+func GetAttendanceStats(cohort int, startDate string, endDate string) ([]models.AttendanceStats, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := bson.M{
+	// Build filter for attendance records
+	recordFilter := bson.M{
 		"deleted": bson.M{"$ne": true},
 	}
+
+	// Add cohort filter if provided
 	if cohort > 0 {
-		filter["cohort_number"] = cohort
+		recordFilter["cohort_number"] = cohort
 	}
 
-	// Get all records and calculate in Go for simpler logic
-	cursor, err := config.AttendanceRecordsCollection.Find(ctx, filter)
+	// Add date filter if BOTH start and end dates are provided
+	if startDate != "" && endDate != "" {
+		recordFilter["date"] = bson.M{
+			"$gte": startDate,
+			"$lte": endDate,
+		}
+	}
+
+	// Fetch all matching attendance records
+	cursor, err := config.AttendanceRecordsCollection.Find(ctx, recordFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -425,33 +436,7 @@ func GetAttendanceStats(cohort int) ([]models.AttendanceStats, error) {
 		return nil, err
 	}
 
-	// Get all holidays to exclude from stats
-	holidays, _ := GetHolidays()
-	holidayDates := make(map[string]bool)
-	for _, h := range holidays {
-		start, err := time.Parse("2006-01-02", h.StartDate)
-		if err != nil {
-			continue
-		}
-		end, err := time.Parse("2006-01-02", h.EndDate)
-		if err != nil {
-			continue
-		}
-		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-			holidayDates[d.Format("2006-01-02")] = true
-		}
-	}
-
-	// Group by user and date
-	type dayKey struct {
-		userID       string
-		jsdNumber    string
-		firstName    string
-		lastName     string
-		cohortNumber int
-		date         string
-	}
-
+	// Group records by user
 	type userKey struct {
 		userID       string
 		jsdNumber    string
@@ -460,59 +445,90 @@ func GetAttendanceStats(cohort int) ([]models.AttendanceStats, error) {
 		cohortNumber int
 	}
 
-	dayMap := make(map[dayKey]map[string]bool)
+	type userStats struct {
+		present       int
+		late          int
+		absent        int
+		lateExcused   int
+		absentExcused int
+		dates         map[string]struct {
+			morning   string
+			afternoon string
+		}
+	}
+
+	userStatsMap := make(map[userKey]*userStats)
+
 	for _, r := range records {
-		if r.Deleted {
-			continue
-		}
-		// Skip holidays
-		if holidayDates[r.Date] {
-			continue
-		}
-		key := dayKey{
+		uk := userKey{
 			userID:       r.UserID.Hex(),
 			jsdNumber:    r.JSDNumber,
 			firstName:    r.FirstName,
 			lastName:     r.LastName,
 			cohortNumber: r.CohortNumber,
-			date:         r.Date,
 		}
-		if dayMap[key] == nil {
-			dayMap[key] = make(map[string]bool)
-		}
-		dayMap[key][string(r.Session)] = true
-	}
 
-	// Calculate stats per user
-	userStats := make(map[userKey]int)
-	absentDays := make(map[userKey]int)
-	for key, sessions := range dayMap {
-		uk := userKey{
-			userID:       key.userID,
-			jsdNumber:    key.jsdNumber,
-			firstName:    key.firstName,
-			lastName:     key.lastName,
-			cohortNumber: key.cohortNumber,
+		if userStatsMap[uk] == nil {
+			userStatsMap[uk] = &userStats{
+				dates: make(map[string]struct {
+					morning   string
+					afternoon string
+				}),
+			}
 		}
-		// Present if both morning and afternoon attended
-		if sessions["morning"] && sessions["afternoon"] {
-			userStats[uk]++
+
+		// Count session status
+		status := string(r.Status)
+		switch status {
+		case "present":
+			userStatsMap[uk].present++
+		case "late":
+			userStatsMap[uk].late++
+		case "absent":
+			userStatsMap[uk].absent++
+		case "late_excused":
+			userStatsMap[uk].lateExcused++
+		case "absent_excused":
+			userStatsMap[uk].absentExcused++
+		}
+
+		// Track per-date sessions
+		dateData := userStatsMap[uk].dates[r.Date]
+		if r.Session == "morning" {
+			dateData.morning = status
 		} else {
-			absentDays[uk]++
+			dateData.afternoon = status
 		}
+		userStatsMap[uk].dates[r.Date] = dateData
 	}
 
-	// Convert to response
-	stats := make([]models.AttendanceStats, 0, len(userStats))
-	for uk, present := range userStats {
-		absent := absentDays[uk]
-		totalDays := present + absent
+	// Calculate present_days and absent_days for each user
+	stats := make([]models.AttendanceStats, 0, len(userStatsMap))
+	for uk, us := range userStatsMap {
 		userID, _ := primitive.ObjectIDFromHex(uk.userID)
 
+		// Count present_days and absent_days
+		presentDays := 0
+		absentDays := 0
+		for _, dateData := range us.dates {
+			hasAbsent := dateData.morning == "absent" || dateData.afternoon == "absent"
+			hasPresent := dateData.morning == "present" || dateData.afternoon == "present"
+			hasLate := dateData.morning == "late" || dateData.afternoon == "late"
+			hasLateExcused := dateData.morning == "late_excused" || dateData.afternoon == "late_excused"
+
+			if hasAbsent {
+				absentDays++
+			} else if hasPresent || hasLate || hasLateExcused {
+				presentDays++
+			}
+			// absent_excused doesn't count as absent day or present day
+		}
+
+		// Warning level based on absent count
 		warningLevel := "normal"
-		if absent >= 7 {
+		if us.absent >= 7 {
 			warningLevel = "red"
-		} else if absent >= 4 {
+		} else if us.absent >= 4 {
 			warningLevel = "yellow"
 		}
 
@@ -522,12 +538,13 @@ func GetAttendanceStats(cohort int) ([]models.AttendanceStats, error) {
 			FirstName:     uk.firstName,
 			LastName:      uk.lastName,
 			CohortNumber:  uk.cohortNumber,
-			Present:       present,
-			Late:          0,
-			LateExcused:   0,
-			Absent:        absent,
-			AbsentExcused: 0,
-			TotalDays:     totalDays,
+			Present:       us.present,
+			Late:          us.late,
+			LateExcused:   us.lateExcused,
+			Absent:        us.absent,
+			AbsentExcused: us.absentExcused,
+			PresentDays:   presentDays,
+			AbsentDays:    absentDays,
 			WarningLevel:  warningLevel,
 		})
 	}
@@ -541,6 +558,7 @@ func GetStudentAttendanceHistory(userID primitive.ObjectID) ([]models.Attendance
 
 	cursor, err := config.AttendanceRecordsCollection.Find(ctx, bson.M{
 		"user_id": userID,
+		"deleted": bson.M{"$ne": true},
 	}, &options.FindOptions{
 		Sort: bson.D{{Key: "date", Value: -1}, {Key: "session", Value: 1}},
 	})
@@ -885,7 +903,6 @@ func GetAttendanceStatsWithFilter(cohort int, days int) ([]models.AttendanceStat
 			AbsentExcused: int(r["absent_excused"].(int32)),
 			WarningLevel:  warningLevel,
 		}
-		stat.TotalDays = stat.Present + stat.Late + stat.Absent + stat.LateExcused + stat.AbsentExcused
 		stats = append(stats, stat)
 	}
 

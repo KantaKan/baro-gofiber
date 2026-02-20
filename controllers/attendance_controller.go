@@ -4,6 +4,7 @@ import (
 	"gofiber-baro/models"
 	"gofiber-baro/services"
 	"gofiber-baro/utils"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -294,8 +295,16 @@ func GetAttendanceLogs(c *fiber.Ctx) error {
 // @Router /admin/attendance/stats [get]
 func GetAttendanceStats(c *fiber.Ctx) error {
 	cohort := c.QueryInt("cohort", 0)
+	startDate := c.Query("start_date", "")
+	endDate := c.Query("end_date", "")
 
-	stats, err := services.GetAttendanceStats(cohort)
+	// Default to last 30 days if not provided
+	if startDate == "" || endDate == "" {
+		endDate = time.Now().In(time.UTC).Format("2006-01-02")
+		startDate = time.Now().In(time.UTC).AddDate(0, 0, -30).Format("2006-01-02")
+	}
+
+	stats, err := services.GetAttendanceStats(cohort, startDate, endDate)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching stats")
 	}

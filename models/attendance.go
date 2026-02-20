@@ -67,12 +67,13 @@ type AttendanceStats struct {
 	FirstName     string             `json:"first_name"`
 	LastName      string             `json:"last_name"`
 	CohortNumber  int                `json:"cohort_number"`
-	Present       int                `json:"present"`
-	Late          int                `json:"late"`
-	Absent        int                `json:"absent"`
-	LateExcused   int                `json:"late_excused"`
-	AbsentExcused int                `json:"absent_excused"`
-	TotalDays     int                `json:"total_days"`
+	Present       int                `json:"present"`        // Sessions marked present
+	Late          int                `json:"late"`           // Sessions marked late
+	Absent        int                `json:"absent"`         // Sessions marked absent
+	LateExcused   int                `json:"late_excused"`   // Sessions marked late excused
+	AbsentExcused int                `json:"absent_excused"` // Sessions marked absent excused
+	PresentDays   int                `json:"present_days"`   // Days attended (morning OR afternoon)
+	AbsentDays    int                `json:"absent_days"`    // Days absent (morning OR afternoon absent)
 	WarningLevel  string             `json:"warning_level"`
 }
 
