@@ -43,7 +43,7 @@ func GenerateAttendanceCode(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid session. Use 'morning' or 'afternoon'")
 	}
 
-	adminID := c.Locals("user_id")
+	adminID := c.Locals("userID")
 	generatedBy := ""
 	if id, ok := adminID.(string); ok {
 		generatedBy = id
@@ -102,7 +102,7 @@ func GetActiveAttendanceCode(c *fiber.Ctx) error {
 // @Failure 410 {object} utils.StandardResponse "Code expired"
 // @Router /attendance/submit [post]
 func SubmitAttendance(c *fiber.Ctx) error {
-	userID := c.Locals("user_id")
+	userID := c.Locals("userID")
 	if userID == nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -156,7 +156,7 @@ func SubmitAttendance(c *fiber.Ctx) error {
 // @Success 200 {object} utils.StandardResponse "Attendance status retrieved"
 // @Router /attendance/my-status [get]
 func GetMyAttendanceStatus(c *fiber.Ctx) error {
-	userID := c.Locals("user_id")
+	userID := c.Locals("userID")
 	if userID == nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -227,7 +227,7 @@ func ManualMarkAttendance(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid status")
 	}
 
-	adminID := c.Locals("user_id")
+	adminID := c.Locals("userID")
 	markedBy := ""
 	if id, ok := adminID.(string); ok {
 		markedBy = id
@@ -431,7 +431,7 @@ func DeleteAttendanceRecord(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Record ID is required")
 	}
 
-	adminID := c.Locals("user_id")
+	adminID := c.Locals("userID")
 	deletedBy := ""
 	if idStr, ok := adminID.(string); ok {
 		deletedBy = idStr
@@ -544,7 +544,7 @@ func BulkMarkAttendance(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "No valid user IDs provided")
 	}
 
-	adminID := c.Locals("user_id")
+	adminID := c.Locals("userID")
 	markedBy := ""
 	if id, ok := adminID.(string); ok {
 		markedBy = id

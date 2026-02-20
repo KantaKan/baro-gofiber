@@ -82,7 +82,7 @@ func main() {
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     allowedOrigins,
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+		AllowMethods:     "GET,POST,PUT,PATCH,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Requested-With",
 		AllowCredentials: true,
 		MaxAge:           3600, // Cache preflight response for 1 hour
@@ -94,14 +94,14 @@ func main() {
 	})
 	app.Use(helmet.New(helmet.Config{
 		ContentSecurityPolicy: "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:",
-		XSSProtection:        "1; mode=block",
-		ContentTypeNosniff:   "nosniff",
-		ReferrerPolicy:       "no-referrer",
+		XSSProtection:         "1; mode=block",
+		ContentTypeNosniff:    "nosniff",
+		ReferrerPolicy:        "no-referrer",
 	}))
 
 	app.Use(limiter.New(limiter.Config{
-		Max:        100,              // Max number of requests
-		Expiration: 1 * time.Minute,  // Per minute
+		Max:        100,             // Max number of requests
+		Expiration: 1 * time.Minute, // Per minute
 		KeyGenerator: func(c *fiber.Ctx) string {
 			return c.IP() // Rate limit by IP
 		},

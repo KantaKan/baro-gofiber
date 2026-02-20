@@ -10,7 +10,7 @@ import (
 )
 
 func CreateLeaveRequest(c *fiber.Ctx) error {
-	userID := c.Locals("user_id")
+	userID := c.Locals("userID")
 	if userID == nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -65,7 +65,7 @@ func CreateLeaveRequest(c *fiber.Ctx) error {
 }
 
 func GetMyLeaveRequests(c *fiber.Ctx) error {
-	userID := c.Locals("user_id")
+	userID := c.Locals("userID")
 	if userID == nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -134,7 +134,7 @@ func AdminCreateLeaveRequest(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
 	}
 
-	adminID := c.Locals("user_id")
+	adminID := c.Locals("userID")
 	adminOID, _ := primitive.ObjectIDFromHex(adminID.(string))
 
 	adminName := "Admin"
@@ -183,7 +183,7 @@ func UpdateLeaveRequestStatus(c *fiber.Ctx) error {
 
 	status := models.LeaveRequestStatus(body.Status)
 
-	adminID := c.Locals("user_id")
+	adminID := c.Locals("userID")
 	adminOID, _ := primitive.ObjectIDFromHex(adminID.(string))
 
 	adminName := "Admin"
@@ -203,7 +203,7 @@ func UpdateLeaveRequestStatus(c *fiber.Ctx) error {
 }
 
 func GetMyAttendanceHistory(c *fiber.Ctx) error {
-	userID := c.Locals("user_id")
+	userID := c.Locals("userID")
 	if userID == nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
@@ -224,7 +224,7 @@ func GetMyAttendanceHistory(c *fiber.Ctx) error {
 }
 
 func GetMyDailyStats(c *fiber.Ctx) error {
-	userID := c.Locals("user_id")
+	userID := c.Locals("userID")
 	if userID == nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
