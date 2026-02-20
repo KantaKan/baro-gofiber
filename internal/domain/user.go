@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -25,6 +26,20 @@ type Reflection struct {
 	CreatedAt      time.Time          `bson:"createdAt" json:"createdAt"`
 	ReflectionData ReflectionContent  `bson:"reflection" json:"reflection"`
 	AdminFeedback  string             `bson:"admin_feedback,omitempty" json:"admin_feedback,omitempty"`
+}
+
+func (r Reflection) MarshalJSON() ([]byte, error) {
+	type Alias Reflection
+	thailandLoc, _ := time.LoadLocation("Asia/Bangkok")
+	return json.Marshal(&struct {
+		Date      string `json:"date"`
+		CreatedAt string `json:"createdAt"`
+		*Alias
+	}{
+		Date:      r.Date.In(thailandLoc).Format(time.RFC3339),
+		CreatedAt: r.CreatedAt.In(thailandLoc).Format(time.RFC3339),
+		Alias:     (*Alias)(&r),
+	})
 }
 
 type ReflectionContent struct {
