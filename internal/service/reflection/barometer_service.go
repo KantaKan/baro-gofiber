@@ -42,7 +42,7 @@ func (s *BarometerService) GetUserBarometerData(users []domain.User) (map[string
 			switch strings.ToLower(barometer) {
 			case "comfort zone":
 				zoneCounts["Comfort Zone"]++
-			case "stretch zone- enjoying the challenges":
+			case "stretch zone - enjoying the challenges":
 				zoneCounts["Stretch Zone - Enjoying the Challenges"]++
 			case "stretch zone - overwhelmed":
 				zoneCounts["Stretch Zone - Overwhelmed"]++
@@ -72,12 +72,16 @@ func (s *BarometerService) GetAllUsersBarometerData(timeRange string, cohort int
 		startDate = endDate.AddDate(0, 0, -90)
 	}
 
+	startDateStr := startDate.Format("2006-01-02")
+	endDateStr := endDate.Format("2006-01-02")
+
 	matchFilter := bson.M{
-		"reflections.date": bson.M{
-			"$gte": startDate,
-			"$lte": endDate,
+		"reflections.day": bson.M{
+			"$gte": startDateStr,
+			"$lte": endDateStr,
 		},
 	}
+
 	if cohort > 0 {
 		matchFilter["cohort_number"] = cohort
 	}
@@ -87,12 +91,7 @@ func (s *BarometerService) GetAllUsersBarometerData(timeRange string, cohort int
 		{"$match": matchFilter},
 		{"$group": bson.M{
 			"_id": bson.M{
-				"date": bson.M{
-					"$dateToString": bson.M{
-						"format": "%Y-%m-%d",
-						"date":   "$reflections.date",
-					},
-				},
+				"date":      "$reflections.day",
 				"barometer": "$reflections.reflection.barometer",
 			},
 			"count": bson.M{"$sum": 1},
