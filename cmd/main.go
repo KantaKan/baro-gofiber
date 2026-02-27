@@ -110,12 +110,13 @@ func main() {
 	})
 
 	handlers := Handlers{
-		User:       container.UserHandler,
-		Admin:      container.AdminHandler,
-		Attendance: container.AttendanceHandler,
-		Leave:      container.LeaveHandler,
-		Holiday:    container.HolidayHandler,
-		TalkBoard:  container.TalkBoardHandler,
+		User:         container.UserHandler,
+		Admin:        container.AdminHandler,
+		Attendance:   container.AttendanceHandler,
+		Leave:        container.LeaveHandler,
+		Holiday:      container.HolidayHandler,
+		TalkBoard:    container.TalkBoardHandler,
+		Notification: container.NotificationHandler,
 	}
 
 	setupRoutes(app, handlers)

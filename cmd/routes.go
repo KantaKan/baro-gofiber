@@ -10,17 +10,22 @@ import (
 )
 
 type Handlers struct {
-	User       *handler.UserHandler
-	Admin      *handler.AdminHandler
-	Attendance *handler.AttendanceHandler
-	Leave      *handler.LeaveHandler
-	Holiday    *handler.HolidayHandler
-	TalkBoard  *handler.TalkBoardHandler
+	User         *handler.UserHandler
+	Admin        *handler.AdminHandler
+	Attendance   *handler.AttendanceHandler
+	Leave        *handler.LeaveHandler
+	Holiday      *handler.HolidayHandler
+	TalkBoard    *handler.TalkBoardHandler
+	Notification *handler.NotificationHandler
 }
 
 func setupRoutes(app *fiber.App, h Handlers) {
 	app.Post("/login", h.User.LoginUser)
 	app.Get("/api/verify-token", middleware.AuthMiddleware, h.User.VerifyToken)
+
+	notifications := app.Group("/api/notifications", middleware.AuthMiddleware)
+	notifications.Get("", h.Notification.GetActiveNotifications)
+	notifications.Post("/:id/read", h.Notification.MarkAsRead)
 
 	protected := app.Group("/users", middleware.AuthMiddleware)
 	protected.Get("/:id", h.User.GetUserProfile)
@@ -71,6 +76,11 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/leave-requests", h.Leave.CreateLeaveRequestAdmin)
 	admin.Get("/leave-requests", h.Leave.GetAllLeaveRequests)
 	admin.Patch("/leave-requests/:id", h.Leave.UpdateLeaveRequestStatus)
+
+	admin.Post("/notifications", h.Notification.CreateNotification)
+	admin.Get("/notifications", h.Notification.GetAllNotifications)
+	admin.Put("/notifications/:id", h.Notification.UpdateNotification)
+	admin.Delete("/notifications/:id", h.Notification.DeleteNotification)
 
 	student := app.Group("/attendance", middleware.AuthMiddleware)
 	student.Post("/submit", h.Attendance.SubmitAttendance)

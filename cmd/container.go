@@ -7,6 +7,7 @@ import (
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/holiday"
 	leaveService "gofiber-baro/internal/service/leave"
+	notificationService "gofiber-baro/internal/service/notification"
 	reflectionService "gofiber-baro/internal/service/reflection"
 	userService "gofiber-baro/internal/service/user"
 
@@ -22,6 +23,7 @@ type Container struct {
 	LeaveRepo          domain.LeaveRequestRepository
 	HolidayRepo        domain.HolidayRepository
 	TalkBoardRepo      domain.TalkBoardRepository
+	NotificationRepo   domain.NotificationRepository
 
 	UserService                 *userService.Service
 	BadgeService                *userService.BadgeService
@@ -29,17 +31,19 @@ type Container struct {
 	BarometerService            *reflectionService.BarometerService
 	LeaveService                *leaveService.Service
 	HolidayService              *holiday.Service
+	NotificationService         *notificationService.Service
 	AttendanceCodeService       *attendance.CodeService
 	AttendanceSubmissionService *attendance.SubmissionService
 	AttendanceStatsService      *attendance.StatsService
 	AttendanceOverviewService   *attendance.OverviewService
 
-	UserHandler       *handler.UserHandler
-	AdminHandler      *handler.AdminHandler
-	AttendanceHandler *handler.AttendanceHandler
-	LeaveHandler      *handler.LeaveHandler
-	HolidayHandler    *handler.HolidayHandler
-	TalkBoardHandler  *handler.TalkBoardHandler
+	UserHandler         *handler.UserHandler
+	AdminHandler        *handler.AdminHandler
+	AttendanceHandler   *handler.AttendanceHandler
+	LeaveHandler        *handler.LeaveHandler
+	HolidayHandler      *handler.HolidayHandler
+	TalkBoardHandler    *handler.TalkBoardHandler
+	NotificationHandler *handler.NotificationHandler
 }
 
 func NewContainer(db *mongo.Database) *Container {
@@ -59,6 +63,7 @@ func (c *Container) initRepositories() {
 	c.LeaveRepo = repository.NewLeaveRequestRepository(c.DB)
 	c.HolidayRepo = repository.NewHolidayRepository(c.DB)
 	c.TalkBoardRepo = repository.NewTalkBoardRepository(c.DB)
+	c.NotificationRepo = repository.NewNotificationRepository(c.DB)
 }
 
 func (c *Container) initServices() {
@@ -68,6 +73,7 @@ func (c *Container) initServices() {
 	c.BarometerService = reflectionService.NewBarometerService(c.DB)
 	c.LeaveService = leaveService.NewService(c.LeaveRepo, c.UserService)
 	c.HolidayService = holiday.NewService(c.HolidayRepo, c.DB)
+	c.NotificationService = notificationService.NewService(c.NotificationRepo)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
 	c.AttendanceSubmissionService = attendance.NewSubmissionService(c.AttendanceRepo, c.UserService)
@@ -88,4 +94,5 @@ func (c *Container) initHandlers() {
 	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService)
 	c.HolidayHandler = handler.NewHolidayHandler(c.HolidayService)
 	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo)
+	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
 }
