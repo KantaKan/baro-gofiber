@@ -437,9 +437,10 @@ func (h *AttendanceHandler) GetAttendanceStatsByDays(c *fiber.Ctx) error {
 
 func (h *AttendanceHandler) GetDailyAttendanceStats(c *fiber.Ctx) error {
 	cohort := c.QueryInt("cohort", 0)
-	days := c.QueryInt("days", 7)
+	startDate := c.Query("start_date", "")
+	endDate := c.Query("end_date", "")
 
-	stats, err := h.statsService.GetDailyAttendanceStats(cohort, days)
+	stats, err := h.statsService.GetDailyAttendanceStatsByDateRange(cohort, startDate, endDate)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching daily stats")
 	}
@@ -484,7 +485,11 @@ func (h *AttendanceHandler) GetMyDailyStats(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
 
-	stats, err := h.statsService.GetDailyAttendanceStats(user.CohortNumber, days)
+	// Calculate date range from days
+	startDate := utils.GetThailandTime().AddDate(0, 0, -days).Format("2006-01-02")
+	endDate := utils.GetThailandTime().Format("2006-01-02")
+
+	stats, err := h.statsService.GetDailyAttendanceStatsByDateRange(user.CohortNumber, startDate, endDate)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching daily stats")
 	}

@@ -137,15 +137,7 @@ func (r *attendanceRepository) AggregateDailyStats(ctx interface{}, pipeline int
 
 	stats := make([]map[string]interface{}, len(results))
 	for i, r := range results {
-		stats[i] = map[string]interface{}{
-			"date":           r["_id"],
-			"present":        r["present"],
-			"late":           r["late"],
-			"absent":         r["absent"],
-			"late_excused":   r["late_excused"],
-			"absent_excused": r["absent_excused"],
-			"total":          r["present"].(int32) + r["late"].(int32) + r["absent"].(int32) + r["late_excused"].(int32) + r["absent_excused"].(int32),
-		}
+		stats[i] = r
 	}
 	return stats, nil
 }
