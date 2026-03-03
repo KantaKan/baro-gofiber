@@ -3,12 +3,15 @@ package attendance
 import (
 	"context"
 	"errors"
+	"log"
+	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type SubmissionService struct {
@@ -27,10 +30,14 @@ func (s *SubmissionService) ManualMarkAttendance(userID primitive.ObjectID, date
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	log.Printf("[DEBUG] ManualMarkAttendance: userID=%s, date=%s, session=%s, status=%s", userID.Hex(), date, session, status)
+
 	user, err := s.userService.GetUserByID(userID.Hex())
 	if err != nil {
+		log.Printf("[ERROR] ManualMarkAttendance: user not found: %s, err=%v", userID.Hex(), err)
 		return nil, ErrStudentNotFound
 	}
+	log.Printf("[DEBUG] ManualMarkAttendance: user found: %s %s", user.FirstName, user.LastName)
 
 	filter := domain.AttendanceRecordFilter{
 		UserID:  userID,
@@ -39,11 +46,15 @@ func (s *SubmissionService) ManualMarkAttendance(userID primitive.ObjectID, date
 	}
 
 	existing, err := s.recordRepo.FindRecord(ctx, filter)
-	if err != nil && !errors.Is(err, ErrRecordNotFound) {
+	// Check for record not found - handle both service and repo error instances
+	isNotFound := errors.Is(err, ErrRecordNotFound) || (err != nil && err.Error() == "attendance record not found")
+	if err != nil && !isNotFound {
+		log.Printf("[ERROR] ManualMarkAttendance: FindRecord error: %v", err)
 		return nil, err
 	}
 
 	if existing != nil && existing.ID != primitive.NilObjectID {
+		log.Printf("[DEBUG] ManualMarkAttendance: updating existing record %s", existing.ID.Hex())
 		update := bson.M{
 			"status":         status,
 			"marked_by":      domain.MarkedByAdmin,
@@ -54,6 +65,7 @@ func (s *SubmissionService) ManualMarkAttendance(userID primitive.ObjectID, date
 			"deleted_by":     "",
 		}
 		if err := s.recordRepo.UpdateRecord(ctx, existing.ID, update); err != nil {
+			log.Printf("[ERROR] ManualMarkAttendance: UpdateRecord error: %v", err)
 			return nil, err
 		}
 		existing.Status = status
@@ -78,10 +90,49 @@ func (s *SubmissionService) ManualMarkAttendance(userID primitive.ObjectID, date
 		Locked:       false,
 	}
 
+	log.Printf("[DEBUG] ManualMarkAttendance: inserting new record for user %s", userID.Hex())
 	if err := s.recordRepo.InsertRecord(ctx, record); err != nil {
+		log.Printf("[ERROR] ManualMarkAttendance: InsertRecord error: %v", err)
+
+		// Check for duplicate key error (unique index violation)
+		if mongo.IsDuplicateKeyError(err) {
+			log.Printf("[DEBUG] ManualMarkAttendance: duplicate key error, searching for existing record")
+			// Try to find and update the existing record
+			existing, findErr := s.recordRepo.FindRecord(ctx, filter)
+			if findErr == nil && existing != nil {
+				log.Printf("[DEBUG] ManualMarkAttendance: found existing record %s, updating", existing.ID.Hex())
+				update := bson.M{
+					"status":         status,
+					"marked_by":      domain.MarkedByAdmin,
+					"marked_by_user": markedBy,
+					"submitted_at":   time.Now(),
+					"deleted":        false,
+					"deleted_at":     nil,
+					"deleted_by":     "",
+				}
+				if updateErr := s.recordRepo.UpdateRecord(ctx, existing.ID, update); updateErr != nil {
+					log.Printf("[ERROR] ManualMarkAttendance: UpdateRecord failed: %v", updateErr)
+					return nil, updateErr
+				}
+				existing.Status = status
+				existing.MarkedBy = domain.MarkedByAdmin
+				existing.MarkedByUser = markedBy
+				existing.Deleted = false
+				return existing, nil
+			}
+			log.Printf("[DEBUG] ManualMarkAttendance: could not find existing record: %v", findErr)
+		}
+
+		// Check for other common errors
+		if strings.Contains(err.Error(), "context deadline exceeded") {
+			log.Printf("[ERROR] ManualMarkAttendance: database timeout")
+			return nil, errors.New("database timeout, please try again")
+		}
+
 		return nil, err
 	}
 
+	log.Printf("[DEBUG] ManualMarkAttendance: success, record ID: %s", record.ID.Hex())
 	return record, nil
 }
 
@@ -104,7 +155,8 @@ func (s *SubmissionService) BulkMarkAttendance(userIDs []primitive.ObjectID, dat
 		}
 
 		existing, err := s.recordRepo.FindRecord(ctx, filter)
-		if err != nil && !errors.Is(err, ErrRecordNotFound) {
+		isNotFound := errors.Is(err, ErrRecordNotFound) || (err != nil && err.Error() == "attendance record not found")
+		if err != nil && !isNotFound {
 			continue
 		}
 

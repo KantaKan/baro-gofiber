@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -202,10 +203,11 @@ func (h *AttendanceHandler) ManualMarkAttendance(c *fiber.Ctx) error {
 
 	record, err := h.submissionService.ManualMarkAttendance(oid, body.Date, body.Session, status, markedBy)
 	if err != nil {
+		log.Printf("[ERROR] ManualMarkAttendance failed for user %s: %v", body.UserID, err)
 		if err == attendance.ErrStudentNotFound {
 			return utils.SendError(c, fiber.StatusNotFound, "Student not found")
 		}
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error marking attendance")
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error marking attendance: "+err.Error())
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Attendance marked successfully", record)
