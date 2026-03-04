@@ -57,7 +57,7 @@ func (r *talkBoardRepository) FindByID(ctx context.Context, id primitive.ObjectI
 }
 
 func (r *talkBoardRepository) UpdatePost(ctx context.Context, id primitive.ObjectID, update interface{}) error {
-	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": update})
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
 	return err
 }
 
@@ -76,10 +76,29 @@ func (r *talkBoardRepository) AddComment(ctx context.Context, postID primitive.O
 }
 
 func (r *talkBoardRepository) AddReaction(ctx context.Context, postID primitive.ObjectID, reaction domain.Reaction) error {
+	// First ensure reactions field exists as an array (not null)
 	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": postID, "reactions": nil},
+		bson.M{"$set": bson.M{"reactions": []domain.Reaction{}}},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Now push the reaction
+	_, err = r.collection.UpdateOne(
 		ctx,
 		bson.M{"_id": postID},
 		bson.M{"$push": bson.M{"reactions": reaction}},
 	)
 	return err
+}
+
+func (r *talkBoardRepository) Exists(ctx context.Context, id primitive.ObjectID) (bool, error) {
+	count, err := r.collection.CountDocuments(ctx, bson.M{"_id": id})
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"log"
 	"time"
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -80,6 +82,8 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 		ZoomName:  body.ZoomName,
 		Cohort:    body.Cohort,
 		Content:   body.Content,
+		Reactions: []domain.Reaction{},
+		Comments:  []domain.Comment{},
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -156,7 +160,19 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 
 	postOID, err := primitive.ObjectIDFromHex(postID)
 	if err != nil {
+		log.Printf("ERROR: Invalid post ID format: %v", err)
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
+	}
+
+	// Verify post exists
+	exists, err := h.repo.Exists(ctx, postOID)
+	if err != nil {
+		log.Printf("ERROR: Error checking post existence: %v", err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error checking post")
+	}
+	if !exists {
+		log.Printf("ERROR: Post not found: %s", postID)
+		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
 	}
 
 	type RequestBody struct {
@@ -165,6 +181,7 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 
 	var body RequestBody
 	if err := c.BodyParser(&body); err != nil {
+		log.Printf("ERROR: Body parser error: %v", err)
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
@@ -172,7 +189,31 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Reaction is required")
 	}
 
-	userOID, _ := primitive.ObjectIDFromHex(userID.(string))
+	log.Printf("DEBUG: Adding reaction %s to post %s by user %s", body.Reaction, postID, userID.(string))
+
+	userOID, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		log.Printf("ERROR: Invalid user ID format: %v, userID: %v", err, userID)
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
+	}
+
+	// First ensure reactions field exists and is an array
+	initUpdate := bson.M{
+		"$setOnInsert": bson.M{
+			"reactions": []domain.Reaction{},
+		},
+	}
+	err = h.repo.UpdatePost(ctx, postOID, initUpdate)
+	if err != nil {
+		log.Printf("DEBUG: initUpdate result: %v", err)
+	}
+
+	// Now remove any existing reaction by this user
+	pullUpdate := bson.M{"$pull": bson.M{"reactions": bson.M{"userId": userOID}}}
+	if err := h.repo.UpdatePost(ctx, postOID, pullUpdate); err != nil {
+		log.Printf("DEBUG: pullUpdate result: %v", err)
+		// Continue anyway - might be first reaction
+	}
 
 	reaction := domain.Reaction{
 		ID:        primitive.NewObjectID(),
@@ -182,8 +223,11 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 		CreatedAt: time.Now(),
 	}
 
-	if err := h.repo.AddReaction(ctx, postOID, reaction); err != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
+	log.Printf("DEBUG: Adding reaction to MongoDB: postID=%s, reaction=%+v", postOID.Hex(), reaction)
+	err = h.repo.AddReaction(ctx, postOID, reaction)
+	if err != nil {
+		log.Printf("ERROR: Error adding reaction: %v", err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction: "+err.Error())
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Reaction added", reaction)
@@ -191,6 +235,11 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 
 func (h *TalkBoardHandler) RemoveReactionFromPost(c *fiber.Ctx) error {
 	ctx := c.Context()
+	userID := c.Locals("userID")
+	if userID == nil {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+
 	postID := c.Params("postId")
 	if postID == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
@@ -201,7 +250,14 @@ func (h *TalkBoardHandler) RemoveReactionFromPost(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
 	}
 
-	if err := h.repo.UpdatePost(ctx, postOID, nil); err != nil {
+	userOID, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
+	}
+
+	// Remove reaction where userId matches
+	update := bson.M{"$pull": bson.M{"reactions": bson.M{"userId": userOID}}}
+	if err := h.repo.UpdatePost(ctx, postOID, update); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error removing reaction")
 	}
 
