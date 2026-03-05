@@ -68,6 +68,7 @@ type User struct {
 	GenmateGroup string             `bson:"genmate_group" json:"genmate_group"`
 	ZoomName     string             `bson:"zoom_name" json:"zoom_name"`
 	Badges       []Badge            `bson:"badges,omitempty" json:"badges,omitempty"`
+	SalesforceID string             `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
 }
 
 type ReflectionWithUser struct {

@@ -114,6 +114,7 @@ type AttendanceRepository interface {
 	InsertRecord(ctx interface{}, record *AttendanceRecord) error
 	FindRecord(ctx interface{}, filter AttendanceRecordFilter) (*AttendanceRecord, error)
 	FindRecords(ctx interface{}, filter AttendanceRecordFilter, opts interface{}) ([]AttendanceRecord, error)
+	FindRecordsRaw(ctx interface{}, bsonFilter interface{}, opts interface{}) ([]AttendanceRecord, error)
 	UpdateRecord(ctx interface{}, id primitive.ObjectID, update interface{}) error
 	UpdateRecords(ctx interface{}, filter AttendanceRecordFilter, update interface{}) error
 	DeleteRecord(ctx interface{}, id primitive.ObjectID, deletedBy string) error

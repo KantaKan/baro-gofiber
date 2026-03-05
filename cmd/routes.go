@@ -4,9 +4,10 @@ import (
 	"gofiber-baro/internal/handler"
 	middleware "gofiber-baro/pkg/middleware"
 
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"time"
 )
 
 type Handlers struct {
@@ -68,6 +69,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/attendance/lock", h.Attendance.LockSession)
 	admin.Post("/attendance/bulk", h.Attendance.BulkMarkAttendance)
 	admin.Delete("/attendance/:id", h.Attendance.DeleteAttendanceRecord)
+	admin.Get("/attendance/export/salesforce", h.Attendance.ExportToSalesforce)
+	admin.Patch("/users/:id/salesforce-id", h.Attendance.UpdateSalesforceID)
 
 	admin.Post("/holidays", h.Holiday.CreateHoliday)
 	admin.Get("/holidays", h.Holiday.GetHolidays)

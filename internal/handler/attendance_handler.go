@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -18,6 +19,7 @@ type AttendanceHandler struct {
 	submissionService *attendance.SubmissionService
 	statsService      *attendance.StatsService
 	overviewService   *attendance.OverviewService
+	exportService     *attendance.ExportService
 	userService       *user.Service
 }
 
@@ -26,6 +28,7 @@ func NewAttendanceHandler(
 	submissionService *attendance.SubmissionService,
 	statsService *attendance.StatsService,
 	overviewService *attendance.OverviewService,
+	exportService *attendance.ExportService,
 	userService *user.Service,
 ) *AttendanceHandler {
 	return &AttendanceHandler{
@@ -33,6 +36,7 @@ func NewAttendanceHandler(
 		submissionService: submissionService,
 		statsService:      statsService,
 		overviewService:   overviewService,
+		exportService:     exportService,
 		userService:       userService,
 	}
 }
@@ -495,4 +499,55 @@ func (h *AttendanceHandler) GetMyDailyStats(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Daily stats retrieved", stats)
+}
+
+// ExportToSalesforce generates and streams a Salesforce-compatible CSV file.
+// Query params: cohort (int), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)
+func (h *AttendanceHandler) ExportToSalesforce(c *fiber.Ctx) error {
+	cohort := c.QueryInt("cohort", 0)
+	startDate := c.Query("start_date", "")
+	endDate := c.Query("end_date", "")
+
+	if cohort == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "cohort is required")
+	}
+	if startDate == "" || endDate == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "start_date and end_date are required (YYYY-MM-DD)")
+	}
+
+	csvBytes, err := h.exportService.ExportSalesforceCSV(cohort, startDate, endDate)
+	if err != nil {
+		log.Printf("[ERROR] ExportToSalesforce: %v", err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error generating export")
+	}
+
+	filename := fmt.Sprintf("salesforce_attendance_%s_%s.csv", startDate, endDate)
+	c.Set("Content-Type", "text/csv; charset=utf-8")
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	return c.SendString(string(csvBytes))
+}
+
+// UpdateSalesforceID lets an admin set or clear the Salesforce ID for a user.
+// PATCH /admin/users/:id/salesforce-id  { "salesforce_id": "a1gUZ..." }
+func (h *AttendanceHandler) UpdateSalesforceID(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	type RequestBody struct {
+		SalesforceID string `json:"salesforce_id"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if err := h.userService.UpdateUser(id, map[string]interface{}{"salesforce_id": body.SalesforceID}); err != nil {
+		log.Printf("[ERROR] UpdateSalesforceID for user %s: %v", id, err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating Salesforce ID")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Salesforce ID updated", nil)
 }

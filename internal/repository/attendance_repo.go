@@ -73,6 +73,29 @@ func (r *attendanceRepository) FindRecords(ctx interface{}, filter domain.Attend
 	return records, nil
 }
 
+func (r *attendanceRepository) FindRecordsRaw(ctx interface{}, bsonFilter interface{}, opts interface{}) ([]domain.AttendanceRecord, error) {
+	c := ctx.(context.Context)
+
+	findOpts := options.Find()
+	if opts != nil {
+		if o, ok := opts.(*options.FindOptions); ok {
+			findOpts = o
+		}
+	}
+
+	cursor, err := r.collection.Find(c, bsonFilter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(c)
+
+	var records []domain.AttendanceRecord
+	if err := cursor.All(c, &records); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
 func (r *attendanceRepository) UpdateRecord(ctx interface{}, id primitive.ObjectID, update interface{}) error {
 	c := ctx.(context.Context)
 	filter := bson.M{"_id": id}
