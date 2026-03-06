@@ -21,6 +21,10 @@ const (
 	StatusAbsent        AttendanceStatus = "absent"
 	StatusLateExcused   AttendanceStatus = "late_excused"
 	StatusAbsentExcused AttendanceStatus = "absent_excused"
+	StatusNoClass       AttendanceStatus = "no_class"
+	StatusHoliday       AttendanceStatus = "holiday"
+	StatusDropout       AttendanceStatus = "dropout"
+	StatusDismissed     AttendanceStatus = "dismissed"
 )
 
 type MarkedBy string

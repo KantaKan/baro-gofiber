@@ -64,7 +64,7 @@ func (s *OverviewService) GetTodayAttendanceOverview(cohort int, session domain.
 		}
 	}
 
-	users, _, err := s.userService.GetAllUsers(cohort, "", "", "", "first_name", 1, 1, 500)
+	users, _, err := s.userService.GetAllUsers(cohort, "", "", "", "first_name", 1, 1, 500, "dropout,dismissed")
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (s *OverviewService) GetAttendanceOverviewByDate(cohort int, session domain
 		}
 	}
 
-	users, _, err := s.userService.GetAllUsers(cohort, "", "", "", "first_name", 1, 1, 500)
+	users, _, err := s.userService.GetAllUsers(cohort, "", "", "", "first_name", 1, 1, 500, "dropout,dismissed")
 	if err != nil {
 		return nil, err
 	}

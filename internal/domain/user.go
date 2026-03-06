@@ -55,20 +55,21 @@ type SessionDetails struct {
 }
 
 type User struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	JSDNumber    string             `bson:"jsd_number" json:"jsd_number"`
-	FirstName    string             `bson:"first_name" json:"first_name"`
-	LastName     string             `bson:"last_name" json:"last_name"`
-	Email        string             `bson:"email" json:"email"`
-	CohortNumber int                `bson:"cohort_number" json:"cohort_number"`
-	Reflections  []Reflection       `bson:"reflections" json:"reflections"`
-	Password     string             `bson:"password,omitempty" json:"password,omitempty"`
-	Role         string             `bson:"role" json:"role"`
-	ProjectGroup string             `bson:"project_group" json:"project_group"`
-	GenmateGroup string             `bson:"genmate_group" json:"genmate_group"`
-	ZoomName     string             `bson:"zoom_name" json:"zoom_name"`
-	Badges       []Badge            `bson:"badges,omitempty" json:"badges,omitempty"`
-	SalesforceID string             `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
+	ID               primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	JSDNumber        string             `bson:"jsd_number" json:"jsd_number"`
+	FirstName        string             `bson:"first_name" json:"first_name"`
+	LastName         string             `bson:"last_name" json:"last_name"`
+	Email            string             `bson:"email" json:"email"`
+	CohortNumber     int                `bson:"cohort_number" json:"cohort_number"`
+	Reflections      []Reflection       `bson:"reflections" json:"reflections"`
+	Password         string             `bson:"password,omitempty" json:"password,omitempty"`
+	Role             string             `bson:"role" json:"role"`
+	ProjectGroup     string             `bson:"project_group" json:"project_group"`
+	GenmateGroup     string             `bson:"genmate_group" json:"genmate_group"`
+	ZoomName         string             `bson:"zoom_name" json:"zoom_name"`
+	Badges           []Badge            `bson:"badges,omitempty" json:"badges,omitempty"`
+	SalesforceID     string             `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
+	AttendanceStatus string             `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
 }
 
 type ReflectionWithUser struct {
@@ -108,10 +109,11 @@ type StudentInfo struct {
 }
 
 type UserFilter struct {
-	Cohort int
-	Role   string
-	Email  string
-	Search string
+	Cohort                  int
+	Role                    string
+	Email                   string
+	Search                  string
+	ExcludeAttendanceStatus string // Comma-separated statuses to exclude, e.g., "dropout,dismissed"
 }
 
 type UserRepository interface {

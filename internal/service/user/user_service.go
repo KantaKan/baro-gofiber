@@ -40,7 +40,7 @@ func (s *Service) GetUserByEmail(email string) (*domain.User, error) {
 	return s.repo.FindByEmail(ctx, email)
 }
 
-func (s *Service) GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int) ([]domain.User, int, error) {
+func (s *Service) GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int, excludeAttendanceStatus ...string) ([]domain.User, int, error) {
 	ctx := context.Background()
 
 	filter := domain.UserFilter{
@@ -48,6 +48,10 @@ func (s *Service) GetAllUsers(cohort int, role, email, search, sort string, sort
 		Role:   role,
 		Email:  email,
 		Search: search,
+	}
+
+	if len(excludeAttendanceStatus) > 0 && excludeAttendanceStatus[0] != "" {
+		filter.ExcludeAttendanceStatus = excludeAttendanceStatus[0]
 	}
 
 	findOpts := options.Find()

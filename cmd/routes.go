@@ -71,6 +71,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Delete("/attendance/:id", h.Attendance.DeleteAttendanceRecord)
 	admin.Get("/attendance/export/salesforce", h.Attendance.ExportToSalesforce)
 	admin.Patch("/users/:id/salesforce-id", h.Attendance.UpdateSalesforceID)
+	admin.Patch("/users/:id/attendance-status", h.Attendance.UpdateAttendanceStatus)
 
 	admin.Post("/holidays", h.Holiday.CreateHoliday)
 	admin.Get("/holidays", h.Holiday.GetHolidays)

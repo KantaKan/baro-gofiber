@@ -299,7 +299,7 @@ func (s *StatsService) GetDailyAttendanceStatsByDateRange(cohort int, startDate,
 	// Get cohort learner count
 	cohortTotal := 0
 	if cohort > 0 {
-		users, _, err := s.userService.GetAllUsers(cohort, "learner", "", "", "email", 1, 0, 0)
+		users, _, err := s.userService.GetAllUsers(cohort, "learner", "", "", "email", 1, 0, 0, "dropout,dismissed")
 		if err == nil {
 			cohortTotal = len(users)
 		} else {
@@ -311,7 +311,7 @@ func (s *StatsService) GetDailyAttendanceStatsByDateRange(cohort int, startDate,
 	dateMap := make(map[string]map[string]interface{})
 	for _, r := range results {
 		var date, session string
-		
+
 		// Robustly extract date and session from _id or top-level
 		if id, ok := r["_id"]; ok {
 			if idMap, ok := id.(map[string]interface{}); ok {
@@ -330,7 +330,7 @@ func (s *StatsService) GetDailyAttendanceStatsByDateRange(cohort int, startDate,
 				}
 			}
 		}
-		
+
 		// Fallback to top-level if not in _id
 		if date == "" {
 			date, _ = r["date"].(string)
@@ -378,7 +378,7 @@ func (s *StatsService) GetDailyAttendanceStatsByDateRange(cohort int, startDate,
 		// Session-specific counts
 		sessionPresent := present + late + lateExcused
 		sessionAbsentTotal := absent + absentExcused
-		
+
 		// Use cohortTotal for denominators if available
 		totalForSession := cohortTotal
 		if totalForSession == 0 {
@@ -400,17 +400,17 @@ func (s *StatsService) GetDailyAttendanceStatsByDateRange(cohort int, startDate,
 	finalResults := make([]map[string]interface{}, 0, len(dateMap))
 	for _, v := range dateMap {
 		v["total"] = cohortTotal
-		
+
 		// Calculate attendance rate
 		// We use (am_present + pm_present) / (cohortTotal * 2)
 		// If cohortTotal is 0, we fallback to the sum of records
 		presentSum := v["present"].(int)
 		lateSum := v["late"].(int)
 		lateExcusedSum := v["late_excused"].(int)
-		
+
 		attended := float64(presentSum + lateSum + lateExcusedSum)
 		var totalPossible float64
-		
+
 		if cohortTotal > 0 {
 			totalPossible = float64(cohortTotal * 2)
 		} else {

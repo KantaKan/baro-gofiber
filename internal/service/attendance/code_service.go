@@ -34,7 +34,7 @@ type CodeService struct {
 
 type UserServiceInterface interface {
 	GetUserByID(id string) (*domain.User, error)
-	GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int) ([]domain.User, int, error)
+	GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int, excludeAttendanceStatus ...string) ([]domain.User, int, error)
 }
 
 func NewCodeService(codeRepo domain.AttendanceCodeRepository, recordRepo domain.AttendanceRepository, userService UserServiceInterface) *CodeService {

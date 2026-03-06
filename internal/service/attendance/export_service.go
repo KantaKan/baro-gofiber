@@ -25,6 +25,7 @@ func NewExportService(recordRepo domain.AttendanceRepository, us *userService.Se
 
 // salesforceStatus maps internal attendance status → Salesforce display label.
 // Worst session in the day wins: Absent > AbsentExcused > Late > LateExcused > Present > NoClass > Holiday
+// Dropout and Dismissed return empty string (blank in export)
 func salesforceStatus(morning, afternoon domain.AttendanceStatus) string {
 	combined := []domain.AttendanceStatus{morning, afternoon}
 
@@ -48,9 +49,9 @@ func salesforceStatus(morning, afternoon domain.AttendanceStatus) string {
 			hasLateExcused = true
 		case domain.StatusPresent:
 			hasPresent = true
-		case "no_class":
+		case domain.StatusNoClass:
 			hasNoClass = true
-		case "holiday":
+		case domain.StatusHoliday:
 			hasHoliday = true
 		}
 	}
@@ -71,6 +72,7 @@ func salesforceStatus(morning, afternoon domain.AttendanceStatus) string {
 	case hasHoliday:
 		return "Holiday"
 	default:
+		// dropout, dismissed, or no record = blank
 		return ""
 	}
 }
@@ -134,10 +136,12 @@ func (s *ExportService) ExportSalesforceCSV(cohort int, startDate, endDate strin
 			morning := sessionMap[sessionKey{uid, date, domain.SessionMorning}]
 			afternoon := sessionMap[sessionKey{uid, date, domain.SessionAfternoon}]
 
-			// If both sessions empty → dropout / no class; leave status blank.
+			// If user is dropout/dismissed, leave status blank (they still appear in CSV)
 			status := ""
-			if morning != "" || afternoon != "" {
-				status = salesforceStatus(morning, afternoon)
+			if u.AttendanceStatus != "dropout" && u.AttendanceStatus != "dismissed" {
+				if morning != "" || afternoon != "" {
+					status = salesforceStatus(morning, afternoon)
+				}
 			}
 
 			_ = w.Write([]string{

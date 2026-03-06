@@ -186,6 +186,8 @@ func (h *AttendanceHandler) ManualMarkAttendance(c *fiber.Ctx) error {
 	validStatuses := []domain.AttendanceStatus{
 		domain.StatusPresent, domain.StatusLate, domain.StatusAbsent,
 		domain.StatusLateExcused, domain.StatusAbsentExcused,
+		domain.StatusNoClass, domain.StatusHoliday,
+		domain.StatusDropout, domain.StatusDismissed,
 	}
 
 	valid := false
@@ -243,6 +245,8 @@ func (h *AttendanceHandler) BulkMarkAttendance(c *fiber.Ctx) error {
 	validStatuses := []domain.AttendanceStatus{
 		domain.StatusPresent, domain.StatusLate, domain.StatusAbsent,
 		domain.StatusLateExcused, domain.StatusAbsentExcused,
+		domain.StatusNoClass, domain.StatusHoliday,
+		domain.StatusDropout, domain.StatusDismissed,
 	}
 
 	valid := false
@@ -550,4 +554,44 @@ func (h *AttendanceHandler) UpdateSalesforceID(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Salesforce ID updated", nil)
+}
+
+// UpdateAttendanceStatus lets an admin set or clear the attendance status for a user.
+// PATCH /admin/users/:id/attendance-status  { "attendance_status": "dropout" }
+func (h *AttendanceHandler) UpdateAttendanceStatus(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	type RequestBody struct {
+		AttendanceStatus string `json:"attendance_status"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	validStatuses := map[domain.AttendanceStatus]bool{
+		domain.AttendanceStatus("active"): true,
+		domain.StatusDropout:              true,
+		domain.StatusDismissed:            true,
+	}
+
+	if !validStatuses[domain.AttendanceStatus(body.AttendanceStatus)] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid attendance status. Must be 'active', 'dropout', or 'dismissed'")
+	}
+
+	statusToSave := body.AttendanceStatus
+	if body.AttendanceStatus == "active" {
+		statusToSave = ""
+	}
+
+	if err := h.userService.UpdateUser(id, map[string]interface{}{"attendance_status": statusToSave}); err != nil {
+		log.Printf("[ERROR] UpdateAttendanceStatus for user %s: %v", id, err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating attendance status")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Attendance status updated", nil)
 }

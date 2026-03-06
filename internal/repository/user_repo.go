@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 
 	"gofiber-baro/internal/domain"
 
@@ -142,6 +143,14 @@ func (r *userRepository) buildFilter(filter domain.UserFilter) bson.M {
 			{"first_name": bson.M{"$regex": filter.Search, "$options": "i"}},
 			{"last_name": bson.M{"$regex": filter.Search, "$options": "i"}},
 			{"email": bson.M{"$regex": filter.Search, "$options": "i"}},
+		}
+	}
+	if filter.ExcludeAttendanceStatus != "" {
+		statuses := strings.Split(filter.ExcludeAttendanceStatus, ",")
+		if len(statuses) == 1 {
+			bsonFilter["attendance_status"] = bson.M{"$ne": statuses[0]}
+		} else {
+			bsonFilter["attendance_status"] = bson.M{"$nin": statuses}
 		}
 	}
 
