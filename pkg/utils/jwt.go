@@ -27,7 +27,7 @@ func GenerateJWT(userID primitive.ObjectID, role string, secretKey string) (stri
 	claims := jwt.MapClaims{
 		"user_id": userID.Hex(),
 		"role":    role,
-		"exp":     time.Now().Add(24 * time.Hour).Unix(),
+		"exp":     time.Now().Add(30 * 24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 

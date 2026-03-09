@@ -92,9 +92,13 @@ func main() {
 	}))
 
 	app.Use(limiter.New(limiter.Config{
-		Max:        100,
+		Max:        300,
 		Expiration: 1 * time.Minute,
 		KeyGenerator: func(c *fiber.Ctx) string {
+			authHeader := c.Get("Authorization")
+			if authHeader != "" {
+				return authHeader
+			}
 			return c.IP()
 		},
 		LimitReached: func(c *fiber.Ctx) error {
