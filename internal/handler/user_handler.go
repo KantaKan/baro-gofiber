@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"html"
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/user"
 	middleware "gofiber-baro/pkg/middleware"
@@ -78,6 +79,36 @@ func (h *UserHandler) CreateReflection(c *fiber.Ctx) error {
 	if err := c.BodyParser(&reflection); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reflection data")
 	}
+
+	// Barometer Validation & Sanitization
+	validZones := map[string]bool{
+		"Comfort Zone":                           true,
+		"Stretch Zone - Enjoying the Challenges": true,
+		"Stretch Zone - Overwhelmed":             true,
+		"Panic Zone":                             true,
+		// Also allow lowercase variations as seen in the codebase
+		"Stretch zone - Enjoying the challenges": true,
+		"Stretch zone - Overwhelmed":             true,
+	}
+
+	if !validZones[reflection.ReflectionData.Barometer] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid Barometer zone selected. Please choose from the provided options.")
+	}
+
+	// Sanitize all text inputs to prevent XSS
+	reflection.ReflectionData.Barometer = html.EscapeString(reflection.ReflectionData.Barometer)
+
+	for i, s := range reflection.ReflectionData.TechSessions.SessionName {
+		reflection.ReflectionData.TechSessions.SessionName[i] = html.EscapeString(s)
+	}
+	reflection.ReflectionData.TechSessions.Happy = html.EscapeString(reflection.ReflectionData.TechSessions.Happy)
+	reflection.ReflectionData.TechSessions.Improve = html.EscapeString(reflection.ReflectionData.TechSessions.Improve)
+
+	for i, s := range reflection.ReflectionData.NonTechSessions.SessionName {
+		reflection.ReflectionData.NonTechSessions.SessionName[i] = html.EscapeString(s)
+	}
+	reflection.ReflectionData.NonTechSessions.Happy = html.EscapeString(reflection.ReflectionData.NonTechSessions.Happy)
+	reflection.ReflectionData.NonTechSessions.Improve = html.EscapeString(reflection.ReflectionData.NonTechSessions.Improve)
 
 	reflection.UserID = objectID
 	if reflection.Date.IsZero() {
