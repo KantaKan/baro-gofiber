@@ -83,7 +83,7 @@ func (s *ExportService) ExportSalesforceCSV(cohort int, startDate, endDate strin
 	ctx := context.Background()
 
 	// 1. Fetch all learners in the cohort, sorted by jsd_number.
-	users, _, err := s.userService.GetAllUsers(cohort, "learner", "", "", "jsd_number", 1, 1, 1000)
+	users, _, err := s.userService.GetAllUsers(cohort, "learner", "", "", "first_name", 1, 1, 1000)
 	if err != nil {
 		return nil, err
 	}
