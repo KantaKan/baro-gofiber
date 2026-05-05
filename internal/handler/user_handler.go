@@ -201,9 +201,27 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
 	}
 
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	// Security: Only allow user to update their own profile, or admin to update anyone
+	if claims.Role != "admin" && claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only update your own profile")
+	}
+
 	var body map[string]interface{}
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	// Security: Block students from updating sensitive fields
+	if claims.Role != "admin" {
+		delete(body, "role")
+		delete(body, "cohort_number")
+		delete(body, "jsd_number")
+		delete(body, "email")
 	}
 
 	if err := h.userService.UpdateUser(id, body); err != nil {

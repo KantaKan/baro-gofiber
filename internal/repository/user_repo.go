@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"regexp"
 	"strings"
 
 	"gofiber-baro/internal/domain"
@@ -139,10 +140,11 @@ func (r *userRepository) buildFilter(filter domain.UserFilter) bson.M {
 		bsonFilter["email"] = filter.Email
 	}
 	if filter.Search != "" {
+		escapedSearch := regexp.QuoteMeta(filter.Search)
 		bsonFilter["$or"] = []bson.M{
-			{"first_name": bson.M{"$regex": filter.Search, "$options": "i"}},
-			{"last_name": bson.M{"$regex": filter.Search, "$options": "i"}},
-			{"email": bson.M{"$regex": filter.Search, "$options": "i"}},
+			{"first_name": bson.M{"$regex": escapedSearch, "$options": "i"}},
+			{"last_name": bson.M{"$regex": escapedSearch, "$options": "i"}},
+			{"email": bson.M{"$regex": escapedSearch, "$options": "i"}},
 		}
 	}
 	if filter.ExcludeAttendanceStatus != "" {
