@@ -1,2 +1,8 @@
 .env
 nul
+*.exe
+/baro-backend
+/cmd/main
+.vscode/
+.idea/
+vendor/

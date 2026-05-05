@@ -8,6 +8,7 @@ import (
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/user"
+	middleware "gofiber-baro/pkg/middleware"
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
@@ -81,6 +82,23 @@ func (h *AttendanceHandler) GetActiveAttendanceCode(c *fiber.Ctx) error {
 
 	if cohort == 0 || session == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Cohort and session are required")
+	}
+
+	// Security: If not admin, verify user is in the requested cohort
+	userID := c.Locals("userID")
+	userRole := ""
+	if user, ok := c.Locals("user").(*middleware.Claims); ok {
+		userRole = user.Role
+	}
+
+	if userRole != "admin" {
+		userData, err := h.userService.GetUserByID(userID.(string))
+		if err != nil {
+			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
+		}
+		if userData.CohortNumber != cohort {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only access codes for your own cohort")
+		}
 	}
 
 	code, err := h.codeService.GetActiveCode(cohort, domain.AttendanceSession(session))

@@ -96,6 +96,6 @@ func (c *Container) initHandlers() {
 	)
 	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService)
 	c.HolidayHandler = handler.NewHolidayHandler(c.HolidayService)
-	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo)
+	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo, c.UserService)
 	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
 }
