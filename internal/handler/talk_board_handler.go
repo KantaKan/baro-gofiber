@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"html"
 	"log"
 	"time"
 
@@ -122,7 +123,7 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 		UserID:    userOID,
 		ZoomName:  userData.ZoomName,
 		Cohort:    userData.CohortNumber,
-		Content:   body.Content,
+		Content:   html.EscapeString(body.Content),
 		Reactions: []domain.Reaction{},
 		Comments:  []domain.Comment{},
 		CreatedAt: time.Now(),
@@ -193,7 +194,7 @@ func (h *TalkBoardHandler) AddComment(c *fiber.Ctx) error {
 		UserID:    userOID,
 		ZoomName:  userData.ZoomName,
 		Cohort:    userData.CohortNumber,
-		Content:   body.Content,
+		Content:   html.EscapeString(body.Content),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -290,7 +291,7 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 		ID:        primitive.NewObjectID(),
 		UserID:    userOID,
 		Type:      "emoji",
-		Value:     body.Reaction,
+		Value:     html.EscapeString(body.Reaction),
 		CreatedAt: time.Now(),
 	}
 
@@ -408,7 +409,7 @@ func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
 		ID:        primitive.NewObjectID(),
 		UserID:    userOID,
 		Type:      "emoji",
-		Value:     body.Reaction,
+		Value:     html.EscapeString(body.Reaction),
 		CreatedAt: time.Now(),
 	}
 
