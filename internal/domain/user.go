@@ -77,6 +77,39 @@ type User struct {
 	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
 }
 
+// UserSafe is a restricted version of User for non-admin users
+// Only contains public-safe fields like name, avatar, badges
+type UserSafe struct {
+	ID            primitive.ObjectID `json:"_id"`
+	JSDNumber     string             `json:"jsd_number"`
+	FirstName     string             `json:"first_name"`
+	LastName      string             `json:"last_name"`
+	CohortNumber  int                `json:"cohort_number"`
+	ProjectGroup  string             `json:"project_group"`
+	GenmateGroup  string             `json:"genmate_group"`
+	ZoomName      string             `json:"zoom_name"`
+	Badges        []Badge            `json:"badges,omitempty"`
+	Bio           string             `json:"bio,omitempty"`
+	SocialLinks   SocialLinks        `json:"social_links,omitempty"`
+}
+
+// ToSafe converts a User to UserSafe for non-admin responses
+func (u *User) ToSafe() UserSafe {
+	return UserSafe{
+		ID:            u.ID,
+		JSDNumber:    u.JSDNumber,
+		FirstName:     u.FirstName,
+		LastName:      u.LastName,
+		CohortNumber:  u.CohortNumber,
+		ProjectGroup:  u.ProjectGroup,
+		GenmateGroup:  u.GenmateGroup,
+		ZoomName:      u.ZoomName,
+		Badges:        u.Badges,
+		Bio:           u.Bio,
+		SocialLinks:   u.SocialLinks,
+	}
+}
+
 type SocialLinks struct {
 	Instagram string `bson:"instagram,omitempty" json:"instagram,omitempty"`
 	LinkedIn  string `bson:"linkedin,omitempty" json:"linkedin,omitempty"`
