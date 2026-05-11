@@ -167,3 +167,28 @@ func (r *userRepository) CreateReflection(ctx interface{}, userID primitive.Obje
 	_, err := r.collection.UpdateOne(c, filter, update)
 	return err
 }
+
+func (r *userRepository) AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment domain.Comment) error {
+	c := ctx.(context.Context)
+	filter := bson.M{"_id": userID}
+	update := bson.M{"$push": bson.M{"profile_comments": comment}}
+	_, err := r.collection.UpdateOne(c, filter, update)
+	return err
+}
+
+func (r *userRepository) AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction domain.Reaction) error {
+	c := ctx.(context.Context)
+	filter := bson.M{"_id": userID}
+	
+	// First, remove any existing reaction by this user
+	pull := bson.M{"$pull": bson.M{"profile_reactions": bson.M{"userId": reaction.UserID}}}
+	_, err := r.collection.UpdateOne(c, filter, pull)
+	if err != nil {
+		return err
+	}
+
+	// Then, push the new reaction
+	update := bson.M{"$push": bson.M{"profile_reactions": reaction}}
+	_, err = r.collection.UpdateOne(c, filter, update)
+	return err
+}

@@ -12,6 +12,8 @@ import (
 
 type Claims struct {
 	UserID string `json:"user_id"`
+	Role   string `json:"role"`
+	Cohort int    `json:"cohort"`
 	jwt.RegisteredClaims
 }
 
@@ -23,10 +25,11 @@ func getJWTKey() []byte {
 	return []byte(key)
 }
 
-func GenerateJWT(userID primitive.ObjectID, role string, secretKey string) (string, error) {
+func GenerateJWT(userID primitive.ObjectID, role string, cohort int, secretKey string) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": userID.Hex(),
 		"role":    role,
+		"cohort":  cohort,
 		"exp":     time.Now().Add(30 * 24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

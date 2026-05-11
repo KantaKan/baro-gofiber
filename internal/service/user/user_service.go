@@ -142,3 +142,33 @@ func (s *Service) GetReflections(userID primitive.ObjectID) ([]domain.Reflection
 
 	return user.Reflections, nil
 }
+
+func (s *Service) AddProfileComment(userID primitive.ObjectID, commenterID primitive.ObjectID, zoomName string, cohort int, content string) error {
+	ctx := context.Background()
+
+	comment := domain.Comment{
+		ID:        primitive.NewObjectID(),
+		UserID:    commenterID,
+		ZoomName:  zoomName,
+		Cohort:    cohort,
+		Content:   content,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	return s.repo.AddProfileComment(ctx, userID, comment)
+}
+
+func (s *Service) AddProfileReaction(userID primitive.ObjectID, reactorID primitive.ObjectID, reactionType, value string) error {
+	ctx := context.Background()
+
+	reaction := domain.Reaction{
+		ID:        primitive.NewObjectID(),
+		UserID:    reactorID,
+		Type:      reactionType,
+		Value:     value,
+		CreatedAt: time.Now(),
+	}
+
+	return s.repo.AddProfileReaction(ctx, userID, reaction)
+}
