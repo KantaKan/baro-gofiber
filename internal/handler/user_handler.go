@@ -182,22 +182,21 @@ func (h *UserHandler) GetUserByID(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
 
-	// Security: Always hide password
-	user.Password = ""
+	isAdmin := claims.Role == "admin"
 
-	// Privacy & Access Control
-	if claims.Role != "admin" && claims.UserID != id {
-		// Learners can only see users from their own cohort
-		if user.CohortNumber != claims.Cohort {
-			return utils.SendError(c, fiber.StatusForbidden, "You can only view profiles within your own cohort")
-		}
-
-		user.Reflections = nil
-		user.SalesforceID = ""
-		user.Email = "Hidden for privacy"
+	// Admin sees everything, user sees their own profile with limited data
+	if isAdmin {
+		user.Password = ""
+		return utils.SendResponse(c, fiber.StatusOK, "User retrieved", user)
 	}
 
-	return utils.SendResponse(c, fiber.StatusOK, "User retrieved", user)
+	// Non-admin: can only see users from their own cohort
+	if user.CohortNumber != claims.Cohort {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only view profiles within your own cohort")
+	}
+
+	// Return safe version without sensitive data
+	return utils.SendResponse(c, fiber.StatusOK, "User retrieved", user.ToSafe())
 }
 
 func (h *UserHandler) GetUserProfile(c *fiber.Ctx) error {
@@ -399,12 +398,27 @@ func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching users")
 	}
 
-	for i := range users {
-		users[i].Password = ""
+	isAdmin := claims.Role == "admin"
+
+	if isAdmin {
+		for i := range users {
+			users[i].Password = ""
+		}
+		return utils.SendResponse(c, fiber.StatusOK, "Users retrieved", fiber.Map{
+			"users": users,
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		})
+	}
+
+	safeUsers := make([]domain.UserSafe, len(users))
+	for i, user := range users {
+		safeUsers[i] = user.ToSafe()
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Users retrieved", fiber.Map{
-		"users": users,
+		"users": safeUsers,
 		"total": total,
 		"page":  page,
 		"limit": limit,
