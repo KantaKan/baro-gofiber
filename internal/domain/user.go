@@ -81,6 +81,7 @@ type User struct {
 // Only contains public-safe fields like name, avatar, badges
 type UserSafe struct {
 	ID            primitive.ObjectID `json:"_id"`
+	JSDNumber     string             `json:"jsd_number"`
 	FirstName     string             `json:"first_name"`
 	LastName      string             `json:"last_name"`
 	CohortNumber  int                `json:"cohort_number"`
@@ -96,6 +97,7 @@ type UserSafe struct {
 func (u *User) ToSafe() UserSafe {
 	return UserSafe{
 		ID:            u.ID,
+		JSDNumber:    u.JSDNumber,
 		FirstName:     u.FirstName,
 		LastName:      u.LastName,
 		CohortNumber:  u.CohortNumber,
