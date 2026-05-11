@@ -29,9 +29,13 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	notifications.Post("/:id/read", h.Notification.MarkAsRead)
 
 	protected := app.Group("/users", middleware.AuthMiddleware)
-	protected.Get("/:id", h.User.GetUserProfile)
+	protected.Get("/", h.User.GetAllUsers)
+	protected.Get("/:id", h.User.GetUserByID)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
 	protected.Get("/:id/reflections", h.User.GetUserReflections)
+	protected.Put("/:id/personal-details", h.User.UpdatePersonalDetails)
+	protected.Post("/:id/profile/comments", h.User.AddProfileComment)
+	protected.Post("/:id/profile/reactions", h.User.AddProfileReaction)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,

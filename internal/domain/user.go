@@ -70,6 +70,17 @@ type User struct {
 	Badges           []Badge            `bson:"badges,omitempty" json:"badges,omitempty"`
 	SalesforceID     string             `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
 	AttendanceStatus string             `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
+	ProfileComments  []Comment          `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
+	ProfileReactions []Reaction         `bson:"profile_reactions,omitempty" json:"profile_reactions,omitempty"`
+	Bio              string             `bson:"bio,omitempty" json:"bio,omitempty"`
+	SocialLinks      SocialLinks        `bson:"social_links,omitempty" json:"social_links,omitempty"`
+	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
+}
+
+type SocialLinks struct {
+	Instagram string `bson:"instagram,omitempty" json:"instagram,omitempty"`
+	LinkedIn  string `bson:"linkedin,omitempty" json:"linkedin,omitempty"`
+	GitHub    string `bson:"github,omitempty" json:"github,omitempty"`
 }
 
 type ReflectionWithUser struct {
@@ -124,4 +135,6 @@ type UserRepository interface {
 	AddBadge(ctx interface{}, userID primitive.ObjectID, badge Badge) error
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
+	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment Comment) error
+	AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 }

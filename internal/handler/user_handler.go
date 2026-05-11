@@ -9,6 +9,7 @@ import (
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -171,9 +172,29 @@ func (h *UserHandler) GetUserByID(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
 	}
 
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
 	user, err := h.userService.GetUserByID(id)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+
+	// Security: Always hide password
+	user.Password = ""
+
+	// Privacy & Access Control
+	if claims.Role != "admin" && claims.UserID != id {
+		// Learners can only see users from their own cohort
+		if user.CohortNumber != claims.Cohort {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only view profiles within your own cohort")
+		}
+
+		user.Reflections = nil
+		user.SalesforceID = ""
+		user.Email = "Hidden for privacy"
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "User retrieved", user)
@@ -229,6 +250,52 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "User updated successfully", nil)
+}
+
+func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	// Security: Only allow user to update their own details
+	if claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only update your own details")
+	}
+
+	var body struct {
+		Bio            string             `json:"bio"`
+		SocialLinks    domain.SocialLinks `json:"social_links"`
+		PinnedBadgeIDs []string           `json:"pinned_badge_ids"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	update := bson.M{
+		"bio": body.Bio,
+		"social_links": body.SocialLinks,
+	}
+
+	pinnedOIDs := []primitive.ObjectID{}
+	for _, pid := range body.PinnedBadgeIDs {
+		oid, err := primitive.ObjectIDFromHex(pid)
+		if err == nil {
+			pinnedOIDs = append(pinnedOIDs, oid)
+		}
+	}
+	update["pinned_badge_ids"] = pinnedOIDs
+
+	if err := h.userService.UpdateUser(id, update); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating personal details")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Personal details updated successfully", nil)
 }
 
 func (h *UserHandler) AwardBadge(c *fiber.Ctx) error {
@@ -297,7 +364,28 @@ func (h *UserHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
 }
 
 func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
 	cohort := c.QueryInt("cohort", 0)
+	if claims.Role != "admin" {
+		// FUTURE: Allow visibility of other cohorts for Social/Alumni features.
+		// For now, strictly restrict to the user's current cohort.
+		cohort = claims.Cohort
+
+		// Defensive: prevent returning all users if cohort is 0 or invalid
+		if cohort <= 0 {
+			return utils.SendResponse(c, fiber.StatusOK, "Users retrieved", fiber.Map{
+				"users": []interface{}{},
+				"total": 0,
+				"page":  1,
+				"limit": 50,
+			})
+		}
+	}
+
 	role := c.Query("role", "")
 	email := c.Query("email", "")
 	search := c.Query("search", "")
@@ -323,6 +411,83 @@ func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
 	})
 }
 
+func (h *UserHandler) AddProfileComment(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	targetOID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	commenterOID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid commenter ID")
+	}
+
+	var body struct {
+		Content  string `json:"content"`
+		ZoomName string `json:"zoomName"`
+		Cohort   int    `json:"cohort"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Content == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Content is required")
+	}
+
+	if err := h.userService.AddProfileComment(targetOID, commenterOID, body.ZoomName, body.Cohort, body.Content); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding comment")
+	}
+
+	return utils.SendResponse(c, fiber.StatusCreated, "Comment added successfully", nil)
+}
+
+func (h *UserHandler) AddProfileReaction(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	targetOID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	reactorOID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reactor ID")
+	}
+
+	var body struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Value == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Reaction value is required")
+	}
+
+	if body.Type == "" {
+		body.Type = "emoji"
+	}
+
+	if err := h.userService.AddProfileReaction(targetOID, reactorOID, body.Type, body.Value); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
+	}
+
+	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
+}
+
 func (h *UserHandler) GetDomainUserByID(id string) (*domain.User, error) {
 	return h.userService.GetUserByID(id)
 }
@@ -337,7 +502,7 @@ func (h *UserHandler) authenticateUser(email, password string) (string, string, 
 		return "", "", "", errors.New("invalid credentials")
 	}
 
-	token, err := utils.GenerateJWT(user.ID, user.Role, "")
+	token, err := utils.GenerateJWT(user.ID, user.Role, user.CohortNumber, "")
 	if err != nil {
 		return "", "", "", errors.New("could not generate token")
 	}
