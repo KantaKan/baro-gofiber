@@ -126,6 +126,55 @@ func (h *AdminHandler) AwardBadge(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Badge awarded successfully", nil)
 }
 
+func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
+	type RequestBody struct {
+		UserIDs []string `json:"userIds"`
+		Type    string   `json:"type"`
+		Name    string   `json:"name"`
+		Emoji   string   `json:"emoji"`
+		Color   string   `json:"color"`
+		Style   string   `json:"style"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if len(body.UserIDs) == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "User IDs are required")
+	}
+
+	if body.Name == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Badge name is required")
+	}
+
+	successCount := 0
+	failCount := 0
+
+	for _, id := range body.UserIDs {
+		userID, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			failCount++
+			continue
+		}
+
+		if err := h.badgeService.AwardBadge(userID, body.Type, body.Name, body.Emoji, "", body.Color, body.Style); err != nil {
+			failCount++
+			continue
+		}
+		successCount++
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success":      true,
+		"message":      "Bulk badge award completed",
+		"data":         nil,
+		"successCount": successCount,
+		"failCount":    failCount,
+	})
+}
+
 func (h *AdminHandler) GetAllReflections(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 20)
