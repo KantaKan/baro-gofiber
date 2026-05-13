@@ -54,6 +54,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Get("/users", h.Admin.GetAllUsers)
 	admin.Get("/userreflections/:id", h.Admin.GetUserWithReflections)
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)
+	admin.Delete("/users/:id", h.Admin.DeleteUser)
 	admin.Post("/badges/bulk", h.Admin.BulkAwardBadge)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)

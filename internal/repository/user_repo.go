@@ -168,9 +168,21 @@ func (r *userRepository) CreateReflection(ctx interface{}, userID primitive.Obje
 	return err
 }
 
-func (r *userRepository) AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment domain.Comment) error {
+func (r *userRepository) AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment domain.ProfileComment) error {
 	c := ctx.(context.Context)
 	filter := bson.M{"_id": userID}
+
+	if comment.ParentID != nil && !comment.ParentID.IsZero() {
+		// Add reply to existing comment using array filters
+		filter["profile_comments._id"] = comment.ParentID
+		update := bson.M{
+			"$push": bson.M{"profile_comments.$.replies": comment},
+		}
+		_, err := r.collection.UpdateOne(c, filter, update)
+		return err
+	}
+
+	// Add new root comment
 	update := bson.M{"$push": bson.M{"profile_comments": comment}}
 	_, err := r.collection.UpdateOne(c, filter, update)
 	return err

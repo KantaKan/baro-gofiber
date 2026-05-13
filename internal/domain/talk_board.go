@@ -48,6 +48,7 @@ type TalkBoardRepository interface {
 	FindByID(ctx context.Context, id primitive.ObjectID) (*Post, error)
 	UpdatePost(ctx context.Context, id primitive.ObjectID, update interface{}) error
 	DeletePost(ctx context.Context, id primitive.ObjectID) error
+	DeleteComment(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID) error
 	AddComment(ctx context.Context, postID primitive.ObjectID, comment Comment) error
 	AddReaction(ctx context.Context, postID primitive.ObjectID, reaction Reaction) error
 	Exists(ctx context.Context, id primitive.ObjectID) (bool, error)
