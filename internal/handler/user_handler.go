@@ -370,8 +370,7 @@ func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
 
 	cohort := c.QueryInt("cohort", 0)
 	if claims.Role != "admin" {
-		// FUTURE: Allow visibility of other cohorts for Social/Alumni features.
-		// For now, strictly restrict to the user's current cohort.
+		// Enforce cohort restriction for learners: ignore any cohort query param and use their own
 		cohort = claims.Cohort
 
 		// Defensive: prevent returning all users if cohort is 0 or invalid
@@ -461,6 +460,39 @@ func (h *UserHandler) AddProfileComment(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusCreated, "Comment added successfully", nil)
+}
+
+func (h *UserHandler) DeleteProfileComment(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	commentID := c.Params("commentId")
+
+	targetOID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	commentOID, err := primitive.ObjectIDFromHex(commentID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid comment ID")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	// Security: Only admin can delete any comment, or user can delete comment on their own profile?
+	// Usually admin only for moderation, or the user who wrote the comment.
+	// But the user specifically asked for admin UI.
+	if claims.Role != "admin" {
+		return utils.SendError(c, fiber.StatusForbidden, "Only admins can delete profile comments")
+	}
+
+	if err := h.userService.DeleteProfileComment(targetOID, commentOID); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error deleting profile comment")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Comment deleted successfully", nil)
 }
 
 func (h *UserHandler) AddProfileReaction(c *fiber.Ctx) error {

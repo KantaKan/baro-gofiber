@@ -166,6 +166,11 @@ func (s *Service) AddProfileComment(userID primitive.ObjectID, commenterID primi
 	return s.repo.AddProfileComment(ctx, userID, comment)
 }
 
+func (s *Service) DeleteProfileComment(userID primitive.ObjectID, commentID primitive.ObjectID) error {
+	ctx := context.Background()
+	return s.repo.DeleteProfileComment(ctx, userID, commentID)
+}
+
 func (s *Service) AddProfileReaction(userID primitive.ObjectID, reactorID primitive.ObjectID, reactionType, value string) error {
 	ctx := context.Background()
 

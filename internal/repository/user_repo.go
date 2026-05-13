@@ -188,6 +188,27 @@ func (r *userRepository) AddProfileComment(ctx interface{}, userID primitive.Obj
 	return err
 }
 
+func (r *userRepository) DeleteProfileComment(ctx interface{}, userID primitive.ObjectID, commentID primitive.ObjectID) error {
+	c := ctx.(context.Context)
+	filter := bson.M{"_id": userID}
+
+	// First try to delete from top-level comments
+	update := bson.M{"$pull": bson.M{"profile_comments": bson.M{"_id": commentID}}}
+	result, err := r.collection.UpdateOne(c, filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.ModifiedCount > 0 {
+		return nil
+	}
+
+	// If not found in top-level, try to delete from replies (nested)
+	updateReplies := bson.M{"$pull": bson.M{"profile_comments.$[].replies": bson.M{"_id": commentID}}}
+	_, err = r.collection.UpdateOne(c, filter, updateReplies)
+	return err
+}
+
 func (r *userRepository) AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction domain.Reaction) error {
 	c := ctx.(context.Context)
 	filter := bson.M{"_id": userID}

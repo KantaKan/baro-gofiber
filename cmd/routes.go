@@ -31,10 +31,12 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected := app.Group("/users", middleware.AuthMiddleware)
 	protected.Get("/", h.User.GetAllUsers)
 	protected.Get("/:id", h.User.GetUserByID)
+	protected.Put("/:id", h.User.UpdateUser)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
 	protected.Get("/:id/reflections", h.User.GetUserReflections)
 	protected.Put("/:id/personal-details", h.User.UpdatePersonalDetails)
 	protected.Post("/:id/profile/comments", h.User.AddProfileComment)
+	protected.Delete("/:id/profile/comments/:commentId", h.User.DeleteProfileComment)
 	protected.Post("/:id/profile/reactions", h.User.AddProfileReaction)
 
 	adminLimiter := limiter.New(limiter.Config{
@@ -107,7 +109,9 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	board.Get("/posts", h.TalkBoard.GetPosts)
 	board.Get("/posts/:postId", h.TalkBoard.GetPost)
 	board.Post("/posts", h.TalkBoard.CreatePost)
+	board.Delete("/posts/:postId", h.TalkBoard.DeletePost)
 	board.Post("/posts/:postId/comments", h.TalkBoard.AddComment)
+	board.Delete("/posts/:postId/comments/:commentId", h.TalkBoard.DeleteComment)
 	board.Post("/posts/:postId/reactions", h.TalkBoard.AddReactionToPost)
 	board.Delete("/posts/:postId/reactions", h.TalkBoard.RemoveReactionFromPost)
 	board.Post("/posts/:postId/comments/:commentId/reactions", h.TalkBoard.AddReactionToComment)

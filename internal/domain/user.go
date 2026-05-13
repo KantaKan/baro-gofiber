@@ -187,5 +187,6 @@ type UserRepository interface {
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
 	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error
+	DeleteProfileComment(ctx interface{}, userID primitive.ObjectID, commentID primitive.ObjectID) error
 	AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 }
