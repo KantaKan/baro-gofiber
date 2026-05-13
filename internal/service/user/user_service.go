@@ -143,10 +143,10 @@ func (s *Service) GetReflections(userID primitive.ObjectID) ([]domain.Reflection
 	return user.Reflections, nil
 }
 
-func (s *Service) AddProfileComment(userID primitive.ObjectID, commenterID primitive.ObjectID, zoomName string, cohort int, content string) error {
+func (s *Service) AddProfileComment(userID primitive.ObjectID, commenterID primitive.ObjectID, zoomName string, cohort int, content string, parentID string) error {
 	ctx := context.Background()
 
-	comment := domain.Comment{
+	comment := domain.ProfileComment{
 		ID:        primitive.NewObjectID(),
 		UserID:    commenterID,
 		ZoomName:  zoomName,
@@ -154,6 +154,13 @@ func (s *Service) AddProfileComment(userID primitive.ObjectID, commenterID primi
 		Content:   content,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+	}
+
+	if parentID != "" {
+		oid, err := primitive.ObjectIDFromHex(parentID)
+		if err == nil {
+			comment.ParentID = &oid
+		}
 	}
 
 	return s.repo.AddProfileComment(ctx, userID, comment)
@@ -171,4 +178,21 @@ func (s *Service) AddProfileReaction(userID primitive.ObjectID, reactorID primit
 	}
 
 	return s.repo.AddProfileReaction(ctx, userID, reaction)
+}
+
+func (s *Service) SoftDeleteUser(id string) error {
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return ErrUserNotFound
+	}
+
+	ctx := context.Background()
+	now := time.Now()
+	update := bson.M{
+		"$set": bson.M{
+			"deleted":    true,
+			"deleted_at": now,
+		},
+	}
+	return s.repo.Update(ctx, oid, update)
 }

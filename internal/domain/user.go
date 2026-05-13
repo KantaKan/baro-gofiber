@@ -54,6 +54,18 @@ type SessionDetails struct {
 	Improve     string   `bson:"improve" json:"improve"`
 }
 
+type ProfileComment struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	UserID    primitive.ObjectID `bson:"userId" json:"userId"`
+	ZoomName  string             `bson:"zoomName" json:"zoomName"`
+	Cohort    int                `bson:"cohort" json:"cohort"`
+	Content   string             `bson:"content" json:"content"`
+	ParentID  *primitive.ObjectID `bson:"parentId,omitempty" json:"parentId,omitempty"`
+	Replies   []ProfileComment    `bson:"replies,omitempty" json:"replies,omitempty"`
+	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
+}
+
 type User struct {
 	ID               primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
 	JSDNumber        string             `bson:"jsd_number" json:"jsd_number"`
@@ -70,11 +82,13 @@ type User struct {
 	Badges           []Badge            `bson:"badges,omitempty" json:"badges,omitempty"`
 	SalesforceID     string             `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
 	AttendanceStatus string             `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
-	ProfileComments  []Comment          `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
+	ProfileComments  []ProfileComment   `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
 	ProfileReactions []Reaction         `bson:"profile_reactions,omitempty" json:"profile_reactions,omitempty"`
 	Bio              string             `bson:"bio,omitempty" json:"bio,omitempty"`
 	SocialLinks      SocialLinks        `bson:"social_links,omitempty" json:"social_links,omitempty"`
 	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
+	Deleted          bool               `bson:"deleted,omitempty" json:"deleted,omitempty"`
+	DeletedAt        *time.Time        `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 }
 
 // UserSafe is a restricted version of User for non-admin users
@@ -168,6 +182,6 @@ type UserRepository interface {
 	AddBadge(ctx interface{}, userID primitive.ObjectID, badge Badge) error
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
-	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment Comment) error
+	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error
 	AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 }

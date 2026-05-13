@@ -416,3 +416,108 @@ func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
 	_ = commentOID
 	return utils.SendResponse(c, fiber.StatusOK, "Reaction added", reaction)
 }
+
+func (h *TalkBoardHandler) DeletePost(c *fiber.Ctx) error {
+	ctx := c.Context()
+	userID := c.Locals("userID")
+	if userID == nil {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	postID := c.Params("postId")
+	if postID == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
+	}
+
+	postOID, err := primitive.ObjectIDFromHex(postID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
+	}
+
+	post, err := h.repo.FindByID(ctx, postOID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
+	}
+
+	userRole := ""
+	currentUserID := ""
+	if user, ok := c.Locals("user").(*middleware.Claims); ok {
+		userRole = user.Role
+		currentUserID = user.UserID
+	}
+
+	isAdmin := userRole == "admin"
+	isOwner := post.UserID.Hex() == currentUserID
+
+	if !isAdmin && !isOwner {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only delete your own posts")
+	}
+
+	if err := h.repo.DeletePost(ctx, postOID); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error deleting post")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Post deleted", nil)
+}
+
+func (h *TalkBoardHandler) DeleteComment(c *fiber.Ctx) error {
+	ctx := c.Context()
+	userID := c.Locals("userID")
+	if userID == nil {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	postID := c.Params("postId")
+	commentID := c.Params("commentId")
+
+	if postID == "" || commentID == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Post ID and Comment ID are required")
+	}
+
+	postOID, err := primitive.ObjectIDFromHex(postID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
+	}
+
+	commentOID, err := primitive.ObjectIDFromHex(commentID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid comment ID")
+	}
+
+	post, err := h.repo.FindByID(ctx, postOID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
+	}
+
+	var commentFound *domain.Comment
+	for i := range post.Comments {
+		if post.Comments[i].ID == commentOID {
+			commentFound = &post.Comments[i]
+			break
+		}
+	}
+
+	if commentFound == nil {
+		return utils.SendError(c, fiber.StatusNotFound, "Comment not found")
+	}
+
+	userRole := ""
+	currentUserID := ""
+	if user, ok := c.Locals("user").(*middleware.Claims); ok {
+		userRole = user.Role
+		currentUserID = user.UserID
+	}
+
+	isAdmin := userRole == "admin"
+	isOwner := commentFound.UserID.Hex() == currentUserID
+
+	if !isAdmin && !isOwner {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only delete your own comments")
+	}
+
+	if err := h.repo.DeleteComment(ctx, postOID, commentOID); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error deleting comment")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Comment deleted", nil)
+}

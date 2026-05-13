@@ -299,3 +299,16 @@ func (h *AdminHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
 
 	return utils.SendResponse(c, fiber.StatusOK, "Feedback updated successfully", nil)
 }
+
+func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	if err := h.userService.SoftDeleteUser(id); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error deleting user")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "User deleted successfully", nil)
+}

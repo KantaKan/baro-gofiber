@@ -446,6 +446,7 @@ func (h *UserHandler) AddProfileComment(c *fiber.Ctx) error {
 		Content  string `json:"content"`
 		ZoomName string `json:"zoomName"`
 		Cohort   int    `json:"cohort"`
+		ParentID string `json:"parentId,omitempty"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
@@ -455,7 +456,7 @@ func (h *UserHandler) AddProfileComment(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Content is required")
 	}
 
-	if err := h.userService.AddProfileComment(targetOID, commenterOID, body.ZoomName, body.Cohort, body.Content); err != nil {
+	if err := h.userService.AddProfileComment(targetOID, commenterOID, body.ZoomName, body.Cohort, body.Content, body.ParentID); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding comment")
 	}
 
