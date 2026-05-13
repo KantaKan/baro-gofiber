@@ -95,6 +95,13 @@ func (r *talkBoardRepository) AddReaction(ctx context.Context, postID primitive.
 	return err
 }
 
+func (r *talkBoardRepository) DeleteComment(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID) error {
+	filter := bson.M{"_id": postID}
+	update := bson.M{"$pull": bson.M{"comments": bson.M{"_id": commentID}}}
+	_, err := r.collection.UpdateOne(ctx, filter, update)
+	return err
+}
+
 func (r *talkBoardRepository) Exists(ctx context.Context, id primitive.ObjectID) (bool, error) {
 	count, err := r.collection.CountDocuments(ctx, bson.M{"_id": id})
 	if err != nil {

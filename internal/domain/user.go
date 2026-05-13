@@ -105,6 +105,8 @@ type UserSafe struct {
 	Badges        []Badge            `json:"badges,omitempty"`
 	Bio           string             `json:"bio,omitempty"`
 	SocialLinks   SocialLinks        `json:"social_links,omitempty"`
+	ProfileComments []ProfileComment `json:"profile_comments,omitempty"`
+	ProfileReactions []Reaction      `json:"profile_reactions,omitempty"`
 }
 
 // ToSafe converts a User to UserSafe for non-admin responses
@@ -121,6 +123,8 @@ func (u *User) ToSafe() UserSafe {
 		Badges:        u.Badges,
 		Bio:           u.Bio,
 		SocialLinks:   u.SocialLinks,
+		ProfileComments: u.ProfileComments,
+		ProfileReactions: u.ProfileReactions,
 	}
 }
 
