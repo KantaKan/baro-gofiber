@@ -226,22 +226,14 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
 	}
 
-	// Security: Only allow user to update their own profile, or admin to update anyone
-	if claims.Role != "admin" && claims.UserID != id {
-		return utils.SendError(c, fiber.StatusForbidden, "You can only update your own profile")
+	// Security: ONLY admins can use the general update endpoint
+	if claims.Role != "admin" {
+		return utils.SendError(c, fiber.StatusForbidden, "Only admins can update general user information. Learners should use the personal-details endpoint.")
 	}
 
 	var body map[string]interface{}
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
-	}
-
-	// Security: Block students from updating sensitive fields
-	if claims.Role != "admin" {
-		delete(body, "role")
-		delete(body, "cohort_number")
-		delete(body, "jsd_number")
-		delete(body, "email")
 	}
 
 	if err := h.userService.UpdateUser(id, body); err != nil {
@@ -443,8 +435,6 @@ func (h *UserHandler) AddProfileComment(c *fiber.Ctx) error {
 
 	var body struct {
 		Content  string `json:"content"`
-		ZoomName string `json:"zoomName"`
-		Cohort   int    `json:"cohort"`
 		ParentID string `json:"parentId,omitempty"`
 	}
 	if err := c.BodyParser(&body); err != nil {
@@ -455,7 +445,13 @@ func (h *UserHandler) AddProfileComment(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Content is required")
 	}
 
-	if err := h.userService.AddProfileComment(targetOID, commenterOID, body.ZoomName, body.Cohort, body.Content, body.ParentID); err != nil {
+	// Fetch commenter's actual data to prevent impersonation
+	commenter, err := h.userService.GetUserByID(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusNotFound, "Commenter user not found")
+	}
+
+	if err := h.userService.AddProfileComment(targetOID, commenterOID, commenter.ZoomName, commenter.CohortNumber, body.Content, body.ParentID); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding comment")
 	}
 
