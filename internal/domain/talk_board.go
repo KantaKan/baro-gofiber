@@ -51,5 +51,6 @@ type TalkBoardRepository interface {
 	DeleteComment(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID) error
 	AddComment(ctx context.Context, postID primitive.ObjectID, comment Comment) error
 	AddReaction(ctx context.Context, postID primitive.ObjectID, reaction Reaction) error
+	AddCommentReaction(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID, reaction Reaction) error
 	Exists(ctx context.Context, id primitive.ObjectID) (bool, error)
 }
