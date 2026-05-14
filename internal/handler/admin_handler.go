@@ -131,9 +131,10 @@ func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
 		UserIDs []string `json:"userIds"`
 		Type    string   `json:"type"`
 		Name    string   `json:"name"`
-		Emoji   string   `json:"emoji"`
-		Color   string   `json:"color"`
-		Style   string   `json:"style"`
+		Emoji    string   `json:"emoji"`
+		ImageUrl string   `json:"imageUrl"`
+		Color    string   `json:"color"`
+		Style    string   `json:"style"`
 	}
 
 	var body RequestBody
@@ -159,7 +160,7 @@ func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
 			continue
 		}
 
-		if err := h.badgeService.AwardBadge(userID, body.Type, body.Name, body.Emoji, "", body.Color, body.Style); err != nil {
+		if err := h.badgeService.AwardBadge(userID, body.Type, body.Name, body.Emoji, body.ImageUrl, body.Color, body.Style); err != nil {
 			failCount++
 			continue
 		}
