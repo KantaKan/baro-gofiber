@@ -78,6 +78,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/attendance/bulk", h.Attendance.BulkMarkAttendance)
 	admin.Delete("/attendance/:id", h.Attendance.DeleteAttendanceRecord)
 	admin.Get("/attendance/export/salesforce", h.Attendance.ExportToSalesforce)
+	admin.Get("/attendance/export", h.Attendance.ExportAttendance)
 	admin.Patch("/users/:id/salesforce-id", h.Attendance.UpdateSalesforceID)
 	admin.Patch("/users/:id/attendance-status", h.Attendance.UpdateAttendanceStatus)
 

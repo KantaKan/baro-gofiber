@@ -549,6 +549,65 @@ func (h *AttendanceHandler) ExportToSalesforce(c *fiber.Ctx) error {
 	return c.SendString(string(csvBytes))
 }
 
+func (h *AttendanceHandler) ExportAttendance(c *fiber.Ctx) error {
+	cohort := c.QueryInt("cohort", 0)
+	startDate := c.Query("start_date", "")
+	endDate := c.Query("end_date", "")
+	format := c.Query("format", "csv")
+	structure := c.Query("structure", "daily")
+	splitAMPM := c.Query("split_am_pm", "false") == "true"
+	statusFilter := c.Query("status_filter", "all")
+
+	if cohort == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "cohort is required")
+	}
+	if startDate == "" {
+		startDate = time.Now().In(time.UTC).AddDate(0, 0, -30).Format("2006-01-02")
+	}
+	if endDate == "" {
+		endDate = time.Now().In(time.UTC).Format("2006-01-02")
+	}
+
+	expFormat := attendance.ExportFormat(format)
+	if expFormat != attendance.ExportFormatCSV && expFormat != attendance.ExportFormatXLSX {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid format. Use 'csv' or 'xlsx'")
+	}
+
+	expStructure := attendance.ExportStructure(structure)
+	if expStructure != attendance.ExportStructureDaily &&
+		expStructure != attendance.ExportStructureSummary &&
+		expStructure != attendance.ExportStructureWeekly {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid structure. Use 'daily', 'summary', or 'weekly'")
+	}
+
+	req := attendance.ExportRequest{
+		Cohort:        cohort,
+		StartDate:     startDate,
+		EndDate:       endDate,
+		Format:        expFormat,
+		Structure:     expStructure,
+		SplitAMPM:     splitAMPM,
+		StatusFilter:  statusFilter,
+	}
+
+	data, ext, err := h.exportService.Export(req)
+	if err != nil {
+		log.Printf("[ERROR] ExportAttendance: %v", err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error generating export")
+	}
+
+	filename := fmt.Sprintf("attendance_export_%s_%s.%s", startDate, endDate, ext)
+
+	switch ext {
+	case "xlsx":
+		c.Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	default:
+		c.Set("Content-Type", "text/csv; charset=utf-8")
+	}
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	return c.Send(data)
+}
+
 // UpdateSalesforceID lets an admin set or clear the Salesforce ID for a user.
 // PATCH /admin/users/:id/salesforce-id  { "salesforce_id": "a1gUZ..." }
 func (h *AttendanceHandler) UpdateSalesforceID(c *fiber.Ctx) error {
