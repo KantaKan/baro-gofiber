@@ -94,19 +94,20 @@ type User struct {
 // UserSafe is a restricted version of User for non-admin users
 // Only contains public-safe fields like name, avatar, badges
 type UserSafe struct {
-	ID            primitive.ObjectID `json:"_id"`
-	JSDNumber     string             `json:"jsd_number"`
-	FirstName     string             `json:"first_name"`
-	LastName      string             `json:"last_name"`
-	CohortNumber  int                `json:"cohort_number"`
-	ProjectGroup  string             `json:"project_group"`
-	GenmateGroup  string             `json:"genmate_group"`
-	ZoomName      string             `json:"zoom_name"`
-	Badges        []Badge            `json:"badges,omitempty"`
-	Bio           string             `json:"bio,omitempty"`
-	SocialLinks   SocialLinks        `json:"social_links,omitempty"`
-	ProfileComments []ProfileComment `json:"profile_comments,omitempty"`
-	ProfileReactions []Reaction      `json:"profile_reactions,omitempty"`
+	ID            primitive.ObjectID   `json:"_id"`
+	JSDNumber     string               `json:"jsd_number"`
+	FirstName     string               `json:"first_name"`
+	LastName      string               `json:"last_name"`
+	CohortNumber  int                  `json:"cohort_number"`
+	ProjectGroup  string               `json:"project_group"`
+	GenmateGroup  string               `json:"genmate_group"`
+	ZoomName      string               `json:"zoom_name"`
+	Badges        []Badge              `json:"badges,omitempty"`
+	Bio           string               `json:"bio,omitempty"`
+	SocialLinks   SocialLinks          `json:"social_links,omitempty"`
+	PinnedBadgeIDs []primitive.ObjectID `json:"pinned_badge_ids,omitempty"`
+	ProfileComments []ProfileComment   `json:"profile_comments,omitempty"`
+	ProfileReactions []Reaction        `json:"profile_reactions,omitempty"`
 }
 
 // ToSafe converts a User to UserSafe for non-admin responses
@@ -120,9 +121,10 @@ func (u *User) ToSafe() UserSafe {
 		ProjectGroup:  u.ProjectGroup,
 		GenmateGroup:  u.GenmateGroup,
 		ZoomName:      u.ZoomName,
-		Badges:        u.Badges,
-		Bio:           u.Bio,
-		SocialLinks:   u.SocialLinks,
+		Badges:          u.Badges,
+		Bio:             u.Bio,
+		SocialLinks:     u.SocialLinks,
+		PinnedBadgeIDs:  u.PinnedBadgeIDs,
 		ProfileComments: u.ProfileComments,
 		ProfileReactions: u.ProfileReactions,
 	}
