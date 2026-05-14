@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"log"
 
 	"gofiber-baro/internal/domain"
 
@@ -93,6 +94,22 @@ func (r *talkBoardRepository) AddReaction(ctx context.Context, postID primitive.
 		bson.M{"$push": bson.M{"reactions": reaction}},
 	)
 	return err
+}
+
+func (r *talkBoardRepository) AddCommentReaction(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID, reaction domain.Reaction) error {
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": postID},
+		bson.M{"$push": bson.M{"comments.$[c].reactions": reaction}},
+		options.Update().SetArrayFilters(options.ArrayFilters{
+			Filters: []interface{}{bson.M{"c._id": commentID}},
+		}),
+	)
+	if err != nil {
+		log.Printf("ERROR: AddCommentReaction: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (r *talkBoardRepository) DeleteComment(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID) error {

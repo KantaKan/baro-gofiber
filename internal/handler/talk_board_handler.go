@@ -363,14 +363,45 @@ func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
 
+	postID := c.Params("postId")
+	if postID == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
+	}
+
 	commentID := c.Params("commentId")
 	if commentID == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Comment ID is required")
 	}
 
+	postOID, err := primitive.ObjectIDFromHex(postID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
+	}
+
 	commentOID, err := primitive.ObjectIDFromHex(commentID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid comment ID")
+	}
+
+	// Security: Verify post exists and check cohort
+	post, err := h.repo.FindByID(c.Context(), postOID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
+	}
+
+	userRole := ""
+	if user, ok := c.Locals("user").(*middleware.Claims); ok {
+		userRole = user.Role
+	}
+
+	if userRole != "admin" {
+		userData, err := h.userService.GetUserByID(userID.(string))
+		if err != nil {
+			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
+		}
+		if post.Cohort != userData.CohortNumber {
+			return utils.SendError(c, fiber.StatusForbidden, "You cannot react to comments from other cohorts")
+		}
 	}
 
 	type RequestBody struct {
@@ -386,24 +417,14 @@ func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Reaction is required")
 	}
 
-	// Security: If not admin, verify user data
-	userRole := ""
-	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
+	userOID, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
 	}
 
-	if userRole != "admin" {
-		userData, err := h.userService.GetUserByID(userID.(string))
-		if err != nil {
-			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
-		}
-		// Note: Ideally we'd check the cohort of the comment here, 
-		// but since comment reaction is not fully implemented in repo, 
-		// we'll just keep the user check for now.
-		_ = userData
-	}
-
-	userOID, _ := primitive.ObjectIDFromHex(userID.(string))
+	// Remove existing reaction by this user on the same comment
+	pullUpdate := bson.M{"$pull": bson.M{"comments.$[c].reactions": bson.M{"userId": userOID}}}
+	_ = h.repo.UpdatePost(c.Context(), postOID, pullUpdate)
 
 	reaction := domain.Reaction{
 		ID:        primitive.NewObjectID(),
@@ -413,7 +434,10 @@ func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
 		CreatedAt: time.Now(),
 	}
 
-	_ = commentOID
+	if err := h.repo.AddCommentReaction(c.Context(), postOID, commentOID, reaction); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
+	}
+
 	return utils.SendResponse(c, fiber.StatusOK, "Reaction added", reaction)
 }
 
