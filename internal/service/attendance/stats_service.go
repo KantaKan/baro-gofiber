@@ -28,15 +28,17 @@ func (s *StatsService) GetAttendanceStats(cohort int, startDate, endDate string)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := domain.AttendanceRecordFilter{
-		NotDeleted: true,
+	bsonFilter := bson.M{
+		"deleted": bson.M{"$ne": true},
 	}
-
 	if cohort > 0 {
-		filter.Cohort = cohort
+		bsonFilter["cohort_number"] = cohort
+	}
+	if startDate != "" && endDate != "" {
+		bsonFilter["date"] = bson.M{"$gte": startDate, "$lte": endDate}
 	}
 
-	records, err := s.recordRepo.FindRecords(ctx, filter, nil)
+	records, err := s.recordRepo.FindRecordsRaw(ctx, bsonFilter, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -63,20 +65,14 @@ func (s *StatsService) GetAttendanceStats(cohort int, startDate, endDate string)
 
 	userStatsMap := make(map[userKey]*userStats)
 
-	// To handle deduplication, we track which sessions we've already counted for each user
-	type sessionKey struct {
+	type sessKey struct {
 		userID  string
 		date    string
 		session string
 	}
-	countedSessions := make(map[sessionKey]bool)
+	countedSessions := make(map[sessKey]bool)
 
 	for _, r := range records {
-		if startDate != "" && endDate != "" {
-			if r.Date < startDate || r.Date > endDate {
-				continue
-			}
-		}
 
 		uk := userKey{
 			userID:       r.UserID.Hex(),
@@ -86,7 +82,7 @@ func (s *StatsService) GetAttendanceStats(cohort int, startDate, endDate string)
 			cohortNumber: r.CohortNumber,
 		}
 
-		sk := sessionKey{
+		sk := sessKey{
 			userID:  uk.userID,
 			date:    r.Date,
 			session: string(r.Session),
