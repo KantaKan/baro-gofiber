@@ -268,6 +268,10 @@ func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
+	if len(body.Bio) > 1000 {
+		return utils.SendError(c, fiber.StatusBadRequest, "Bio must be under 1000 characters")
+	}
+
 	update := bson.M{
 		"bio": body.Bio,
 		"social_links": body.SocialLinks,
