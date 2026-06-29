@@ -43,100 +43,86 @@ func (s *StatsService) GetAttendanceStats(cohort int, startDate, endDate string)
 		return nil, err
 	}
 
-	type userKey struct {
+	// Group by user_id so a name edit never splits one learner into two rows.
+	type sessKey struct {
+		date    string
+		session string
+	}
+	type userStats struct {
 		userID       string
 		jsdNumber    string
 		firstName    string
 		lastName     string
 		cohortNumber int
-	}
-
-	type userStats struct {
-		present       int
-		late          int
-		absent        int
-		lateExcused   int
+		present      int
+		late         int
+		absent       int
+		lateExcused  int
 		absentExcused int
-		dates         map[string]struct {
+		dates        map[string]struct {
 			morning   string
 			afternoon string
 		}
 	}
 
-	userStatsMap := make(map[userKey]*userStats)
-
-	type sessKey struct {
-		userID  string
-		date    string
-		session string
-	}
-	countedSessions := make(map[sessKey]bool)
+	userMap := make(map[string]*userStats)
+	countedSessions := make(map[string]bool) // "userID-date-session"
 
 	for _, r := range records {
-
-		uk := userKey{
-			userID:       r.UserID.Hex(),
-			jsdNumber:    r.JSDNumber,
-			firstName:    r.FirstName,
-			lastName:     r.LastName,
-			cohortNumber: r.CohortNumber,
-		}
-
-		sk := sessKey{
-			userID:  uk.userID,
-			date:    r.Date,
-			session: string(r.Session),
-		}
-
-		// Skip if we've already counted this session for this user
+		uid := r.UserID.Hex()
+		sk := uid + "-" + r.Date + "-" + string(r.Session)
 		if countedSessions[sk] {
 			continue
 		}
 		countedSessions[sk] = true
 
-		if userStatsMap[uk] == nil {
-			userStatsMap[uk] = &userStats{
-				dates: make(map[string]struct {
-					morning   string
-					afternoon string
-				}),
+		us, ok := userMap[uid]
+		if !ok {
+			us = &userStats{
+				userID:       uid,
+				jsdNumber:    r.JSDNumber,
+				firstName:    r.FirstName,
+				lastName:     r.LastName,
+				cohortNumber: r.CohortNumber,
+				dates:        make(map[string]struct{ morning, afternoon string }),
 			}
+			userMap[uid] = us
 		}
 
 		status := string(r.Status)
 		switch status {
 		case "present":
-			userStatsMap[uk].present++
+			us.present++
 		case "late":
-			userStatsMap[uk].late++
+			us.late++
 		case "absent":
-			userStatsMap[uk].absent++
+			us.absent++
 		case "late_excused":
-			userStatsMap[uk].lateExcused++
+			us.lateExcused++
 		case "absent_excused":
-			userStatsMap[uk].absentExcused++
+			us.absentExcused++
 		}
 
-		dateData := userStatsMap[uk].dates[r.Date]
+		dd := us.dates[r.Date]
 		if r.Session == "morning" {
-			dateData.morning = status
+			dd.morning = status
 		} else {
-			dateData.afternoon = status
+			dd.afternoon = status
 		}
-		userStatsMap[uk].dates[r.Date] = dateData
+		us.dates[r.Date] = dd
 	}
 
-	stats := make([]domain.AttendanceStats, 0, len(userStatsMap))
-	for uk, us := range userStatsMap {
-		userID, _ := primitive.ObjectIDFromHex(uk.userID)
+	stats := make([]domain.AttendanceStats, 0, len(userMap))
+	for _, us := range userMap {
+		userID, _ := primitive.ObjectIDFromHex(us.userID)
 
 		presentDays := 0
 		absentDays := 0
-		for _, dateData := range us.dates {
-			hasAbsent := dateData.morning == "absent" || dateData.afternoon == "absent"
-			hasPresent := dateData.morning == "present" || dateData.afternoon == "present"
-			hasLate := dateData.morning == "late" || dateData.afternoon == "late"
-			hasLateExcused := dateData.morning == "late_excused" || dateData.afternoon == "late_excused"
+		for _, dd := range us.dates {
+			hasAbsent := dd.morning == "absent" || dd.afternoon == "absent"
+			hasPresent := dd.morning == "present" || dd.afternoon == "present"
+			hasLate := dd.morning == "late" || dd.afternoon == "late"
+			hasLateExcused := dd.morning == "late_excused" || dd.afternoon == "late_excused"
 
 			if hasAbsent {
 				absentDays++
@@ -154,10 +140,10 @@ func (s *StatsService) GetAttendanceStats(cohort int, startDate, endDate string)
 
 		stats = append(stats, domain.AttendanceStats{
 			UserID:        userID,
-			JSDNumber:     uk.jsdNumber,
-			FirstName:     uk.firstName,
-			LastName:      uk.lastName,
-			CohortNumber:  uk.cohortNumber,
+			JSDNumber:     us.jsdNumber,
+			FirstName:     us.firstName,
+			LastName:      us.lastName,
+			CohortNumber:  us.cohortNumber,
 			Present:       us.present,
 			Late:          us.late,
 			LateExcused:   us.lateExcused,
@@ -178,11 +164,16 @@ func (s *StatsService) GetAttendanceStatsWithFilter(cohort int, days int) ([]dom
 
 	startDate := utils.GetThailandTime().AddDate(0, 0, -days).Format("2006-01-02")
 
+	matchStage := bson.M{
+		"deleted": bson.M{"$ne": true},
+		"date":    bson.M{"$gte": startDate},
+	}
+	if cohort > 0 {
+		matchStage["cohort_number"] = cohort
+	}
+
 	pipeline := []bson.M{
-		{"$match": bson.M{
-			"deleted": bson.M{"$ne": true},
-			"date":    bson.M{"$gte": startDate},
-		}},
+		{"$match": matchStage},
 		// First group by date, session, and user_id to deduplicate
 		{"$group": bson.M{
 			"_id": bson.M{
