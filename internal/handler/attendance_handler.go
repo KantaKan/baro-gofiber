@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/attendance"
@@ -342,8 +341,8 @@ func (h *AttendanceHandler) GetAttendanceStats(c *fiber.Ctx) error {
 	endDate := c.Query("end_date", "")
 
 	if startDate == "" || endDate == "" {
-		endDate = time.Now().In(time.UTC).Format("2006-01-02")
-		startDate = time.Now().In(time.UTC).AddDate(0, 0, -30).Format("2006-01-02")
+		endDate = utils.GetThailandTime().Format("2006-01-02")
+		startDate = utils.GetThailandTime().AddDate(0, 0, -30).Format("2006-01-02")
 	}
 
 	stats, err := h.statsService.GetAttendanceStats(cohort, startDate, endDate)
@@ -399,6 +398,7 @@ func (h *AttendanceHandler) GetTodayOverview(c *fiber.Ctx) error {
 
 func (h *AttendanceHandler) LockSession(c *fiber.Ctx) error {
 	type RequestBody struct {
+		Cohort  int    `json:"cohort"`
 		Date    string `json:"date"`
 		Session string `json:"session"`
 		Locked  bool   `json:"locked"`
@@ -413,7 +413,11 @@ func (h *AttendanceHandler) LockSession(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Date and session are required")
 	}
 
-	err := h.submissionService.LockSession(body.Date, body.Session, 0, body.Locked)
+	if !attendance.ValidateDateFormat(body.Date) {
+		return utils.SendError(c, fiber.StatusBadRequest, "Date must be YYYY-MM-DD")
+	}
+
+	err := h.submissionService.LockSession(body.Date, body.Session, body.Cohort, body.Locked)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating lock status")
 	}
@@ -485,7 +489,14 @@ func (h *AttendanceHandler) GetMyAttendanceHistory(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
 	}
 
-	history, err := h.submissionService.GetStudentAttendanceHistory(oid)
+	days := c.QueryInt("days", 0)
+
+	var history []domain.AttendanceRecord
+	if days > 0 {
+		history, err = h.submissionService.GetStudentHistorySince(oid, days)
+	} else {
+		history, err = h.submissionService.GetStudentAttendanceHistory(oid)
+	}
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching history")
 	}
@@ -562,10 +573,10 @@ func (h *AttendanceHandler) ExportAttendance(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "cohort is required")
 	}
 	if startDate == "" {
-		startDate = time.Now().In(time.UTC).AddDate(0, 0, -30).Format("2006-01-02")
+		startDate = utils.GetThailandTime().AddDate(0, 0, -30).Format("2006-01-02")
 	}
 	if endDate == "" {
-		endDate = time.Now().In(time.UTC).Format("2006-01-02")
+		endDate = utils.GetThailandTime().Format("2006-01-02")
 	}
 
 	expFormat := attendance.ExportFormat(format)

@@ -24,17 +24,92 @@ var (
 	ErrAllFieldsRequired  = errors.New("code and cohort are required")
 	ErrNoActiveCode       = errors.New("no active code for this session")
 	ErrRecordNotFound     = errors.New("attendance record not found")
+	ErrTooManyAttempts     = errors.New("too many failed attempts, try again later")
 )
 
-type CodeService struct {
-	codeRepo    domain.AttendanceCodeRepository
-	recordRepo  domain.AttendanceRepository
-	userService UserServiceInterface
+// codeAttemptKey is the in-memory throttle entry for per-user code brute-force protection.
+type codeAttemptKey struct {
+	userID  primitive.ObjectID
+	session string
+}
+
+type codeAttempt struct {
+	count    int
+	firstTry time.Time
+}
+
+// In-memory rate limiter for code submissions. Tolerates burst of 3 wrong codes per
+// session, then blocks for 5 minutes. Resets automatically. No external dep needed.
+var (
+	attemptMu     = struct{}{}
+	codeAttempts  = map[codeAttemptKey]codeAttempt{}
+	cleanupDone   = make(chan struct{})
+	attemptBurst  = 3
+	attemptWindow = 5 * time.Minute
+)
+
+func init() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				func() {
+					now := utils.GetThailandTime()
+					for k, a := range codeAttempts {
+						if now.Sub(a.firstTry) > attemptWindow {
+							delete(codeAttempts, k)
+						}
+					}
+				}()
+			case <-cleanupDone:
+				return
+			}
+		}
+	}()
+}
+
+func checkCodeRateLimit(userID primitive.ObjectID, session string) error {
+	key := codeAttemptKey{userID: userID, session: session}
+	now := utils.GetThailandTime()
+
+	a, ok := codeAttempts[key]
+	if ok && a.count >= attemptBurst && now.Sub(a.firstTry) < attemptWindow {
+		remaining := attemptWindow - now.Sub(a.firstTry)
+		return fmt.Errorf("%w (%.0f seconds remaining)", ErrTooManyAttempts, remaining.Seconds())
+	}
+
+	if !ok {
+		codeAttempts[key] = codeAttempt{count: 0, firstTry: now}
+	}
+	return nil
+}
+
+func recordFailedAttempt(userID primitive.ObjectID, session string) {
+	key := codeAttemptKey{userID: userID, session: session}
+	a, ok := codeAttempts[key]
+	if !ok {
+		return
+	}
+	a.count++
+	codeAttempts[key] = a
+}
+
+func clearAttempts(userID primitive.ObjectID, session string) {
+	key := codeAttemptKey{userID: userID, session: session}
+	delete(codeAttempts, key)
 }
 
 type UserServiceInterface interface {
 	GetUserByID(id string) (*domain.User, error)
 	GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int, excludeAttendanceStatus ...string) ([]domain.User, int, error)
+}
+
+type CodeService struct {
+	codeRepo    domain.AttendanceCodeRepository
+	recordRepo  domain.AttendanceRepository
+	userService UserServiceInterface
 }
 
 func NewCodeService(codeRepo domain.AttendanceCodeRepository, recordRepo domain.AttendanceRepository, userService UserServiceInterface) *CodeService {
@@ -54,8 +129,6 @@ func (s *CodeService) GenerateCode(cohort int, session domain.AttendanceSession,
 	now := utils.GetThailandTime()
 	expiresAt := now.Add(120 * time.Minute)
 
-	fmt.Printf("Generating code: cohort=%d, session=%s, code=%s, expiresAt=%v\n", cohort, session, code, expiresAt)
-
 	s.codeRepo.DeactivateOldCodes(ctx, cohort, session)
 
 	newCode := &domain.AttendanceCode{
@@ -72,7 +145,6 @@ func (s *CodeService) GenerateCode(cohort int, session domain.AttendanceSession,
 		return nil, err
 	}
 
-	fmt.Printf("Code generated and saved: %+v\n", newCode)
 	return newCode, nil
 }
 
@@ -93,9 +165,6 @@ func (s *CodeService) GetActiveCode(cohort int, session domain.AttendanceSession
 }
 
 func (s *CodeService) SubmitAttendance(userID primitive.ObjectID, code string, cohort int, ipAddress string) (*domain.AttendanceRecord, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	if code == "" || cohort == 0 {
 		return nil, ErrAllFieldsRequired
 	}
@@ -116,6 +185,11 @@ func (s *CodeService) SubmitAttendance(userID primitive.ObjectID, code string, c
 		return nil, ErrInvalidCode
 	}
 
+	// Rate-limit: reject burst of failed attempts per session.
+	if err := checkCodeRateLimit(userID, string(session)); err != nil {
+		return nil, err
+	}
+
 	attendanceCode, err := s.GetActiveCode(cohort, session)
 	if err != nil {
 		return nil, err
@@ -126,6 +200,7 @@ func (s *CodeService) SubmitAttendance(userID primitive.ObjectID, code string, c
 	}
 
 	if attendanceCode.Code != code {
+		recordFailedAttempt(userID, string(session))
 		return nil, ErrInvalidCode
 	}
 
@@ -140,20 +215,34 @@ func (s *CodeService) SubmitAttendance(userID primitive.ObjectID, code string, c
 
 	today := utils.GetThailandDate()
 
-	existing, err := s.recordRepo.CountRecords(ctx, domain.AttendanceRecordFilter{
+	// Enforce session lock.
+	locked, err := s.IsSessionLocked(today, string(session), cohort)
+	if err != nil {
+		return nil, err
+	}
+	if locked {
+		return nil, ErrSessionLocked
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check for existing live record (double-submit guard).
+	existing, err := s.recordRepo.FindRecord(ctx, domain.AttendanceRecordFilter{
 		UserID:     userID,
 		Date:       today,
 		Session:    session,
 		NotDeleted: true,
 	})
-	if err != nil {
+	if err != nil && !isNotFound(err) {
 		return nil, err
 	}
-	if existing > 0 {
+	if existing != nil {
 		return nil, ErrAlreadySubmitted
 	}
 
 	status := s.calculateStatus(session)
+	now := utils.GetThailandTime()
 
 	record := &domain.AttendanceRecord{
 		UserID:       userID,
@@ -165,23 +254,54 @@ func (s *CodeService) SubmitAttendance(userID primitive.ObjectID, code string, c
 		Session:      session,
 		Status:       status,
 		MarkedBy:     domain.MarkedBySelf,
-		SubmittedAt:  time.Now(),
+		SubmittedAt:  now,
 		Locked:       false,
 		IPAddress:    ipAddress,
 	}
 
 	if err := s.recordRepo.InsertRecord(ctx, record); err != nil {
+		// Partial-unique index means this should not happen for live records,
+		// but handle gracefully just in case.
+		if strings.Contains(err.Error(), "E11000") || strings.Contains(err.Error(), "duplicate key") {
+			return nil, ErrAlreadySubmitted
+		}
 		return nil, err
 	}
 
+	clearAttempts(userID, string(session))
 	return record, nil
 }
 
+// IsSessionLocked exposes the lock check for use from SubmitAttendance.
+func (s *CodeService) IsSessionLocked(date, session string, cohort int) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := domain.AttendanceRecordFilter{
+		Date:       date,
+		Session:    domain.AttendanceSession(session),
+		Cohort:     cohort,
+		NotDeleted: true,
+	}
+
+	records, err := s.recordRepo.FindRecords(ctx, filter, nil)
+	if err != nil {
+		return false, err
+	}
+
+	for _, r := range records {
+		if r.Locked {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *CodeService) calculateStatus(session domain.AttendanceSession) domain.AttendanceStatus {
-	var startTime time.Time
 	now := utils.GetThailandTime()
 	location := now.Location()
 
+	var startTime time.Time
 	if session == domain.SessionMorning {
 		startTime = time.Date(now.Year(), now.Month(), now.Day(), 9, 0, 0, 0, location)
 	} else {

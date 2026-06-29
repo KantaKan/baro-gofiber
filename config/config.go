@@ -76,6 +76,14 @@ func createIndexes(ctx context.Context) error {
 	}
 
 	// 2. Attendance Records Indexes
+	// The (user_id, date, session) uniqueness must only apply to LIVE records so that a
+	// learner can re-check-in after an admin clears (soft-deletes) their record. We use a
+	// partial unique index. A legacy full-unique index from an older deployment is
+	// incompatible with the partial filter expression, so drop it by name first if present.
+	// NOTE: dropping/recreating an index never touches document data.
+	legacyUniqueName := "user_id_1_date_1_session_1"
+	_, _ = AttendanceRecordsCollection.Indexes().DropOne(ctx, legacyUniqueName)
+
 	attendanceIndexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
@@ -83,7 +91,9 @@ func createIndexes(ctx context.Context) error {
 				{Key: "date", Value: 1},
 				{Key: "session", Value: 1},
 			},
-			Options: options.Index().SetUnique(true),
+			Options: options.Index().
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{"deleted": bson.M{"$ne": true}}),
 		},
 		{
 			Keys: bson.D{
