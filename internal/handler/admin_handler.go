@@ -301,6 +301,77 @@ func (h *AdminHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Feedback updated successfully", nil)
 }
 
+// ponytail: no CSV upload, no individual validation per field beyond required
+func (h *AdminHandler) BulkRegisterUsers(c *fiber.Ctx) error {
+	type UserEntry struct {
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		Email        string `json:"email"`
+		JSDNumber    string `json:"jsd_number"`
+		Password     string `json:"password"`
+		ProjectGroup string `json:"project_group"`
+		GenmateGroup string `json:"genmate_group"`
+		ZoomName     string `json:"zoom_name"`
+	}
+	type RequestBody struct {
+		CohortNumber int         `json:"cohort_number"`
+		Password     string      `json:"password"`
+		Users        []UserEntry `json:"users"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.CohortNumber == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "cohort_number is required")
+	}
+	if len(body.Users) == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "at least one user is required")
+	}
+	if len(body.Users) > 200 {
+		return utils.SendError(c, fiber.StatusBadRequest, "maximum 200 users per request")
+	}
+
+	inputs := make([]user.BulkUserInput, len(body.Users))
+	for i, u := range body.Users {
+		inputs[i] = user.BulkUserInput{
+			FirstName:    u.FirstName,
+			LastName:     u.LastName,
+			Email:        u.Email,
+			JSDNumber:    u.JSDNumber,
+			Password:     u.Password,
+			ProjectGroup: u.ProjectGroup,
+			GenmateGroup: u.GenmateGroup,
+			ZoomName:     u.ZoomName,
+		}
+	}
+
+	results, err := h.userService.BulkCreateUsers(inputs, body.CohortNumber, body.Password)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Bulk registration failed")
+	}
+
+	successCount := 0
+	failCount := 0
+	for _, r := range results {
+		if r.Status == "created" {
+			successCount++
+		} else {
+			failCount++
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success":      true,
+		"message":      "Bulk registration completed",
+		"data":         results,
+		"successCount": successCount,
+		"failCount":    failCount,
+	})
+}
+
 func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {

@@ -184,6 +184,7 @@ type UserRepository interface {
 	FindByID(ctx interface{}, id primitive.ObjectID) (*User, error)
 	FindByEmail(ctx interface{}, email string) (*User, error)
 	FindAll(ctx interface{}, filter UserFilter, opts interface{}) ([]User, int, error)
+	Create(ctx interface{}, user *User) error
 	Update(ctx interface{}, id primitive.ObjectID, update interface{}) error
 	AddBadge(ctx interface{}, userID primitive.ObjectID, badge Badge) error
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error

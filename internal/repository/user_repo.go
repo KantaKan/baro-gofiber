@@ -91,6 +91,13 @@ func (r *userRepository) FindAll(ctx interface{}, filter domain.UserFilter, opts
 	return users, int(total), nil
 }
 
+func (r *userRepository) Create(ctx interface{}, user *domain.User) error {
+	c := ctx.(context.Context)
+	user.ID = primitive.NewObjectID()
+	_, err := r.collection.InsertOne(c, user)
+	return err
+}
+
 func (r *userRepository) Update(ctx interface{}, id primitive.ObjectID, update interface{}) error {
 	c := ctx.(context.Context)
 	filter := bson.M{"_id": id}
