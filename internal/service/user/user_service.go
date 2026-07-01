@@ -15,10 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var (
-	ErrUserNotFound = errors.New("user not found")
-)
-
 type Service struct {
 	repo domain.UserRepository
 }
@@ -30,7 +26,7 @@ func NewService(repo domain.UserRepository) *Service {
 func (s *Service) GetUserByID(id string) (*domain.User, error) {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return nil, domain.ErrUserNotFound
 	}
 
 	ctx := context.Background()
@@ -78,7 +74,7 @@ func (s *Service) GetAllUsers(cohort int, role, email, search, sort string, sort
 func (s *Service) UpdateUser(id string, update interface{}) error {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 
 	ctx := context.Background()
@@ -112,7 +108,7 @@ func (s *Service) CreateReflection(userID primitive.ObjectID, reflection domain.
 
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return nil, domain.ErrUserNotFound
 	}
 
 	now := utils.GetThailandTime()
@@ -139,7 +135,7 @@ func (s *Service) GetReflections(userID primitive.ObjectID) ([]domain.Reflection
 
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return nil, domain.ErrUserNotFound
 	}
 
 	return user.Reflections, nil
@@ -237,8 +233,8 @@ func (s *Service) BulkCreateUsers(inputs []BulkUserInput, cohortNumber int, shar
 		seenEmails[in.Email] = true
 
 		existing, err := s.repo.FindByEmail(ctx, in.Email)
-		if err != nil && !errors.Is(err, ErrUserNotFound) {
-			results = append(results, BulkUserResult{Email: in.Email, Status: "error", Error: "db error"})
+		if err != nil && !errors.Is(err, domain.ErrUserNotFound) {
+			results = append(results, BulkUserResult{Email: in.Email, Status: "error", Error: "db error: " + err.Error()})
 			continue
 		}
 		if existing != nil {
@@ -287,7 +283,7 @@ func (s *Service) BulkCreateUsers(inputs []BulkUserInput, cohortNumber int, shar
 func (s *Service) SoftDeleteUser(id string) error {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return ErrUserNotFound
+		return domain.ErrUserNotFound
 	}
 
 	ctx := context.Background()

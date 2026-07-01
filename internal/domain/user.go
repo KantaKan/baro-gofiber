@@ -2,10 +2,13 @@ package domain
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+var ErrUserNotFound = errors.New("user not found")
 
 type Badge struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
