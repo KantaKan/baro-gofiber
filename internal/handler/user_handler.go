@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"html"
+	"log"
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/user"
 	middleware "gofiber-baro/pkg/middleware"
@@ -122,6 +123,7 @@ func (h *UserHandler) CreateReflection(c *fiber.Ctx) error {
 		if err.Error() == "user has already created a reflection today" {
 			return utils.SendError(c, fiber.StatusConflict, "You have already submitted a reflection today. Please try again tomorrow.")
 		}
+		log.Printf("CreateReflection error for user %s: %v", objectID.Hex(), err)
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error creating reflection")
 	}
 

@@ -267,6 +267,7 @@ func (s *Service) BulkCreateUsers(inputs []BulkUserInput, cohortNumber int, shar
 			ProjectGroup: in.ProjectGroup,
 			GenmateGroup: in.GenmateGroup,
 			ZoomName:     in.ZoomName,
+			Reflections:  []domain.Reflection{},
 		}
 
 		if err := s.repo.Create(ctx, user); err != nil {

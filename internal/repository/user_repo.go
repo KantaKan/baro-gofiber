@@ -166,6 +166,16 @@ func (r *userRepository) buildFilter(filter domain.UserFilter) bson.M {
 func (r *userRepository) CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection domain.Reflection) error {
 	c := ctx.(context.Context)
 	reflection.ID = primitive.NewObjectID()
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$set", Value: bson.D{
+			{Key: "reflections", Value: bson.D{
+				{Key: "$ifNull", Value: bson.A{"$reflections", bson.A{}}},
+			}},
+		}}},
+	}
+	r.collection.UpdateOne(c, bson.M{"_id": userID}, pipeline)
+
 	filter := bson.M{"_id": userID}
 	update := bson.M{"$push": bson.M{"reflections": reflection}}
 	_, err := r.collection.UpdateOne(c, filter, update)
