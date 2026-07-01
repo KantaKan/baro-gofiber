@@ -15,10 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var (
-	ErrUserNotFound = errors.New("user not found")
-)
-
 type userRepository struct {
 	collection *mongo.Collection
 }
@@ -35,7 +31,7 @@ func (r *userRepository) FindByID(ctx interface{}, id primitive.ObjectID) (*doma
 	err := r.collection.FindOne(c, bson.M{"_id": id}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, ErrUserNotFound
+			return nil, domain.ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -48,8 +44,9 @@ func (r *userRepository) FindByEmail(ctx interface{}, email string) (*domain.Use
 	err := r.collection.FindOne(c, bson.M{"email": email}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return nil, ErrUserNotFound
+			return nil, domain.ErrUserNotFound
 		}
+		log.Printf("FindByEmail error for %s: %v", email, err)
 		return nil, err
 	}
 	return &user, nil

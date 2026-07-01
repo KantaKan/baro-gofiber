@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -84,6 +86,8 @@ func createIndexes(ctx context.Context) error {
 	legacyUniqueName := "user_id_1_date_1_session_1"
 	_, _ = AttendanceRecordsCollection.Indexes().DropOne(ctx, legacyUniqueName)
 
+	cleanupAttendanceDuplicates(ctx)
+
 	attendanceIndexes := []mongo.IndexModel{
 		{
 			Keys: bson.D{
@@ -93,7 +97,7 @@ func createIndexes(ctx context.Context) error {
 			},
 			Options: options.Index().
 				SetUnique(true).
-				SetPartialFilterExpression(bson.M{"deleted": bson.M{"$ne": true}}),
+				SetPartialFilterExpression(bson.M{"deleted": false}), // ponytail: $ne unsupported in partial index
 		},
 		{
 			Keys: bson.D{
@@ -146,4 +150,61 @@ func createIndexes(ctx context.Context) error {
 
 	log.Println("Database indexes synchronized successfully")
 	return nil
+}
+
+func cleanupAttendanceDuplicates(ctx context.Context) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.D{
+			{Key: "_id", Value: bson.D{
+				{Key: "user_id", Value: "$user_id"},
+				{Key: "date", Value: "$date"},
+				{Key: "session", Value: "$session"},
+			}},
+			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
+			{Key: "ids", Value: bson.D{{Key: "$push", Value: "$_id"}}},
+		}}},
+		{{Key: "$match", Value: bson.D{{Key: "count", Value: bson.D{{Key: "$gt", Value: 1}}}}}},
+	}
+	cursor, err := AttendanceRecordsCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		log.Printf("Warning: failed to query attendance duplicates: %v", err)
+		return
+	}
+	defer cursor.Close(ctx)
+
+	type dupGroup struct {
+		ID    struct {
+			UserID  primitive.ObjectID `bson:"user_id"`
+			Date    string             `bson:"date"`
+			Session string             `bson:"session"`
+		} `bson:"_id"`
+		Count int                `bson:"count"`
+		IDs   []primitive.ObjectID `bson:"ids"`
+	}
+
+	var groups []dupGroup
+	if err := cursor.All(ctx, &groups); err != nil {
+		log.Printf("Warning: failed to decode attendance duplicates: %v", err)
+		return
+	}
+
+	now := time.Now()
+	for _, g := range groups {
+		// keep the first one (oldest _id), soft-delete the rest
+		for _, id := range g.IDs[1:] {
+			_, err := AttendanceRecordsCollection.UpdateOne(ctx,
+				bson.M{"_id": id},
+				bson.M{"$set": bson.M{"deleted": true, "deleted_at": now, "deleted_by": "system"}},
+			)
+			if err != nil {
+				log.Printf("Warning: failed to clean duplicate attendance %s: %v", id.Hex(), err)
+			} else {
+				log.Printf("Cleaned duplicate attendance: user=%s date=%s session=%s", g.ID.UserID.Hex(), g.ID.Date, g.ID.Session)
+			}
+		}
+	}
+
+	if len(groups) > 0 {
+		log.Printf("Cleaned %d duplicate attendance groups", len(groups))
+	}
 }
