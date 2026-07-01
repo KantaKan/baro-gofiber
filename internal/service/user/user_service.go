@@ -2,7 +2,9 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"math/big"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -183,6 +185,103 @@ func (s *Service) AddProfileReaction(userID primitive.ObjectID, reactorID primit
 	}
 
 	return s.repo.AddProfileReaction(ctx, userID, reaction)
+}
+
+// ponytail: input for bulk-register per-user data
+type BulkUserInput struct {
+	FirstName    string
+	LastName     string
+	Email        string
+	JSDNumber    string
+	Password     string // per-user override
+	ProjectGroup string
+	GenmateGroup string
+	ZoomName     string
+}
+
+// ponytail: result for a single bulk-register attempt
+type BulkUserResult struct {
+	Email    string `json:"email"`
+	Status   string `json:"status"`
+	Password string `json:"password,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+var passwordChars = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+func generateRandomPassword(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		idx, _ := rand.Int(rand.Reader, big.NewInt(int64(len(passwordChars))))
+		b[i] = passwordChars[idx.Int64()]
+	}
+	return string(b)
+}
+
+// ponytail: no per-user tx rollback — skip duplicates, keep going
+func (s *Service) BulkCreateUsers(inputs []BulkUserInput, cohortNumber int, sharedPassword string) ([]BulkUserResult, error) {
+	ctx := context.Background()
+	var results []BulkUserResult
+	seenEmails := map[string]bool{}
+
+	for _, in := range inputs {
+		if in.Email == "" || in.FirstName == "" || in.LastName == "" {
+			results = append(results, BulkUserResult{Email: in.Email, Status: "skipped", Error: "missing required fields"})
+			continue
+		}
+
+		if seenEmails[in.Email] {
+			results = append(results, BulkUserResult{Email: in.Email, Status: "skipped", Error: "duplicate in batch"})
+			continue
+		}
+		seenEmails[in.Email] = true
+
+		existing, err := s.repo.FindByEmail(ctx, in.Email)
+		if err != nil && !errors.Is(err, ErrUserNotFound) {
+			results = append(results, BulkUserResult{Email: in.Email, Status: "error", Error: "db error"})
+			continue
+		}
+		if existing != nil {
+			results = append(results, BulkUserResult{Email: in.Email, Status: "skipped", Error: "email already registered"})
+			continue
+		}
+
+		password := in.Password
+		if password == "" {
+			password = sharedPassword
+		}
+		if password == "" {
+			password = generateRandomPassword(10)
+		}
+
+		hashed, err := utils.HashPassword(password)
+		if err != nil {
+			results = append(results, BulkUserResult{Email: in.Email, Status: "error", Error: "failed to hash password"})
+			continue
+		}
+
+		user := &domain.User{
+			FirstName:    in.FirstName,
+			LastName:     in.LastName,
+			Email:        in.Email,
+			JSDNumber:    in.JSDNumber,
+			Password:     hashed,
+			Role:         "learner",
+			CohortNumber: cohortNumber,
+			ProjectGroup: in.ProjectGroup,
+			GenmateGroup: in.GenmateGroup,
+			ZoomName:     in.ZoomName,
+		}
+
+		if err := s.repo.Create(ctx, user); err != nil {
+			results = append(results, BulkUserResult{Email: in.Email, Status: "error", Error: "failed to create user"})
+			continue
+		}
+
+		results = append(results, BulkUserResult{Email: in.Email, Status: "created", Password: password})
+	}
+
+	return results, nil
 }
 
 func (s *Service) SoftDeleteUser(id string) error {
