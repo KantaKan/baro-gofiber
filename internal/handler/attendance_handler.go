@@ -138,14 +138,8 @@ func (h *AttendanceHandler) SubmitAttendance(c *fiber.Ctx) error {
 	record, err := h.codeService.SubmitAttendance(oid, body.Code, body.Cohort, ipAddress)
 	if err != nil {
 		switch err {
-		case attendance.ErrCodeExpired:
-			return utils.SendError(c, fiber.StatusGone, "Code expired. Please contact admin for a new code.")
-		case attendance.ErrInvalidCode:
-			return utils.SendError(c, fiber.StatusBadRequest, "Invalid code. Please check and try again.")
-		case attendance.ErrNoActiveCode:
-			return utils.SendError(c, fiber.StatusBadRequest, "No active code for this session. Please contact admin.")
-		case attendance.ErrCodeForWrongCohort:
-			return utils.SendError(c, fiber.StatusBadRequest, "This code is for a different cohort.")
+	case attendance.ErrCodeExpired, attendance.ErrInvalidCode, attendance.ErrNoActiveCode, attendance.ErrCodeForWrongCohort:
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid code. Please check and try again.")
 		case attendance.ErrAlreadySubmitted:
 			return utils.SendError(c, fiber.StatusConflict, "You have already submitted attendance for this session.")
 		case attendance.ErrSessionLocked:
