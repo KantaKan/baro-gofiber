@@ -4,6 +4,7 @@ import (
 	"errors"
 	"html"
 	"log"
+	"time"
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/user"
 	middleware "gofiber-baro/pkg/middleware"
@@ -358,6 +359,60 @@ func (h *UserHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Feedback updated successfully", nil)
+}
+
+func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	if claims.Cohort <= 0 {
+		return utils.SendResponse(c, fiber.StatusOK, "Genmate garden retrieved", fiber.Map{
+			"users": []interface{}{},
+		})
+	}
+
+	me, err := h.userService.GetUserByID(claims.UserID)
+	if err != nil || me.GenmateGroup == "" {
+		return utils.SendResponse(c, fiber.StatusOK, "Genmate garden retrieved", fiber.Map{
+			"users": []interface{}{},
+		})
+	}
+
+	users, _, err := h.userService.GetAllUsers(claims.Cohort, "learner", "", "", "first_name", 1, 1, 1000)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching genmate garden")
+	}
+
+	members := make([]fiber.Map, 0)
+	for _, u := range users {
+		if u.Deleted || u.GenmateGroup != me.GenmateGroup {
+			continue
+		}
+
+		dates := make([]string, 0, len(u.Reflections))
+		for _, r := range u.Reflections {
+			day := r.Day
+			if day == "" {
+				day = r.Date.Format(time.RFC3339)
+			}
+			dates = append(dates, day)
+		}
+
+		members = append(members, fiber.Map{
+			"_id":             u.ID.Hex(),
+			"first_name":      u.FirstName,
+			"last_name":       u.LastName,
+			"cohort_number":   u.CohortNumber,
+			"genmate_group":   u.GenmateGroup,
+			"reflection_dates": dates,
+		})
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Genmate garden retrieved", fiber.Map{
+		"users": members,
+	})
 }
 
 func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {

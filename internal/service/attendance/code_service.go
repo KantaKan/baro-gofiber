@@ -2,10 +2,12 @@ package attendance
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -41,7 +43,7 @@ type codeAttempt struct {
 // In-memory rate limiter for code submissions. Tolerates burst of 3 wrong codes per
 // session, then blocks for 5 minutes. Resets automatically. No external dep needed.
 var (
-	attemptMu     = struct{}{}
+	attemptMu     sync.Mutex
 	codeAttempts  = map[codeAttemptKey]codeAttempt{}
 	cleanupDone   = make(chan struct{})
 	attemptBurst  = 3
@@ -56,6 +58,8 @@ func init() {
 			select {
 			case <-ticker.C:
 				func() {
+					attemptMu.Lock()
+					defer attemptMu.Unlock()
 					now := utils.GetThailandTime()
 					for k, a := range codeAttempts {
 						if now.Sub(a.firstTry) > attemptWindow {
@@ -71,6 +75,9 @@ func init() {
 }
 
 func checkCodeRateLimit(userID primitive.ObjectID, session string) error {
+	attemptMu.Lock()
+	defer attemptMu.Unlock()
+
 	key := codeAttemptKey{userID: userID, session: session}
 	now := utils.GetThailandTime()
 
@@ -87,6 +94,9 @@ func checkCodeRateLimit(userID primitive.ObjectID, session string) error {
 }
 
 func recordFailedAttempt(userID primitive.ObjectID, session string) {
+	attemptMu.Lock()
+	defer attemptMu.Unlock()
+
 	key := codeAttemptKey{userID: userID, session: session}
 	a, ok := codeAttempts[key]
 	if !ok {
@@ -97,6 +107,9 @@ func recordFailedAttempt(userID primitive.ObjectID, session string) {
 }
 
 func clearAttempts(userID primitive.ObjectID, session string) {
+	attemptMu.Lock()
+	defer attemptMu.Unlock()
+
 	key := codeAttemptKey{userID: userID, session: session}
 	delete(codeAttempts, key)
 }
@@ -150,10 +163,14 @@ func (s *CodeService) GenerateCode(cohort int, session domain.AttendanceSession,
 
 func (s *CodeService) generateRandomCode(prefix string) string {
 	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-	r := rand.New(rand.NewSource(utils.GetThailandTime().UnixNano()))
-	code := make([]byte, 4)
+	code := make([]byte, 6)
 	for i := range code {
-		code[i] = charset[r.Intn(len(charset))]
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			code[i] = charset[time.Now().UnixNano()%int64(len(charset))]
+		} else {
+			code[i] = charset[n.Int64()]
+		}
 	}
 	return strings.ToUpper(prefix) + "-" + string(code)
 }
@@ -239,6 +256,15 @@ func (s *CodeService) SubmitAttendance(userID primitive.ObjectID, code string, c
 	}
 	if existing != nil {
 		return nil, ErrAlreadySubmitted
+	}
+
+	// Re-check lock right before insert to close TOCTOU window.
+	stillLocked, err := s.IsSessionLocked(today, string(session), cohort)
+	if err != nil {
+		return nil, err
+	}
+	if stillLocked {
+		return nil, ErrSessionLocked
 	}
 
 	status := s.calculateStatus(session)
