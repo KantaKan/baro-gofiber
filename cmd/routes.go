@@ -30,6 +30,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 
 	protected := app.Group("/users", middleware.AuthMiddleware)
 	protected.Get("/", h.User.GetAllUsers)
+	protected.Get("/genmate-garden", h.User.GetGenmateGarden)
 	protected.Get("/:id", h.User.GetUserByID)
 	protected.Put("/:id", h.User.UpdateUser)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
