@@ -49,17 +49,17 @@ func (s *StatsService) GetAttendanceStats(cohort int, startDate, endDate string)
 		session string
 	}
 	type userStats struct {
-		userID       string
-		jsdNumber    string
-		firstName    string
-		lastName     string
-		cohortNumber int
-		present      int
-		late         int
-		absent       int
-		lateExcused  int
+		userID        string
+		jsdNumber     string
+		firstName     string
+		lastName      string
+		cohortNumber  int
+		present       int
+		late          int
+		absent        int
+		lateExcused   int
 		absentExcused int
-		dates        map[string]struct {
+		dates         map[string]struct {
 			morning   string
 			afternoon string
 		}
@@ -156,56 +156,6 @@ func (s *StatsService) GetAttendanceStats(cohort int, startDate, endDate string)
 	}
 
 	return stats, nil
-}
-
-func (s *StatsService) GetAttendanceStatsWithFilter(cohort int, days int) ([]domain.AttendanceStats, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	startDate := utils.GetThailandTime().AddDate(0, 0, -days).Format("2006-01-02")
-
-	matchStage := bson.M{
-		"deleted": bson.M{"$ne": true},
-		"date":    bson.M{"$gte": startDate},
-	}
-	if cohort > 0 {
-		matchStage["cohort_number"] = cohort
-	}
-
-	pipeline := []bson.M{
-		{"$match": matchStage},
-		// First group by date, session, and user_id to deduplicate
-		{"$group": bson.M{
-			"_id": bson.M{
-				"date":    "$date",
-				"session": "$session",
-				"user_id": "$user_id",
-			},
-			"status":        bson.M{"$first": "$status"},
-			"jsd_number":    bson.M{"$first": "$jsd_number"},
-			"first_name":    bson.M{"$first": "$first_name"},
-			"last_name":     bson.M{"$first": "$last_name"},
-			"cohort_number": bson.M{"$first": "$cohort_number"},
-		}},
-		// Then group by user_id to get total stats
-		{"$group": bson.M{
-			"_id": bson.M{
-				"user_id":       "$_id.user_id",
-				"jsd_number":    "$jsd_number",
-				"first_name":    "$first_name",
-				"last_name":     "$last_name",
-				"cohort_number": "$cohort_number",
-			},
-			"present":        bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "present"}}, 1, 0}}},
-			"late":           bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "late"}}, 1, 0}}},
-			"absent":         bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "absent"}}, 1, 0}}},
-			"late_excused":   bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "late_excused"}}, 1, 0}}},
-			"absent_excused": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "absent_excused"}}, 1, 0}}},
-		}},
-		{"$sort": bson.D{{Key: "absent", Value: -1}}},
-	}
-
-	return s.recordRepo.AggregateStats(ctx, pipeline)
 }
 
 // toInt - helper to safely convert various numeric types from MongoDB to int

@@ -73,7 +73,6 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/attendance/manual", h.Attendance.ManualMarkAttendance)
 	admin.Get("/attendance/logs", h.Attendance.GetAttendanceLogs)
 	admin.Get("/attendance/stats", h.Attendance.GetAttendanceStats)
-	admin.Get("/attendance/stats-by-days", h.Attendance.GetAttendanceStatsByDays)
 	admin.Get("/attendance/daily-stats", h.Attendance.GetDailyAttendanceStats)
 	admin.Get("/attendance/student/:id", h.Attendance.GetStudentAttendanceHistory)
 	admin.Post("/attendance/lock", h.Attendance.LockSession)
