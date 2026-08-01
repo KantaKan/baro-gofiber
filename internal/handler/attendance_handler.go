@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/attendance"
@@ -138,8 +139,8 @@ func (h *AttendanceHandler) SubmitAttendance(c *fiber.Ctx) error {
 	record, err := h.codeService.SubmitAttendance(oid, body.Code, body.Cohort, ipAddress)
 	if err != nil {
 		switch err {
-	case attendance.ErrCodeExpired, attendance.ErrInvalidCode, attendance.ErrNoActiveCode, attendance.ErrCodeForWrongCohort:
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid code. Please check and try again.")
+		case attendance.ErrCodeExpired, attendance.ErrInvalidCode, attendance.ErrNoActiveCode, attendance.ErrCodeForWrongCohort:
+			return utils.SendError(c, fiber.StatusBadRequest, "Invalid code. Please check and try again.")
 		case attendance.ErrAlreadySubmitted:
 			return utils.SendError(c, fiber.StatusConflict, "You have already submitted attendance for this session.")
 		case attendance.ErrSessionLocked:
@@ -272,12 +273,18 @@ func (h *AttendanceHandler) BulkMarkAttendance(c *fiber.Ctx) error {
 	}
 
 	var userOIDs []primitive.ObjectID
+	var invalidIDs []string
 	for _, id := range body.UserIDs {
 		oid, err := primitive.ObjectIDFromHex(id)
 		if err != nil {
+			invalidIDs = append(invalidIDs, id)
 			continue
 		}
 		userOIDs = append(userOIDs, oid)
+	}
+
+	if len(invalidIDs) > 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user IDs: "+strings.Join(invalidIDs, ", "))
 	}
 
 	if len(userOIDs) == 0 {
@@ -447,18 +454,6 @@ func (h *AttendanceHandler) DeleteAttendanceRecord(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Attendance record deleted", record)
 }
 
-func (h *AttendanceHandler) GetAttendanceStatsByDays(c *fiber.Ctx) error {
-	cohort := c.QueryInt("cohort", 0)
-	days := c.QueryInt("days", 7)
-
-	stats, err := h.statsService.GetAttendanceStatsWithFilter(cohort, days)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching stats")
-	}
-
-	return utils.SendResponse(c, fiber.StatusOK, "Stats retrieved", stats)
-}
-
 func (h *AttendanceHandler) GetDailyAttendanceStats(c *fiber.Ctx) error {
 	cohort := c.QueryInt("cohort", 0)
 	startDate := c.Query("start_date", "")
@@ -586,13 +581,13 @@ func (h *AttendanceHandler) ExportAttendance(c *fiber.Ctx) error {
 	}
 
 	req := attendance.ExportRequest{
-		Cohort:        cohort,
-		StartDate:     startDate,
-		EndDate:       endDate,
-		Format:        expFormat,
-		Structure:     expStructure,
-		SplitAMPM:     splitAMPM,
-		StatusFilter:  statusFilter,
+		Cohort:       cohort,
+		StartDate:    startDate,
+		EndDate:      endDate,
+		Format:       expFormat,
+		Structure:    expStructure,
+		SplitAMPM:    splitAMPM,
+		StatusFilter: statusFilter,
 	}
 
 	data, ext, err := h.exportService.Export(req)

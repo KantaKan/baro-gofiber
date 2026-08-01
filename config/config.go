@@ -21,7 +21,7 @@ var LeaveRequestsCollection *mongo.Collection
 var HolidaysCollection *mongo.Collection
 
 func InitializeDB(mongoURI, databaseName string) error {
-	log.Printf("Debug - MongoDB URI: %s", mongoURI)
+	log.Println("Connecting to MongoDB...")
 
 	if mongoURI == "" || databaseName == "" {
 		return fmt.Errorf("MONGO_URI or DATABASE_NAME not provided")
@@ -173,12 +173,12 @@ func cleanupAttendanceDuplicates(ctx context.Context) {
 	defer cursor.Close(ctx)
 
 	type dupGroup struct {
-		ID    struct {
+		ID struct {
 			UserID  primitive.ObjectID `bson:"user_id"`
 			Date    string             `bson:"date"`
 			Session string             `bson:"session"`
 		} `bson:"_id"`
-		Count int                `bson:"count"`
+		Count int                  `bson:"count"`
 		IDs   []primitive.ObjectID `bson:"ids"`
 	}
 
