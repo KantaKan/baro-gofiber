@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/handler"
 	"gofiber-baro/internal/repository"
@@ -10,6 +12,7 @@ import (
 	notificationService "gofiber-baro/internal/service/notification"
 	reflectionService "gofiber-baro/internal/service/reflection"
 	userService "gofiber-baro/internal/service/user"
+	"gofiber-baro/internal/storage"
 
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -24,6 +27,10 @@ type Container struct {
 	HolidayRepo        domain.HolidayRepository
 	TalkBoardRepo      domain.TalkBoardRepository
 	NotificationRepo   domain.NotificationRepository
+	StampRepo          domain.StampRepository
+	CohortRepo         domain.CohortRepository
+
+	StampStorage storage.Storage
 
 	UserService                 *userService.Service
 	BadgeService                *userService.BadgeService
@@ -45,12 +52,14 @@ type Container struct {
 	HolidayHandler      *handler.HolidayHandler
 	TalkBoardHandler    *handler.TalkBoardHandler
 	NotificationHandler *handler.NotificationHandler
+	StampHandler        *handler.StampHandler
 }
 
 func NewContainer(db *mongo.Database) *Container {
 	c := &Container{DB: db}
 
 	c.initRepositories()
+	c.initStorage()
 	c.initServices()
 	c.initHandlers()
 
@@ -65,6 +74,17 @@ func (c *Container) initRepositories() {
 	c.HolidayRepo = repository.NewHolidayRepository(c.DB)
 	c.TalkBoardRepo = repository.NewTalkBoardRepository(c.DB)
 	c.NotificationRepo = repository.NewNotificationRepository(c.DB)
+	c.StampRepo = repository.NewStampRepository(c.DB)
+	c.CohortRepo = repository.NewCohortRepository(c.DB)
+}
+
+func (c *Container) initStorage() {
+	s, err := storage.NewSupabaseStorage()
+	if err != nil {
+		log.Printf("WARNING: supabase storage not configured: %v", err)
+		s = nil
+	}
+	c.StampStorage = s
 }
 
 func (c *Container) initServices() {
@@ -98,4 +118,5 @@ func (c *Container) initHandlers() {
 	c.HolidayHandler = handler.NewHolidayHandler(c.HolidayService)
 	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo, c.UserService)
 	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
+	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
 }

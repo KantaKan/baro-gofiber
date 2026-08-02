@@ -18,6 +18,7 @@ type Handlers struct {
 	Holiday      *handler.HolidayHandler
 	TalkBoard    *handler.TalkBoardHandler
 	Notification *handler.NotificationHandler
+	Stamp        *handler.StampHandler
 }
 
 func setupRoutes(app *fiber.App, h Handlers) {
@@ -73,7 +74,6 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/attendance/manual", h.Attendance.ManualMarkAttendance)
 	admin.Get("/attendance/logs", h.Attendance.GetAttendanceLogs)
 	admin.Get("/attendance/stats", h.Attendance.GetAttendanceStats)
-	admin.Get("/attendance/stats-by-days", h.Attendance.GetAttendanceStatsByDays)
 	admin.Get("/attendance/daily-stats", h.Attendance.GetDailyAttendanceStats)
 	admin.Get("/attendance/student/:id", h.Attendance.GetStudentAttendanceHistory)
 	admin.Post("/attendance/lock", h.Attendance.LockSession)
@@ -118,4 +118,17 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	board.Post("/posts/:postId/reactions", h.TalkBoard.AddReactionToPost)
 	board.Delete("/posts/:postId/reactions", h.TalkBoard.RemoveReactionFromPost)
 	board.Post("/posts/:postId/comments/:commentId/reactions", h.TalkBoard.AddReactionToComment)
+
+	stamps := app.Group("/stamps", middleware.AuthMiddleware)
+	stamps.Post("/", h.Stamp.CreateStamp)
+
+	cohorts := app.Group("/cohorts", middleware.AuthMiddleware)
+	cohorts.Get("/", h.Stamp.ListCohorts)
+	cohorts.Get("/:cohortNumber", h.Stamp.GetCohort)
+	cohorts.Get("/:cohortNumber/stamps", h.Stamp.GetCohortStamps)
+
+	admin.Put("/cohorts/:cohortNumber", h.Stamp.SetCohortLockAt)
+	admin.Post("/cohorts/:cohortNumber/poster", h.Stamp.UploadPoster)
+	admin.Delete("/cohorts/:cohortNumber/stamps", h.Stamp.ClearCohortStamps)
+	admin.Delete("/cohorts/:cohortNumber/stamps/:stampId", h.Stamp.DeleteStamp)
 }

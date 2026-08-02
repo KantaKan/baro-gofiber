@@ -21,7 +21,7 @@ var LeaveRequestsCollection *mongo.Collection
 var HolidaysCollection *mongo.Collection
 
 func InitializeDB(mongoURI, databaseName string) error {
-	log.Printf("Debug - MongoDB URI: %s", mongoURI)
+	log.Println("Connecting to MongoDB...")
 
 	if mongoURI == "" || databaseName == "" {
 		return fmt.Errorf("MONGO_URI or DATABASE_NAME not provided")
@@ -148,6 +148,37 @@ func createIndexes(ctx context.Context) error {
 		return err
 	}
 
+	// 5. Stamps Indexes
+	stampsColl := DB.Collection("stamps")
+	stampIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{
+				{Key: "cohortNumber", Value: 1},
+				{Key: "createdAt", Value: 1},
+			},
+		},
+	}
+	_, err = stampsColl.Indexes().CreateMany(ctx, stampIndexes)
+	if err != nil {
+		return err
+	}
+
+	// 6. Cohorts Indexes
+	cohortsColl := DB.Collection("cohorts")
+	cohortIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "cohort_number", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys: bson.D{{Key: "lock_at", Value: 1}},
+		},
+	}
+	_, err = cohortsColl.Indexes().CreateMany(ctx, cohortIndexes)
+	if err != nil {
+		return err
+	}
+
 	log.Println("Database indexes synchronized successfully")
 	return nil
 }
@@ -173,12 +204,12 @@ func cleanupAttendanceDuplicates(ctx context.Context) {
 	defer cursor.Close(ctx)
 
 	type dupGroup struct {
-		ID    struct {
+		ID struct {
 			UserID  primitive.ObjectID `bson:"user_id"`
 			Date    string             `bson:"date"`
 			Session string             `bson:"session"`
 		} `bson:"_id"`
-		Count int                `bson:"count"`
+		Count int                  `bson:"count"`
 		IDs   []primitive.ObjectID `bson:"ids"`
 	}
 
