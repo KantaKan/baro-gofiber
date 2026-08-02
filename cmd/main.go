@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"gofiber-baro/config"
+	"gofiber-baro/internal/jobs"
 	"log"
+	"net/url"
 	"os"
 	"time"
 
@@ -66,6 +69,8 @@ func main() {
 
 	container := NewContainer(config.DB)
 
+	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
+
 	app := fiber.New()
 
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
@@ -85,7 +90,7 @@ func main() {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 	app.Use(helmet.New(helmet.Config{
-		ContentSecurityPolicy: "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:",
+		ContentSecurityPolicy: buildCSP(),
 		XSSProtection:         "1; mode=block",
 		ContentTypeNosniff:    "nosniff",
 		ReferrerPolicy:        "no-referrer",
@@ -121,6 +126,7 @@ func main() {
 		Holiday:      container.HolidayHandler,
 		TalkBoard:    container.TalkBoardHandler,
 		Notification: container.NotificationHandler,
+		Stamp:        container.StampHandler,
 	}
 
 	setupRoutes(app, handlers)
@@ -133,4 +139,18 @@ func main() {
 	log.Printf("Database Name: %s", dbName)
 	log.Printf("Port: %s", port)
 	log.Fatal(app.Listen(":" + port))
+}
+
+func buildCSP() string {
+	csp := "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:"
+
+	publicBase := os.Getenv("SUPABASE_STORAGE_PUBLIC_URL")
+	if publicBase != "" {
+		u, err := url.Parse(publicBase)
+		if err == nil && u.Host != "" {
+			csp += " https://" + u.Host
+		}
+	}
+
+	return csp
 }
