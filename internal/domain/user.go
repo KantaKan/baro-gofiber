@@ -9,6 +9,8 @@ import (
 )
 
 var ErrUserNotFound = errors.New("user not found")
+var ErrInsufficientFertilizer = errors.New("insufficient fertilizer balance")
+var ErrDateAlreadyProtected = errors.New("date already protected")
 
 type Badge struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
@@ -19,6 +21,16 @@ type Badge struct {
 	Color     string             `bson:"color,omitempty" json:"color,omitempty"`
 	Style     string             `bson:"style,omitempty" json:"style,omitempty"`
 	AwardedAt time.Time          `bson:"awardedAt" json:"awardedAt"`
+}
+
+type FertilizerLogEntry struct {
+	ID          primitive.ObjectID `bson:"_id,omitempty" json:"_id,omitempty"`
+	Kind        string             `bson:"kind" json:"kind"` // "grant" | "protect" | "feed"
+	Amount      int                `bson:"amount" json:"amount"`
+	RelatedDate string             `bson:"relatedDate,omitempty" json:"relatedDate,omitempty"` // "protect" only, YYYY-MM-DD
+	Note        string             `bson:"note,omitempty" json:"note,omitempty"`
+	GrantedBy   string             `bson:"grantedBy,omitempty" json:"grantedBy,omitempty"`
+	CreatedAt   time.Time          `bson:"createdAt" json:"createdAt"`
 }
 
 type Reflection struct {
@@ -92,6 +104,9 @@ type User struct {
 	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
 	Deleted          bool               `bson:"deleted,omitempty" json:"deleted,omitempty"`
 	DeletedAt        *time.Time        `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
+	FertilizerBalance int                  `bson:"fertilizer_balance,omitempty" json:"fertilizer_balance,omitempty"`
+	GrowthPoints      int                  `bson:"growth_points,omitempty" json:"growth_points,omitempty"`
+	FertilizerLog     []FertilizerLogEntry `bson:"fertilizer_log,omitempty" json:"fertilizer_log,omitempty"`
 }
 
 // UserSafe is a restricted version of User for non-admin users
@@ -111,6 +126,9 @@ type UserSafe struct {
 	PinnedBadgeIDs []primitive.ObjectID `json:"pinned_badge_ids,omitempty"`
 	ProfileComments []ProfileComment   `json:"profile_comments,omitempty"`
 	ProfileReactions []Reaction        `json:"profile_reactions,omitempty"`
+	FertilizerBalance int                  `json:"fertilizer_balance,omitempty"`
+	GrowthPoints      int                  `json:"growth_points,omitempty"`
+	FertilizerLog     []FertilizerLogEntry `json:"fertilizer_log,omitempty"`
 }
 
 // ToSafe converts a User to UserSafe for non-admin responses
@@ -130,6 +148,9 @@ func (u *User) ToSafe() UserSafe {
 		PinnedBadgeIDs:  u.PinnedBadgeIDs,
 		ProfileComments: u.ProfileComments,
 		ProfileReactions: u.ProfileReactions,
+		FertilizerBalance: u.FertilizerBalance,
+		GrowthPoints:      u.GrowthPoints,
+		FertilizerLog:     u.FertilizerLog,
 	}
 }
 
@@ -190,6 +211,9 @@ type UserRepository interface {
 	Create(ctx interface{}, user *User) error
 	Update(ctx interface{}, id primitive.ObjectID, update interface{}) error
 	AddBadge(ctx interface{}, userID primitive.ObjectID, badge Badge) error
+	GrantFertilizer(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error
+	UseFertilizerProtect(ctx interface{}, userID primitive.ObjectID, dateStr string) error
+	UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, points int) error
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
 	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error

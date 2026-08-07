@@ -3,6 +3,7 @@ package handler
 import (
 	"gofiber-baro/internal/service/reflection"
 	"gofiber-baro/internal/service/user"
+	"gofiber-baro/pkg/middleware"
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,6 +13,7 @@ import (
 type AdminHandler struct {
 	userService       *user.Service
 	badgeService      *user.BadgeService
+	fertilizerService *user.FertilizerService
 	reflectionService *reflection.Service
 	barometerService  *reflection.BarometerService
 }
@@ -19,12 +21,14 @@ type AdminHandler struct {
 func NewAdminHandler(
 	userService *user.Service,
 	badgeService *user.BadgeService,
+	fertilizerService *user.FertilizerService,
 	reflectionService *reflection.Service,
 	barometerService *reflection.BarometerService,
 ) *AdminHandler {
 	return &AdminHandler{
 		userService:       userService,
 		badgeService:      badgeService,
+		fertilizerService: fertilizerService,
 		reflectionService: reflectionService,
 		barometerService:  barometerService,
 	}
@@ -170,6 +174,96 @@ func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success":      true,
 		"message":      "Bulk badge award completed",
+		"data":         nil,
+		"successCount": successCount,
+		"failCount":    failCount,
+	})
+}
+
+func (h *AdminHandler) GrantFertilizer(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	type RequestBody struct {
+		Amount int    `json:"amount"`
+		Note   string `json:"note"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Amount <= 0 {
+		body.Amount = 1
+	}
+
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	claims, _ := c.Locals("user").(*middleware.Claims)
+	grantedBy := ""
+	if claims != nil {
+		grantedBy = claims.UserID
+	}
+
+	if err := h.fertilizerService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error granting fertilizer")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Fertilizer granted successfully", nil)
+}
+
+func (h *AdminHandler) BulkGrantFertilizer(c *fiber.Ctx) error {
+	type RequestBody struct {
+		UserIDs []string `json:"userIds"`
+		Amount  int      `json:"amount"`
+		Note    string   `json:"note"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if len(body.UserIDs) == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "User IDs are required")
+	}
+
+	if body.Amount <= 0 {
+		body.Amount = 1
+	}
+
+	claims, _ := c.Locals("user").(*middleware.Claims)
+	grantedBy := ""
+	if claims != nil {
+		grantedBy = claims.UserID
+	}
+
+	successCount := 0
+	failCount := 0
+
+	for _, id := range body.UserIDs {
+		userID, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			failCount++
+			continue
+		}
+
+		if err := h.fertilizerService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
+			failCount++
+			continue
+		}
+		successCount++
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success":      true,
+		"message":      "Bulk fertilizer grant completed",
 		"data":         nil,
 		"successCount": successCount,
 		"failCount":    failCount,
