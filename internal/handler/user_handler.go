@@ -16,12 +16,13 @@ import (
 )
 
 type UserHandler struct {
-	userService *user.Service
-	db          interface{}
+	userService       *user.Service
+	fertilizerService *user.FertilizerService
+	db                interface{}
 }
 
-func NewUserHandler(userService *user.Service) *UserHandler {
-	return &UserHandler{userService: userService}
+func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService) *UserHandler {
+	return &UserHandler{userService: userService, fertilizerService: fertilizerService}
 }
 
 func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
@@ -246,6 +247,79 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "User updated successfully", nil)
 }
 
+func (h *UserHandler) UseFertilizerProtect(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	if claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own fertilizer")
+	}
+
+	var body struct {
+		Date string `json:"date"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Date == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "A date is required")
+	}
+
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	if err := h.fertilizerService.ProtectDate(userID, body.Date); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidProtectDate):
+			return utils.SendError(c, fiber.StatusBadRequest, "That date can't be protected")
+		case errors.Is(err, domain.ErrDateAlreadyProtected):
+			return utils.SendError(c, fiber.StatusConflict, "That date is already protected")
+		case errors.Is(err, domain.ErrInsufficientFertilizer):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error using fertilizer")
+		}
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Streak protected", nil)
+}
+
+func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	if claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own fertilizer")
+	}
+
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	if err := h.fertilizerService.Feed(userID); err != nil {
+		if errors.Is(err, domain.ErrInsufficientFertilizer) {
+			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		}
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error using fertilizer")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Plant fed", nil)
+}
+
 func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
@@ -400,13 +474,22 @@ func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
 			dates = append(dates, day)
 		}
 
+		protectedDates := make([]string, 0)
+		for _, entry := range u.FertilizerLog {
+			if entry.Kind == "protect" && entry.RelatedDate != "" {
+				protectedDates = append(protectedDates, entry.RelatedDate)
+			}
+		}
+
 		members = append(members, fiber.Map{
-			"_id":             u.ID.Hex(),
-			"first_name":      u.FirstName,
-			"last_name":       u.LastName,
-			"cohort_number":   u.CohortNumber,
-			"genmate_group":   u.GenmateGroup,
+			"_id":              u.ID.Hex(),
+			"first_name":       u.FirstName,
+			"last_name":        u.LastName,
+			"cohort_number":    u.CohortNumber,
+			"genmate_group":    u.GenmateGroup,
 			"reflection_dates": dates,
+			"growth_points":    u.GrowthPoints,
+			"protected_dates":  protectedDates,
 		})
 	}
 

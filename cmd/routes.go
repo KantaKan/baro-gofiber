@@ -40,6 +40,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Post("/:id/profile/comments", h.User.AddProfileComment)
 	protected.Delete("/:id/profile/comments/:commentId", h.User.DeleteProfileComment)
 	protected.Post("/:id/profile/reactions", h.User.AddProfileReaction)
+	protected.Post("/:id/fertilizer/protect", h.User.UseFertilizerProtect)
+	protected.Post("/:id/fertilizer/feed", h.User.UseFertilizerFeed)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
@@ -60,6 +62,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)
 	admin.Delete("/users/:id", h.Admin.DeleteUser)
 	admin.Post("/badges/bulk", h.Admin.BulkAwardBadge)
+	admin.Post("/users/:id/fertilizer", h.Admin.GrantFertilizer)
+	admin.Post("/fertilizer/bulk", h.Admin.BulkGrantFertilizer)
 	admin.Post("/users/bulk-register", h.Admin.BulkRegisterUsers)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)

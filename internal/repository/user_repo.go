@@ -6,6 +6,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"gofiber-baro/internal/domain"
 
@@ -108,6 +109,102 @@ func (r *userRepository) AddBadge(ctx interface{}, userID primitive.ObjectID, ba
 	update := bson.M{"$push": bson.M{"badges": badge}}
 	_, err := r.collection.UpdateOne(c, filter, update)
 	return err
+}
+
+func (r *userRepository) GrantFertilizer(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error {
+	c := ctx.(context.Context)
+	entry := domain.FertilizerLogEntry{
+		ID:        primitive.NewObjectID(),
+		Kind:      "grant",
+		Amount:    amount,
+		Note:      note,
+		GrantedBy: grantedBy,
+		CreatedAt: time.Now(),
+	}
+	filter := bson.M{"_id": userID}
+	update := bson.M{
+		"$inc":  bson.M{"fertilizer_balance": amount},
+		"$push": bson.M{"fertilizer_log": entry},
+	}
+	result, err := r.collection.UpdateOne(c, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *userRepository) UseFertilizerProtect(ctx interface{}, userID primitive.ObjectID, dateStr string) error {
+	c := ctx.(context.Context)
+	filter := bson.M{
+		"_id":                userID,
+		"fertilizer_balance": bson.M{"$gte": 1},
+		"fertilizer_log": bson.M{
+			"$not": bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
+		},
+	}
+	entry := domain.FertilizerLogEntry{
+		ID:          primitive.NewObjectID(),
+		Kind:        "protect",
+		Amount:      1,
+		RelatedDate: dateStr,
+		CreatedAt:   time.Now(),
+	}
+	update := bson.M{
+		"$inc":  bson.M{"fertilizer_balance": -1},
+		"$push": bson.M{"fertilizer_log": entry},
+	}
+	result, err := r.collection.UpdateOne(c, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.ModifiedCount == 0 {
+		exists, checkErr := r.hasProtectedDate(c, userID, dateStr)
+		if checkErr == nil && exists {
+			return domain.ErrDateAlreadyProtected
+		}
+		return domain.ErrInsufficientFertilizer
+	}
+	return nil
+}
+
+func (r *userRepository) UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, points int) error {
+	c := ctx.(context.Context)
+	filter := bson.M{
+		"_id":                userID,
+		"fertilizer_balance": bson.M{"$gte": 1},
+	}
+	entry := domain.FertilizerLogEntry{
+		ID:        primitive.NewObjectID(),
+		Kind:      "feed",
+		Amount:    points,
+		CreatedAt: time.Now(),
+	}
+	update := bson.M{
+		"$inc":  bson.M{"fertilizer_balance": -1, "growth_points": points},
+		"$push": bson.M{"fertilizer_log": entry},
+	}
+	result, err := r.collection.UpdateOne(c, filter, update)
+	if err != nil {
+		return err
+	}
+	if result.ModifiedCount == 0 {
+		return domain.ErrInsufficientFertilizer
+	}
+	return nil
+}
+
+func (r *userRepository) hasProtectedDate(ctx context.Context, userID primitive.ObjectID, dateStr string) (bool, error) {
+	count, err := r.collection.CountDocuments(ctx, bson.M{
+		"_id":             userID,
+		"fertilizer_log":  bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
+	})
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (r *userRepository) UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error {

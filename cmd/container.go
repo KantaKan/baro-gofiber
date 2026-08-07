@@ -34,6 +34,7 @@ type Container struct {
 
 	UserService                 *userService.Service
 	BadgeService                *userService.BadgeService
+	FertilizerService           *userService.FertilizerService
 	ReflectionService           *reflectionService.Service
 	BarometerService            *reflectionService.BarometerService
 	LeaveService                *leaveService.Service
@@ -94,6 +95,7 @@ func (c *Container) initServices() {
 	c.BarometerService = reflectionService.NewBarometerService(c.DB)
 	c.LeaveService = leaveService.NewService(c.LeaveRepo, c.UserService)
 	c.HolidayService = holiday.NewService(c.HolidayRepo, c.DB)
+	c.FertilizerService = userService.NewFertilizerService(c.UserRepo, c.HolidayService)
 	c.NotificationService = notificationService.NewService(c.NotificationRepo)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
@@ -104,8 +106,8 @@ func (c *Container) initServices() {
 }
 
 func (c *Container) initHandlers() {
-	c.UserHandler = handler.NewUserHandler(c.UserService)
-	c.AdminHandler = handler.NewAdminHandler(c.UserService, c.BadgeService, c.ReflectionService, c.BarometerService)
+	c.UserHandler = handler.NewUserHandler(c.UserService, c.FertilizerService)
+	c.AdminHandler = handler.NewAdminHandler(c.UserService, c.BadgeService, c.FertilizerService, c.ReflectionService, c.BarometerService)
 	c.AttendanceHandler = handler.NewAttendanceHandler(
 		c.AttendanceCodeService,
 		c.AttendanceSubmissionService,
