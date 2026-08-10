@@ -40,6 +40,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Post("/:id/profile/comments", h.User.AddProfileComment)
 	protected.Delete("/:id/profile/comments/:commentId", h.User.DeleteProfileComment)
 	protected.Post("/:id/profile/reactions", h.User.AddProfileReaction)
+	protected.Post("/:id/plant/reactions", h.User.AddPlantReaction)
 	protected.Post("/:id/fertilizer/protect", h.User.UseFertilizerProtect)
 	protected.Post("/:id/fertilizer/feed", h.User.UseFertilizerFeed)
 

@@ -21,6 +21,12 @@ type UserHandler struct {
 	db                interface{}
 }
 
+// ponytail: mirrors the PALETTES name list in react-genbaro/src/lib/plant-variants.ts — keep in sync
+var validPlantPalettes = map[string]bool{
+	"Forest": true, "Sunset": true, "Ocean": true, "Desert": true, "Rose": true,
+	"Lavender": true, "Sunshine": true, "Mint": true, "Coral": true, "Autumn": true,
+}
+
 func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService) *UserHandler {
 	return &UserHandler{userService: userService, fertilizerService: fertilizerService}
 }
@@ -349,9 +355,10 @@ func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 	}
 
 	var body struct {
-		Bio            string             `json:"bio"`
-		SocialLinks    domain.SocialLinks `json:"social_links"`
-		PinnedBadgeIDs []string           `json:"pinned_badge_ids"`
+		Bio             string             `json:"bio"`
+		SocialLinks     domain.SocialLinks `json:"social_links"`
+		PinnedBadgeIDs  []string           `json:"pinned_badge_ids"`
+		SelectedPalette string             `json:"selected_palette"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
@@ -361,9 +368,18 @@ func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Bio must be under 1000 characters")
 	}
 
+	// ponytail: trusts the client's own tier check (getPlantVariant/getUnlockedPalettes in
+	// plant-variants.ts) — only sanity-checks the name here since this is a cosmetic,
+	// owner-only field. Port getEffectivePlantDays/TIER_THRESHOLDS to Go if this ladder
+	// ever gates something non-cosmetic.
+	if body.SelectedPalette != "" && !validPlantPalettes[body.SelectedPalette] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown palette")
+	}
+
 	update := bson.M{
 		"bio": body.Bio,
 		"social_links": body.SocialLinks,
+		"selected_palette": body.SelectedPalette,
 	}
 
 	pinnedOIDs := []primitive.ObjectID{}
@@ -502,6 +518,8 @@ func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
 			"reflection_dates": dates,
 			"growth_points":    u.GrowthPoints,
 			"protected_dates":  protectedDates,
+			"plant_reactions":  u.PlantReactions,
+			"selected_palette": u.SelectedPalette,
 		})
 	}
 
@@ -681,6 +699,60 @@ func (h *UserHandler) AddProfileReaction(c *fiber.Ctx) error {
 	}
 
 	if err := h.userService.AddProfileReaction(targetOID, reactorOID, body.Type, body.Value); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
+	}
+
+	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
+}
+
+func (h *UserHandler) AddPlantReaction(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	targetOID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	reactorOID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reactor ID")
+	}
+
+	if claims.Role != "admin" {
+		me, err := h.userService.GetUserByID(claims.UserID)
+		if err != nil {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only cheer your genmates' plants")
+		}
+		target, err := h.userService.GetUserByID(userID)
+		if err != nil {
+			return utils.SendError(c, fiber.StatusNotFound, "User not found")
+		}
+		if me.GenmateGroup == "" || me.GenmateGroup != target.GenmateGroup {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only cheer your genmates' plants")
+		}
+	}
+
+	var body struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Value == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Reaction value is required")
+	}
+
+	if body.Type == "" {
+		body.Type = "emoji"
+	}
+
+	if err := h.userService.AddPlantReaction(targetOID, reactorOID, body.Type, body.Value); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
 

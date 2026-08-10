@@ -336,3 +336,20 @@ func (r *userRepository) AddProfileReaction(ctx interface{}, userID primitive.Ob
 	_, err = r.collection.UpdateOne(c, filter, update)
 	return err
 }
+
+func (r *userRepository) AddPlantReaction(ctx interface{}, userID primitive.ObjectID, reaction domain.Reaction) error {
+	c := ctx.(context.Context)
+	filter := bson.M{"_id": userID}
+
+	// First, remove any existing reaction by this user
+	pull := bson.M{"$pull": bson.M{"plant_reactions": bson.M{"userId": reaction.UserID}}}
+	_, err := r.collection.UpdateOne(c, filter, pull)
+	if err != nil {
+		return err
+	}
+
+	// Then, push the new reaction
+	update := bson.M{"$push": bson.M{"plant_reactions": reaction}}
+	_, err = r.collection.UpdateOne(c, filter, update)
+	return err
+}
