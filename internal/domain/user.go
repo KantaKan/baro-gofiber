@@ -213,7 +213,7 @@ type UserRepository interface {
 	AddBadge(ctx interface{}, userID primitive.ObjectID, badge Badge) error
 	GrantFertilizer(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error
 	UseFertilizerProtect(ctx interface{}, userID primitive.ObjectID, dateStr string) error
-	UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, points int) error
+	UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, quantity, points int) error
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
 	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error

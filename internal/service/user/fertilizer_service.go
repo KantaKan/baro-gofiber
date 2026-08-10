@@ -14,6 +14,7 @@ import (
 const FeedPointsPerFertilizer = 10
 
 var ErrInvalidProtectDate = errors.New("date must be a past weekday and not a holiday")
+var ErrInvalidFeedQuantity = errors.New("quantity must be at least 1")
 
 type FertilizerService struct {
 	userRepo   domain.UserRepository
@@ -57,7 +58,10 @@ func (s *FertilizerService) ProtectDate(userID primitive.ObjectID, dateStr strin
 	return s.userRepo.UseFertilizerProtect(ctx, userID, dateStr)
 }
 
-func (s *FertilizerService) Feed(userID primitive.ObjectID) error {
+func (s *FertilizerService) Feed(userID primitive.ObjectID, quantity int) error {
+	if quantity < 1 {
+		return ErrInvalidFeedQuantity
+	}
 	ctx := context.Background()
-	return s.userRepo.UseFertilizerFeed(ctx, userID, FeedPointsPerFertilizer)
+	return s.userRepo.UseFertilizerFeed(ctx, userID, quantity, quantity*FeedPointsPerFertilizer)
 }

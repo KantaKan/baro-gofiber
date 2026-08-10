@@ -310,11 +310,23 @@ func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
 	}
 
-	if err := h.fertilizerService.Feed(userID); err != nil {
-		if errors.Is(err, domain.ErrInsufficientFertilizer) {
+	var body struct {
+		Quantity int `json:"quantity"`
+	}
+	_ = c.BodyParser(&body)
+	if body.Quantity < 1 {
+		body.Quantity = 1
+	}
+
+	if err := h.fertilizerService.Feed(userID, body.Quantity); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidFeedQuantity):
+			return utils.SendError(c, fiber.StatusBadRequest, "Quantity must be at least 1")
+		case errors.Is(err, domain.ErrInsufficientFertilizer):
 			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error using fertilizer")
 		}
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error using fertilizer")
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Plant fed", nil)
