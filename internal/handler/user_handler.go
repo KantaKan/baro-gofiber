@@ -25,6 +25,7 @@ type UserHandler struct {
 var validPlantPalettes = map[string]bool{
 	"Forest": true, "Sunset": true, "Ocean": true, "Desert": true, "Rose": true,
 	"Lavender": true, "Sunshine": true, "Mint": true, "Coral": true, "Autumn": true,
+	"Jade": true, "Berry": true, "Citrus": true, "Slate": true, "Blush": true, "Midnight": true,
 }
 
 func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService) *UserHandler {
