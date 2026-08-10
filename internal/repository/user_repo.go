@@ -170,11 +170,11 @@ func (r *userRepository) UseFertilizerProtect(ctx interface{}, userID primitive.
 	return nil
 }
 
-func (r *userRepository) UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, points int) error {
+func (r *userRepository) UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, quantity, points int) error {
 	c := ctx.(context.Context)
 	filter := bson.M{
 		"_id":                userID,
-		"fertilizer_balance": bson.M{"$gte": 1},
+		"fertilizer_balance": bson.M{"$gte": quantity},
 	}
 	entry := domain.FertilizerLogEntry{
 		ID:        primitive.NewObjectID(),
@@ -183,7 +183,7 @@ func (r *userRepository) UseFertilizerFeed(ctx interface{}, userID primitive.Obj
 		CreatedAt: time.Now(),
 	}
 	update := bson.M{
-		"$inc":  bson.M{"fertilizer_balance": -1, "growth_points": points},
+		"$inc":  bson.M{"fertilizer_balance": -quantity, "growth_points": points},
 		"$push": bson.M{"fertilizer_log": entry},
 	}
 	result, err := r.collection.UpdateOne(c, filter, update)
