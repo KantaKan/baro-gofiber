@@ -183,6 +183,20 @@ func (s *Service) AddProfileReaction(userID primitive.ObjectID, reactorID primit
 	return s.repo.AddProfileReaction(ctx, userID, reaction)
 }
 
+func (s *Service) AddPlantReaction(userID primitive.ObjectID, reactorID primitive.ObjectID, reactionType, value string) error {
+	ctx := context.Background()
+
+	reaction := domain.Reaction{
+		ID:        primitive.NewObjectID(),
+		UserID:    reactorID,
+		Type:      reactionType,
+		Value:     value,
+		CreatedAt: time.Now(),
+	}
+
+	return s.repo.AddPlantReaction(ctx, userID, reaction)
+}
+
 // ponytail: input for bulk-register per-user data
 type BulkUserInput struct {
 	FirstName    string

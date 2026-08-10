@@ -99,9 +99,11 @@ type User struct {
 	AttendanceStatus string             `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
 	ProfileComments  []ProfileComment   `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
 	ProfileReactions []Reaction         `bson:"profile_reactions,omitempty" json:"profile_reactions,omitempty"`
+	PlantReactions   []Reaction         `bson:"plant_reactions,omitempty" json:"plant_reactions,omitempty"`
 	Bio              string             `bson:"bio,omitempty" json:"bio,omitempty"`
 	SocialLinks      SocialLinks        `bson:"social_links,omitempty" json:"social_links,omitempty"`
 	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
+	SelectedPalette  string             `bson:"selected_palette,omitempty" json:"selected_palette,omitempty"`
 	Deleted          bool               `bson:"deleted,omitempty" json:"deleted,omitempty"`
 	DeletedAt        *time.Time        `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 	FertilizerBalance int                  `bson:"fertilizer_balance,omitempty" json:"fertilizer_balance,omitempty"`
@@ -126,6 +128,8 @@ type UserSafe struct {
 	PinnedBadgeIDs []primitive.ObjectID `json:"pinned_badge_ids,omitempty"`
 	ProfileComments []ProfileComment   `json:"profile_comments,omitempty"`
 	ProfileReactions []Reaction        `json:"profile_reactions,omitempty"`
+	PlantReactions   []Reaction        `json:"plant_reactions,omitempty"`
+	SelectedPalette  string            `json:"selected_palette,omitempty"`
 	FertilizerBalance int                  `json:"fertilizer_balance,omitempty"`
 	GrowthPoints      int                  `json:"growth_points,omitempty"`
 	FertilizerLog     []FertilizerLogEntry `json:"fertilizer_log,omitempty"`
@@ -148,6 +152,8 @@ func (u *User) ToSafe() UserSafe {
 		PinnedBadgeIDs:  u.PinnedBadgeIDs,
 		ProfileComments: u.ProfileComments,
 		ProfileReactions: u.ProfileReactions,
+		PlantReactions:  u.PlantReactions,
+		SelectedPalette: u.SelectedPalette,
 		FertilizerBalance: u.FertilizerBalance,
 		GrowthPoints:      u.GrowthPoints,
 		FertilizerLog:     u.FertilizerLog,
@@ -219,4 +225,5 @@ type UserRepository interface {
 	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error
 	DeleteProfileComment(ctx interface{}, userID primitive.ObjectID, commentID primitive.ObjectID) error
 	AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
+	AddPlantReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 }
