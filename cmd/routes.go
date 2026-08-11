@@ -65,6 +65,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/badges/bulk", h.Admin.BulkAwardBadge)
 	admin.Post("/users/:id/fertilizer", h.Admin.GrantFertilizer)
 	admin.Post("/fertilizer/bulk", h.Admin.BulkGrantFertilizer)
+	admin.Patch("/users/:id/plant", h.Admin.UpdatePlantOverride)
 	admin.Post("/users/bulk-register", h.Admin.BulkRegisterUsers)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)

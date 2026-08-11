@@ -478,3 +478,62 @@ func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 
 	return utils.SendResponse(c, fiber.StatusOK, "User deleted successfully", nil)
 }
+
+// UpdatePlantOverride lets an admin override a learner's full plant look —
+// palette plus species/pot/leaf/flower/stem — or clear any of them back to
+// the hash-derived default by sending an empty string.
+// PATCH /admin/users/:id/plant
+func (h *AdminHandler) UpdatePlantOverride(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	type RequestBody struct {
+		Palette string `json:"palette"`
+		Species string `json:"species"`
+		Pot     string `json:"pot"`
+		Leaf    string `json:"leaf"`
+		Flower  string `json:"flower"`
+		Stem    string `json:"stem"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Palette != "" && !validPlantPalettes[body.Palette] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown palette")
+	}
+	if body.Species != "" && !validPlantSpecies[body.Species] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown species")
+	}
+	if body.Pot != "" && !validPlantPots[body.Pot] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown pot style")
+	}
+	if body.Leaf != "" && !validPlantLeaves[body.Leaf] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown leaf style")
+	}
+	if body.Flower != "" && !validPlantFlowers[body.Flower] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown flower type")
+	}
+	if body.Stem != "" && !validPlantStems[body.Stem] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown stem style")
+	}
+
+	update := map[string]interface{}{
+		"selected_palette": body.Palette,
+		"selected_species": body.Species,
+		"selected_pot":     body.Pot,
+		"selected_leaf":    body.Leaf,
+		"selected_flower":  body.Flower,
+		"selected_stem":    body.Stem,
+	}
+
+	if err := h.userService.UpdateUser(id, update); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating plant override")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Plant updated", nil)
+}
