@@ -104,6 +104,11 @@ type User struct {
 	SocialLinks      SocialLinks        `bson:"social_links,omitempty" json:"social_links,omitempty"`
 	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
 	SelectedPalette  string             `bson:"selected_palette,omitempty" json:"selected_palette,omitempty"`
+	SelectedSpecies  string             `bson:"selected_species,omitempty" json:"selected_species,omitempty"`
+	SelectedPot      string             `bson:"selected_pot,omitempty" json:"selected_pot,omitempty"`
+	SelectedLeaf     string             `bson:"selected_leaf,omitempty" json:"selected_leaf,omitempty"`
+	SelectedFlower   string             `bson:"selected_flower,omitempty" json:"selected_flower,omitempty"`
+	SelectedStem     string             `bson:"selected_stem,omitempty" json:"selected_stem,omitempty"`
 	Deleted          bool               `bson:"deleted,omitempty" json:"deleted,omitempty"`
 	DeletedAt        *time.Time        `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 	FertilizerBalance int                  `bson:"fertilizer_balance,omitempty" json:"fertilizer_balance,omitempty"`
@@ -130,6 +135,11 @@ type UserSafe struct {
 	ProfileReactions []Reaction        `json:"profile_reactions,omitempty"`
 	PlantReactions   []Reaction        `json:"plant_reactions,omitempty"`
 	SelectedPalette  string            `json:"selected_palette,omitempty"`
+	SelectedSpecies  string            `json:"selected_species,omitempty"`
+	SelectedPot      string            `json:"selected_pot,omitempty"`
+	SelectedLeaf     string            `json:"selected_leaf,omitempty"`
+	SelectedFlower   string            `json:"selected_flower,omitempty"`
+	SelectedStem     string            `json:"selected_stem,omitempty"`
 	FertilizerBalance int                  `json:"fertilizer_balance,omitempty"`
 	GrowthPoints      int                  `json:"growth_points,omitempty"`
 	FertilizerLog     []FertilizerLogEntry `json:"fertilizer_log,omitempty"`
@@ -154,6 +164,11 @@ func (u *User) ToSafe() UserSafe {
 		ProfileReactions: u.ProfileReactions,
 		PlantReactions:  u.PlantReactions,
 		SelectedPalette: u.SelectedPalette,
+		SelectedSpecies: u.SelectedSpecies,
+		SelectedPot:     u.SelectedPot,
+		SelectedLeaf:    u.SelectedLeaf,
+		SelectedFlower:  u.SelectedFlower,
+		SelectedStem:    u.SelectedStem,
 		FertilizerBalance: u.FertilizerBalance,
 		GrowthPoints:      u.GrowthPoints,
 		FertilizerLog:     u.FertilizerLog,

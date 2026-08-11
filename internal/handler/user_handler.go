@@ -28,6 +28,21 @@ var validPlantPalettes = map[string]bool{
 	"Jade": true, "Berry": true, "Citrus": true, "Slate": true, "Blush": true, "Midnight": true,
 }
 
+// ponytail: mirrors the PlantSpecies union in react-genbaro/src/lib/plant-variants.ts — keep in sync
+var validPlantSpecies = map[string]bool{
+	"flower": true, "cactus": true, "succulent": true, "tree": true, "fern": true,
+	"vine": true, "bamboo": true, "palm": true, "mushroom": true, "pine": true,
+	"clover": true, "orchid": true, "coral": true, "grass": true, "lotus": true,
+	"bonsai": true, "flytrap": true, "sunflower": true, "topiary": true,
+	"strawberry": true, "tulip": true, "pumpkin-vine": true,
+}
+
+// ponytail: mirrors POT_STYLES/LEAF_STYLES/FLOWER_TYPES/STEM_STYLES in plant-variants.ts — keep in sync
+var validPlantPots = map[string]bool{"round": true, "square": true, "tall": true, "bowl": true}
+var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide": true}
+var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
+var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
+
 func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService) *UserHandler {
 	return &UserHandler{userService: userService, fertilizerService: fertilizerService}
 }
@@ -521,6 +536,11 @@ func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
 			"protected_dates":  protectedDates,
 			"plant_reactions":  u.PlantReactions,
 			"selected_palette": u.SelectedPalette,
+			"selected_species": u.SelectedSpecies,
+			"selected_pot":     u.SelectedPot,
+			"selected_leaf":    u.SelectedLeaf,
+			"selected_flower":  u.SelectedFlower,
+			"selected_stem":    u.SelectedStem,
 		})
 	}
 
