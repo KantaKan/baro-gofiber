@@ -38,7 +38,12 @@ var validPlantSpecies = map[string]bool{
 }
 
 // ponytail: mirrors POT_STYLES/LEAF_STYLES/FLOWER_TYPES/STEM_STYLES in plant-variants.ts — keep in sync
-var validPlantPots = map[string]bool{"round": true, "square": true, "tall": true, "bowl": true}
+var validPlantPots = map[string]bool{
+	"round": true, "square": true, "tall": true, "bowl": true,
+	// admin-only reward pots — see SPECIAL_POT_STYLES in plant-variants.ts
+	"trophy": true, "starlight": true, "rainbow": true, "crystal": true, "sweetheart": true,
+	"laurel": true, "constellation": true, "mosaic": true, "royal": true, "firework": true,
+}
 var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide": true}
 var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
 var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
