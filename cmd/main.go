@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	_ "gofiber-baro/docs"
 
@@ -72,6 +73,8 @@ func main() {
 	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
 
 	app := fiber.New()
+
+	app.Use(recover.New())
 
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
