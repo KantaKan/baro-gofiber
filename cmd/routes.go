@@ -22,7 +22,19 @@ type Handlers struct {
 }
 
 func setupRoutes(app *fiber.App, h Handlers) {
-	app.Post("/login", h.User.LoginUser)
+	loginLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Too many login attempts, please try again later",
+			})
+		},
+	})
+	app.Post("/login", loginLimiter, h.User.LoginUser)
 	app.Get("/api/verify-token", middleware.AuthMiddleware, h.User.VerifyToken)
 
 	notifications := app.Group("/api/notifications", middleware.AuthMiddleware)
