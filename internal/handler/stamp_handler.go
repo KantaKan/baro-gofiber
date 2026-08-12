@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -17,6 +16,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
+
+var allowedImageContentTypes = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/webp": true,
+	"image/gif":  true,
+}
 
 type StampHandler struct {
 	repo        domain.StampRepository
@@ -118,8 +124,8 @@ func (h *StampHandler) CreateStamp(c *fiber.Ctx) error {
 	}
 
 	contentType := fileHeader.Header.Get("Content-Type")
-	if contentType != "" && !strings.HasPrefix(contentType, "image/") {
-		return utils.SendError(c, fiber.StatusBadRequest, "File must be an image")
+	if !allowedImageContentTypes[contentType] {
+		return utils.SendError(c, fiber.StatusBadRequest, "File must be a PNG, JPEG, WebP, or GIF image")
 	}
 	if fileHeader.Size > 4<<20 {
 		return utils.SendError(c, fiber.StatusBadRequest, "Image too large")
@@ -211,8 +217,8 @@ func (h *StampHandler) UploadPoster(c *fiber.Ctx) error {
 	}
 
 	contentType := fileHeader.Header.Get("Content-Type")
-	if contentType != "" && !strings.HasPrefix(contentType, "image/") {
-		return utils.SendError(c, fiber.StatusBadRequest, "File must be an image")
+	if !allowedImageContentTypes[contentType] {
+		return utils.SendError(c, fiber.StatusBadRequest, "File must be a PNG, JPEG, WebP, or GIF image")
 	}
 	if fileHeader.Size > 10<<20 {
 		return utils.SendError(c, fiber.StatusBadRequest, "Image too large")
