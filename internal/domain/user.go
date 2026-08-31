@@ -236,6 +236,7 @@ type UserRepository interface {
 	UseFertilizerProtect(ctx interface{}, userID primitive.ObjectID, dateStr string) error
 	UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, quantity, points int) error
 	GiftFertilizer(ctx interface{}, giverID, recipientID primitive.ObjectID, quantity, points int, note string) error
+	RescueFertilizer(ctx interface{}, giverID, recipientID primitive.ObjectID, dateStr, note string) error
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
 	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error

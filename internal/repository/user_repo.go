@@ -247,6 +247,66 @@ func (r *userRepository) GiftFertilizer(ctx interface{}, giverID, recipientID pr
 	return nil
 }
 
+// ponytail: no txn - compensating refund on credit failure; use a mongo session if rescues ever batch
+func (r *userRepository) RescueFertilizer(ctx interface{}, giverID, recipientID primitive.ObjectID, dateStr, note string) error {
+	c := ctx.(context.Context)
+
+	spendEntry := domain.FertilizerLogEntry{
+		ID:          primitive.NewObjectID(),
+		Kind:        "rescue",
+		Amount:      1,
+		RelatedDate: dateStr,
+		Note:        note,
+		CreatedAt:   time.Now(),
+	}
+	debited, err := r.collection.UpdateOne(c, bson.M{
+		"_id":                giverID,
+		"fertilizer_balance": bson.M{"$gte": 1},
+	}, bson.M{
+		"$inc":  bson.M{"fertilizer_balance": -1},
+		"$push": bson.M{"fertilizer_log": spendEntry},
+	})
+	if err != nil {
+		return err
+	}
+	if debited.ModifiedCount == 0 {
+		return domain.ErrInsufficientFertilizer
+	}
+
+	// Same shape as UseFertilizerProtect so the recipient's streak math and the
+	// "already protected" guard stay identical whether they paid or a genmate did.
+	protected, credErr := r.collection.UpdateOne(c, bson.M{
+		"_id": recipientID,
+		"fertilizer_log": bson.M{
+			"$not": bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
+		},
+	}, bson.M{
+		"$push": bson.M{"fertilizer_log": domain.FertilizerLogEntry{
+			ID:          primitive.NewObjectID(),
+			Kind:        "protect",
+			Amount:      1,
+			RelatedDate: dateStr,
+			GrantedBy:   giverID.Hex(),
+			CreatedAt:   time.Now(),
+		}},
+	})
+	if credErr == nil && protected.ModifiedCount == 0 {
+		credErr = domain.ErrDateAlreadyProtected
+		if exists, checkErr := r.hasProtectedDate(c, recipientID, dateStr); checkErr == nil && !exists {
+			credErr = domain.ErrUserNotFound
+		}
+	}
+	if credErr != nil {
+		_, _ = r.collection.UpdateOne(c, bson.M{"_id": giverID}, bson.M{
+			"$inc":  bson.M{"fertilizer_balance": 1},
+			"$pull": bson.M{"fertilizer_log": bson.M{"_id": spendEntry.ID}},
+		})
+		return credErr
+	}
+
+	return nil
+}
+
 func (r *userRepository) hasProtectedDate(ctx context.Context, userID primitive.ObjectID, dateStr string) (bool, error) {
 	count, err := r.collection.CountDocuments(ctx, bson.M{
 		"_id":             userID,
