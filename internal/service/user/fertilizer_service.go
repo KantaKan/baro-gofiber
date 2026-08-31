@@ -15,6 +15,7 @@ const FeedPointsPerFertilizer = 10
 
 var ErrInvalidProtectDate = errors.New("date must be a past weekday and not a holiday")
 var ErrInvalidFeedQuantity = errors.New("quantity must be at least 1")
+var ErrCannotGiftSelf = errors.New("cannot gift fertilizer to yourself")
 
 type FertilizerService struct {
 	userRepo   domain.UserRepository
@@ -64,4 +65,15 @@ func (s *FertilizerService) Feed(userID primitive.ObjectID, quantity int) error 
 	}
 	ctx := context.Background()
 	return s.userRepo.UseFertilizerFeed(ctx, userID, quantity, quantity*FeedPointsPerFertilizer)
+}
+
+func (s *FertilizerService) Gift(giverID, recipientID primitive.ObjectID, quantity int, note string) error {
+	if quantity < 1 {
+		return ErrInvalidFeedQuantity
+	}
+	if giverID == recipientID {
+		return ErrCannotGiftSelf
+	}
+	ctx := context.Background()
+	return s.userRepo.GiftFertilizer(ctx, giverID, recipientID, quantity, quantity*FeedPointsPerFertilizer, note)
 }

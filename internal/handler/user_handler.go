@@ -4,6 +4,7 @@ import (
 	"errors"
 	"html"
 	"log"
+	"strings"
 	"time"
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/user"
@@ -357,6 +358,68 @@ func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Plant fed", nil)
+}
+
+func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
+	recipientID := c.Params("id")
+	if recipientID == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	giverOID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid giver ID")
+	}
+
+	recipientOID, err := primitive.ObjectIDFromHex(recipientID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	target, err := h.userService.GetUserByID(recipientID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+
+	if claims.Role != "admin" {
+		me, err := h.userService.GetUserByID(claims.UserID)
+		if err != nil {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only fertilize your genmates' plants")
+		}
+		if me.GenmateGroup == "" || me.GenmateGroup != target.GenmateGroup {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only fertilize your genmates' plants")
+		}
+	}
+
+	var body struct {
+		Quantity int `json:"quantity"`
+	}
+	_ = c.BodyParser(&body)
+	if body.Quantity < 1 {
+		body.Quantity = 1
+	}
+
+	note := strings.TrimSpace("To " + target.FirstName + " " + target.LastName)
+
+	if err := h.fertilizerService.Gift(giverOID, recipientOID, body.Quantity, note); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidFeedQuantity):
+			return utils.SendError(c, fiber.StatusBadRequest, "Quantity must be at least 1")
+		case errors.Is(err, user.ErrCannotGiftSelf):
+			return utils.SendError(c, fiber.StatusBadRequest, "Use Feed to fertilize your own plant")
+		case errors.Is(err, domain.ErrInsufficientFertilizer):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error sending fertilizer")
+		}
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Fertilizer sent", nil)
 }
 
 func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {

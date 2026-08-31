@@ -196,6 +196,57 @@ func (r *userRepository) UseFertilizerFeed(ctx interface{}, userID primitive.Obj
 	return nil
 }
 
+// ponytail: no txn - compensating refund on credit failure; use a mongo session if gifts ever batch
+func (r *userRepository) GiftFertilizer(ctx interface{}, giverID, recipientID primitive.ObjectID, quantity, points int, note string) error {
+	c := ctx.(context.Context)
+
+	giftEntry := domain.FertilizerLogEntry{
+		ID:        primitive.NewObjectID(),
+		Kind:      "gift",
+		Amount:    quantity,
+		Note:      note,
+		CreatedAt: time.Now(),
+	}
+	debit := bson.M{
+		"$inc":  bson.M{"fertilizer_balance": -quantity},
+		"$push": bson.M{"fertilizer_log": giftEntry},
+	}
+	debited, err := r.collection.UpdateOne(c, bson.M{
+		"_id":                giverID,
+		"fertilizer_balance": bson.M{"$gte": quantity},
+	}, debit)
+	if err != nil {
+		return err
+	}
+	if debited.ModifiedCount == 0 {
+		return domain.ErrInsufficientFertilizer
+	}
+
+	credit := bson.M{
+		"$inc": bson.M{"growth_points": points},
+		"$push": bson.M{"fertilizer_log": domain.FertilizerLogEntry{
+			ID:        primitive.NewObjectID(),
+			Kind:      "gifted",
+			Amount:    points,
+			GrantedBy: giverID.Hex(),
+			CreatedAt: time.Now(),
+		}},
+	}
+	credited, credErr := r.collection.UpdateOne(c, bson.M{"_id": recipientID}, credit)
+	if credErr == nil && credited.MatchedCount == 0 {
+		credErr = domain.ErrUserNotFound
+	}
+	if credErr != nil {
+		_, _ = r.collection.UpdateOne(c, bson.M{"_id": giverID}, bson.M{
+			"$inc":  bson.M{"fertilizer_balance": quantity},
+			"$pull": bson.M{"fertilizer_log": bson.M{"_id": giftEntry.ID}},
+		})
+		return credErr
+	}
+
+	return nil
+}
+
 func (r *userRepository) hasProtectedDate(ctx context.Context, userID primitive.ObjectID, dateStr string) (bool, error) {
 	count, err := r.collection.CountDocuments(ctx, bson.M{
 		"_id":             userID,

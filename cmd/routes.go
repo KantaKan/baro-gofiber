@@ -55,6 +55,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Post("/:id/plant/reactions", h.User.AddPlantReaction)
 	protected.Post("/:id/fertilizer/protect", h.User.UseFertilizerProtect)
 	protected.Post("/:id/fertilizer/feed", h.User.UseFertilizerFeed)
+	protected.Post("/:id/fertilizer/gift", h.User.GiftFertilizer)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
