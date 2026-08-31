@@ -31,7 +31,7 @@ func (s *FertilizerService) Grant(userID primitive.ObjectID, amount int, note, g
 	return s.userRepo.GrantFertilizer(ctx, userID, amount, note, grantedBy)
 }
 
-func (s *FertilizerService) ProtectDate(userID primitive.ObjectID, dateStr string) error {
+func (s *FertilizerService) validateProtectDate(dateStr string) error {
 	date, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
 		return ErrInvalidProtectDate
@@ -55,6 +55,14 @@ func (s *FertilizerService) ProtectDate(userID primitive.ObjectID, dateStr strin
 		return ErrInvalidProtectDate
 	}
 
+	return nil
+}
+
+func (s *FertilizerService) ProtectDate(userID primitive.ObjectID, dateStr string) error {
+	if err := s.validateProtectDate(dateStr); err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	return s.userRepo.UseFertilizerProtect(ctx, userID, dateStr)
 }
@@ -76,4 +84,16 @@ func (s *FertilizerService) Gift(giverID, recipientID primitive.ObjectID, quanti
 	}
 	ctx := context.Background()
 	return s.userRepo.GiftFertilizer(ctx, giverID, recipientID, quantity, quantity*FeedPointsPerFertilizer, note)
+}
+
+func (s *FertilizerService) Rescue(giverID, recipientID primitive.ObjectID, dateStr, note string) error {
+	if giverID == recipientID {
+		return ErrCannotGiftSelf
+	}
+	if err := s.validateProtectDate(dateStr); err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	return s.userRepo.RescueFertilizer(ctx, giverID, recipientID, dateStr, note)
 }

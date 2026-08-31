@@ -360,40 +360,52 @@ func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Plant fed", nil)
 }
 
-func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
+// resolveGenmate validates the caller and the :id target, and enforces that a
+// non-admin caller shares the target's genmate group. On failure it writes the
+// error response and returns a nil target - callers must check target, not the
+// error, since utils.SendError returns nil when the write succeeds.
+func (h *UserHandler) resolveGenmate(c *fiber.Ctx) (primitive.ObjectID, primitive.ObjectID, *domain.User, error) {
+	var giverOID, recipientOID primitive.ObjectID
+
 	recipientID := c.Params("id")
 	if recipientID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
 	}
 
 	claims, ok := c.Locals("user").(*middleware.Claims)
 	if !ok {
-		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
 	}
 
 	giverOID, err := primitive.ObjectIDFromHex(claims.UserID)
 	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid giver ID")
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusBadRequest, "Invalid giver ID")
 	}
 
-	recipientOID, err := primitive.ObjectIDFromHex(recipientID)
+	recipientOID, err = primitive.ObjectIDFromHex(recipientID)
 	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
 	}
 
 	target, err := h.userService.GetUserByID(recipientID)
 	if err != nil {
-		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
 
 	if claims.Role != "admin" {
 		me, err := h.userService.GetUserByID(claims.UserID)
-		if err != nil {
-			return utils.SendError(c, fiber.StatusForbidden, "You can only fertilize your genmates' plants")
+		if err != nil || me.GenmateGroup == "" || me.GenmateGroup != target.GenmateGroup {
+			return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusForbidden, "You can only do that for your genmates")
 		}
-		if me.GenmateGroup == "" || me.GenmateGroup != target.GenmateGroup {
-			return utils.SendError(c, fiber.StatusForbidden, "You can only fertilize your genmates' plants")
-		}
+	}
+
+	return giverOID, recipientOID, target, nil
+}
+
+func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
+	giverOID, recipientOID, target, resp := h.resolveGenmate(c)
+	if target == nil {
+		return resp
 	}
 
 	var body struct {
@@ -404,7 +416,7 @@ func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
 		body.Quantity = 1
 	}
 
-	note := strings.TrimSpace("To " + target.FirstName + " " + target.LastName)
+	note := strings.TrimSpace("Fertilized " + target.FirstName + " " + target.LastName)
 
 	if err := h.fertilizerService.Gift(giverOID, recipientOID, body.Quantity, note); err != nil {
 		switch {
@@ -420,6 +432,39 @@ func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Fertilizer sent", nil)
+}
+
+func (h *UserHandler) RescueFertilizer(c *fiber.Ctx) error {
+	giverOID, recipientOID, target, resp := h.resolveGenmate(c)
+	if target == nil {
+		return resp
+	}
+
+	var body struct {
+		Date string `json:"date"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Date == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "A date is required")
+	}
+
+	note := strings.TrimSpace("Rescued " + target.FirstName + " " + target.LastName)
+
+	if err := h.fertilizerService.Rescue(giverOID, recipientOID, body.Date, note); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidProtectDate):
+			return utils.SendError(c, fiber.StatusBadRequest, "That date can't be protected")
+		case errors.Is(err, user.ErrCannotGiftSelf):
+			return utils.SendError(c, fiber.StatusBadRequest, "Use Protect to cover your own missed day")
+		case errors.Is(err, domain.ErrDateAlreadyProtected):
+			return utils.SendError(c, fiber.StatusConflict, "That day is already protected")
+		case errors.Is(err, domain.ErrInsufficientFertilizer):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error rescuing that day")
+		}
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Day rescued", nil)
 }
 
 func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
