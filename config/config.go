@@ -179,6 +179,22 @@ func createIndexes(ctx context.Context) error {
 		return err
 	}
 
+	// 7. Audit Logs (TTL index also serves the createdAt sort used by history queries)
+	auditColl := DB.Collection("audit_logs")
+	auditIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "createdAt", Value: -1}},
+			Options: options.Index().SetExpireAfterSeconds(90 * 24 * 3600),
+		},
+		{
+			Keys: bson.D{{Key: "actor_id", Value: 1}},
+		},
+	}
+	_, err = auditColl.Indexes().CreateMany(ctx, auditIndexes)
+	if err != nil {
+		return err
+	}
+
 	log.Println("Database indexes synchronized successfully")
 	return nil
 }

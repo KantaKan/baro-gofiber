@@ -19,9 +19,13 @@ type Handlers struct {
 	TalkBoard    *handler.TalkBoardHandler
 	Notification *handler.NotificationHandler
 	Stamp        *handler.StampHandler
+	History      *handler.HistoryHandler
+	Audit        fiber.Handler
 }
 
 func setupRoutes(app *fiber.App, h Handlers) {
+	app.Use(h.Audit)
+
 	loginLimiter := limiter.New(limiter.Config{
 		Max:        10,
 		Expiration: 1 * time.Minute,
@@ -87,6 +91,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Get("/reflections/chartday", h.Admin.GetAllUsersBarometerData)
 	admin.Get("/reflections/weekly", h.Admin.GetWeeklySummary)
 	admin.Get("/emoji-zone-table", h.Admin.GetEmojiZoneTableData)
+	admin.Get("/history", h.History.GetHistory)
 
 	admin.Post("/attendance/generate-code", h.Attendance.GenerateAttendanceCode)
 	admin.Get("/attendance/active-code", h.Attendance.GetActiveAttendanceCode)
