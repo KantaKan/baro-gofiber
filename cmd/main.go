@@ -130,6 +130,8 @@ func main() {
 		TalkBoard:    container.TalkBoardHandler,
 		Notification: container.NotificationHandler,
 		Stamp:        container.StampHandler,
+		History:      container.HistoryHandler,
+		Audit:        container.AuditMiddleware,
 	}
 
 	setupRoutes(app, handlers)

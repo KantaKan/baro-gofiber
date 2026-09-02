@@ -13,7 +13,9 @@ import (
 	reflectionService "gofiber-baro/internal/service/reflection"
 	userService "gofiber-baro/internal/service/user"
 	"gofiber-baro/internal/storage"
+	"gofiber-baro/pkg/middleware"
 
+	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -29,6 +31,7 @@ type Container struct {
 	NotificationRepo   domain.NotificationRepository
 	StampRepo          domain.StampRepository
 	CohortRepo         domain.CohortRepository
+	AuditLogRepo       domain.AuditLogRepository
 
 	StampStorage storage.Storage
 
@@ -54,6 +57,9 @@ type Container struct {
 	TalkBoardHandler    *handler.TalkBoardHandler
 	NotificationHandler *handler.NotificationHandler
 	StampHandler        *handler.StampHandler
+	HistoryHandler      *handler.HistoryHandler
+
+	AuditMiddleware fiber.Handler
 }
 
 func NewContainer(db *mongo.Database) *Container {
@@ -77,6 +83,7 @@ func (c *Container) initRepositories() {
 	c.NotificationRepo = repository.NewNotificationRepository(c.DB)
 	c.StampRepo = repository.NewStampRepository(c.DB)
 	c.CohortRepo = repository.NewCohortRepository(c.DB)
+	c.AuditLogRepo = repository.NewAuditLogRepository(c.DB)
 }
 
 func (c *Container) initStorage() {
@@ -121,4 +128,7 @@ func (c *Container) initHandlers() {
 	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo, c.UserService)
 	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
 	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
+	c.HistoryHandler = handler.NewHistoryHandler(c.AuditLogRepo, c.UserRepo)
+
+	c.AuditMiddleware = middleware.AuditMiddleware(c.AuditLogRepo)
 }
