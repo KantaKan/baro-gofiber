@@ -151,6 +151,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	cohorts.Get("/", h.Stamp.ListCohorts)
 	cohorts.Get("/:cohortNumber", h.Stamp.GetCohort)
 	cohorts.Get("/:cohortNumber/stamps", h.Stamp.GetCohortStamps)
+	cohorts.Get("/:cohortNumber/garden", h.User.GetCohortGarden)
 
 	admin.Put("/cohorts/:cohortNumber", h.Stamp.SetCohortLockAt)
 	admin.Post("/cohorts/:cohortNumber/poster", h.Stamp.UploadPoster)

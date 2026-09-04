@@ -662,6 +662,115 @@ func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
 	})
 }
 
+// enforceCohortAccess mirrors StampHandler's guard of the same name
+// (internal/handler/stamp_handler.go) verbatim by behavior: a learner may
+// only read their own cohort (re-checked against fresh DB state, not the
+// possibly-stale JWT claim), admins bypass entirely. Not shared as a single
+// function across handlers to avoid a cross-handler dependency for ~10 lines
+// of logic — see COHORT_FARM_SPEC.md, ticket 07.
+func (h *UserHandler) enforceCohortAccess(c *fiber.Ctx, cohort int) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.Role == "admin" {
+		return nil
+	}
+	me, err := h.userService.GetUserByID(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
+	}
+	if cohort != me.CohortNumber {
+		return utils.SendError(c, fiber.StatusForbidden, "You cannot access other cohorts")
+	}
+	return nil
+}
+
+// GetCohortGarden returns every learner in the cohort, grouped by
+// genmate_group, for the cohort-wide memory farm (COHORT_FARM_SPEC.md).
+// Learners with no group land in one "Unaffiliated" bucket rather than being
+// silently dropped — ticket 06's decision: a permanent memory shouldn't erase
+// anyone the way the 2D admin garden's live view reasonably does.
+func (h *UserHandler) GetCohortGarden(c *fiber.Ctx) error {
+	cohort, err := c.ParamsInt("cohortNumber", 0)
+	if err != nil || cohort <= 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
+	}
+
+	if err := h.enforceCohortAccess(c, cohort); err != nil {
+		return err
+	}
+
+	users, _, err := h.userService.GetAllUsers(cohort, "learner", "", "", "first_name", 1, 1, 1000)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching cohort garden")
+	}
+
+	const unaffiliatedGroupName = "Unaffiliated"
+	groupOrder := make([]string, 0)
+	groupMembers := make(map[string][]fiber.Map)
+
+	for _, u := range users {
+		if u.Deleted {
+			continue
+		}
+
+		groupName := u.GenmateGroup
+		if groupName == "" {
+			groupName = unaffiliatedGroupName
+		}
+		if _, seen := groupMembers[groupName]; !seen {
+			groupOrder = append(groupOrder, groupName)
+		}
+
+		dates := make([]string, 0, len(u.Reflections))
+		for _, r := range u.Reflections {
+			day := r.Day
+			if day == "" {
+				day = r.Date.Format(time.RFC3339)
+			}
+			dates = append(dates, day)
+		}
+
+		protectedDates := make([]string, 0)
+		for _, entry := range u.FertilizerLog {
+			if entry.Kind == "protect" && entry.RelatedDate != "" {
+				protectedDates = append(protectedDates, entry.RelatedDate)
+			}
+		}
+
+		groupMembers[groupName] = append(groupMembers[groupName], fiber.Map{
+			"_id":              u.ID.Hex(),
+			"first_name":       u.FirstName,
+			"last_name":        u.LastName,
+			"cohort_number":    u.CohortNumber,
+			"genmate_group":    groupName,
+			"reflection_dates": dates,
+			"growth_points":    u.GrowthPoints,
+			"protected_dates":  protectedDates,
+			"plant_reactions":  u.PlantReactions,
+			"selected_palette": u.SelectedPalette,
+			"selected_species": u.SelectedSpecies,
+			"selected_pot":     u.SelectedPot,
+			"selected_leaf":    u.SelectedLeaf,
+			"selected_flower":  u.SelectedFlower,
+			"selected_stem":    u.SelectedStem,
+		})
+	}
+
+	groups := make([]fiber.Map, 0, len(groupOrder))
+	for _, name := range groupOrder {
+		groups = append(groups, fiber.Map{
+			"group_name": name,
+			"members":    groupMembers[name],
+		})
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Cohort garden retrieved", fiber.Map{
+		"groups": groups,
+	})
+}
+
 func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
 	claims, ok := c.Locals("user").(*middleware.Claims)
 	if !ok {
