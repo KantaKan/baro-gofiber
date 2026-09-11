@@ -7,6 +7,7 @@ import (
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/holiday"
+	"gofiber-baro/pkg/utils"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -37,7 +38,7 @@ func (s *FertilizerService) validateProtectDate(dateStr string) error {
 		return ErrInvalidProtectDate
 	}
 
-	today := time.Now()
+	today := utils.GetThailandTime()
 	todayDay := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
 	if !date.Before(todayDay) {
 		return ErrInvalidProtectDate
