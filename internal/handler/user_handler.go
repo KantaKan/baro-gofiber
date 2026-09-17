@@ -361,7 +361,7 @@ func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
 }
 
 // resolveGenmate validates the caller and the :id target, and enforces that a
-// non-admin caller shares the target's genmate group. On failure it writes the
+// non-admin caller shares the target's cohort. On failure it writes the
 // error response and returns a nil target - callers must check target, not the
 // error, since utils.SendError returns nil when the write succeeds.
 func (h *UserHandler) resolveGenmate(c *fiber.Ctx) (primitive.ObjectID, primitive.ObjectID, *domain.User, error) {
@@ -392,11 +392,8 @@ func (h *UserHandler) resolveGenmate(c *fiber.Ctx) (primitive.ObjectID, primitiv
 		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
 
-	if claims.Role != "admin" {
-		me, err := h.userService.GetUserByID(claims.UserID)
-		if err != nil || me.GenmateGroup == "" || me.GenmateGroup != target.GenmateGroup {
-			return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusForbidden, "You can only do that for your genmates")
-		}
+	if claims.Role != "admin" && claims.Cohort != target.CohortNumber {
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusForbidden, "You can only do that for someone in your cohort")
 	}
 
 	return giverOID, recipientOID, target, nil
