@@ -247,4 +247,5 @@ type UserRepository interface {
 	AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 	AddPlantReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 	GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error)
+	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string) (bool, error)
 }

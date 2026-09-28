@@ -124,6 +124,29 @@ func (r *userRepository) GrantCosmetic(ctx interface{}, userID primitive.ObjectI
 	return result.ModifiedCount == 1, nil
 }
 
+func (r *userRepository) RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string) (bool, error) {
+	c := ctx.(context.Context)
+	result, err := r.collection.UpdateOne(
+		c,
+		bson.M{"_id": userID, "owned_cosmetic_ids": cosmeticID},
+		bson.M{"$pull": bson.M{"owned_cosmetic_ids": cosmeticID, "new_cosmetic_ids": cosmeticID}},
+	)
+	if err != nil {
+		return false, err
+	}
+	if result.ModifiedCount == 1 {
+		_, err = r.collection.UpdateOne(
+			c,
+			bson.M{"_id": userID, "equipped_cosmetics." + slot: cosmeticID},
+			bson.M{"$unset": bson.M{"equipped_cosmetics." + slot: ""}},
+		)
+		if err != nil {
+			return true, err
+		}
+	}
+	return result.ModifiedCount == 1, nil
+}
+
 func (r *userRepository) GrantFertilizer(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error {
 	c := ctx.(context.Context)
 	entry := domain.FertilizerLogEntry{

@@ -12,32 +12,70 @@ import (
 type cosmeticUserStore interface {
 	FindByID(ctx interface{}, id primitive.ObjectID) (*domain.User, error)
 	GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error)
+	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string) (bool, error)
+}
+
+type cosmeticNotifier interface {
+	CreateUserNotification(userID primitive.ObjectID, title, message, link, linkText string) error
 }
 
 type CosmeticService struct {
-	users cosmeticUserStore
+	users    cosmeticUserStore
+	notifier cosmeticNotifier
 }
 
-func NewCosmeticService(users cosmeticUserStore) *CosmeticService {
-	return &CosmeticService{users: users}
+func NewCosmeticService(users cosmeticUserStore, notifier ...cosmeticNotifier) *CosmeticService {
+	service := &CosmeticService{users: users}
+	if len(notifier) > 0 {
+		service.notifier = notifier[0]
+	}
+	return service
 }
 
-func (s *CosmeticService) Grant(userID string, cosmeticID string) (bool, error) {
+func (s *CosmeticService) Grant(userID, cosmeticID, message string) (bool, error) {
 	id, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
 		return false, errors.New("invalid user ID")
 	}
-	found := false
-	for _, item := range cosmeticCatalog {
-		if item.ID == cosmeticID {
-			found = true
-			break
+	item, found := findCosmetic(cosmeticID)
+	if !found || item.Starter {
+		return false, errors.New("cosmetic is not eligible for an admin grant")
+	}
+	granted, err := s.users.GrantCosmetic(context.Background(), id, cosmeticID)
+	if err != nil || !granted {
+		return granted, err
+	}
+	if s.notifier != nil {
+		body := message
+		if body == "" {
+			body = "A teacher added " + item.Name + " to your permanent plant collection."
+		}
+		if err := s.notifier.CreateUserNotification(id, "A new garden gift for you", body, "/learner/dashboard", "View collection"); err != nil {
+			return true, err
 		}
 	}
-	if !found {
-		return false, errors.New("unknown cosmetic")
+	return true, nil
+}
+
+func (s *CosmeticService) Revoke(userID, cosmeticID string) (bool, error) {
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return false, errors.New("invalid user ID")
 	}
-	return s.users.GrantCosmetic(context.Background(), id, cosmeticID)
+	item, found := findCosmetic(cosmeticID)
+	if !found || item.Starter {
+		return false, errors.New("cosmetic is not eligible for revocation")
+	}
+	return s.users.RevokeCosmetic(context.Background(), id, cosmeticID, item.Slot)
+}
+
+func findCosmetic(cosmeticID string) (domain.CosmeticCatalogItem, bool) {
+	for _, item := range cosmeticCatalog {
+		if item.ID == cosmeticID {
+			return item, true
+		}
+	}
+	return domain.CosmeticCatalogItem{}, false
 }
 
 var cosmeticCatalog = []domain.CosmeticCatalogItem{

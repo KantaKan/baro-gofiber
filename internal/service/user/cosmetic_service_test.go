@@ -21,6 +21,25 @@ func (s cosmeticUserReaderStub) GrantCosmetic(_ interface{}, _ primitive.ObjectI
 	return true, nil
 }
 
+func (s cosmeticUserReaderStub) RevokeCosmetic(_ interface{}, _ primitive.ObjectID, cosmeticID, _ string) (bool, error) {
+	if !s.owned[cosmeticID] {
+		return false, nil
+	}
+	delete(s.owned, cosmeticID)
+	return true, nil
+}
+
+type cosmeticNotifierStub struct {
+	recipients []primitive.ObjectID
+	messages   []string
+}
+
+func (s *cosmeticNotifierStub) CreateUserNotification(userID primitive.ObjectID, _, message, _, _ string) error {
+	s.recipients = append(s.recipients, userID)
+	s.messages = append(s.messages, message)
+	return nil
+}
+
 func (s cosmeticUserReaderStub) FindByID(_ interface{}, _ primitive.ObjectID) (*domain.User, error) {
 	return s.user, nil
 }
@@ -28,15 +47,33 @@ func (s cosmeticUserReaderStub) FindByID(_ interface{}, _ primitive.ObjectID) (*
 func TestCosmeticOwnershipIsDuplicateSafe(t *testing.T) {
 	userID := primitive.NewObjectID()
 	owned := map[string]bool{}
-	service := NewCosmeticService(cosmeticUserReaderStub{owned: owned})
+	notifier := &cosmeticNotifierStub{}
+	service := NewCosmeticService(cosmeticUserReaderStub{owned: owned}, notifier)
 
-	granted, err := service.Grant(userID.Hex(), "palette:ocean")
+	granted, err := service.Grant(userID.Hex(), "palette:ocean", "Your thoughtful reflection earned this color.")
 	if err != nil || !granted {
 		t.Fatalf("first grant failed: granted=%v err=%v", granted, err)
 	}
-	granted, err = service.Grant(userID.Hex(), "palette:ocean")
+	granted, err = service.Grant(userID.Hex(), "palette:ocean", "Duplicate")
 	if err != nil || granted {
 		t.Fatalf("duplicate grant was not ignored: granted=%v err=%v", granted, err)
+	}
+	if len(notifier.messages) != 1 || notifier.messages[0] != "Your thoughtful reflection earned this color." || notifier.recipients[0] != userID {
+		t.Fatalf("grant notification was incorrect: recipients=%v messages=%v", notifier.recipients, notifier.messages)
+	}
+
+	revoked, err := service.Revoke(userID.Hex(), "palette:ocean")
+	if err != nil || !revoked || owned["palette:ocean"] {
+		t.Fatalf("revoke failed: revoked=%v err=%v owned=%v", revoked, err, owned)
+	}
+}
+
+func TestCosmeticGrantRejectsStarterAndUnknownItems(t *testing.T) {
+	service := NewCosmeticService(cosmeticUserReaderStub{owned: map[string]bool{}})
+	for _, cosmeticID := range []string{"pot:round", "unknown:item"} {
+		if granted, err := service.Grant(primitive.NewObjectID().Hex(), cosmeticID, ""); err == nil || granted {
+			t.Fatalf("ineligible item %q was granted", cosmeticID)
+		}
 	}
 }
 

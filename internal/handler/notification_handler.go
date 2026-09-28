@@ -92,7 +92,10 @@ func (h *NotificationHandler) GetAllNotifications(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) GetActiveNotifications(c *fiber.Ctx) error {
-	notifications, err := h.notificationService.GetActiveNotifications()
+	userID := c.Locals("userID")
+	userIDStr, _ := userID.(string)
+
+	notifications, err := h.notificationService.GetActiveNotificationsForUser(userIDStr)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching notifications: "+err.Error())
 	}
@@ -100,9 +103,6 @@ func (h *NotificationHandler) GetActiveNotifications(c *fiber.Ctx) error {
 	if notifications == nil {
 		notifications = []domain.Notification{}
 	}
-
-	userID := c.Locals("userID")
-	userIDStr, _ := userID.(string)
 
 	if userIDStr != "" {
 		var unreadNotifications []map[string]interface{}

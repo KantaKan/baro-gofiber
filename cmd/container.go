@@ -105,8 +105,8 @@ func (c *Container) initServices() {
 	c.LeaveService = leaveService.NewService(c.LeaveRepo, c.UserService)
 	c.HolidayService = holiday.NewService(c.HolidayRepo, c.DB)
 	c.FertilizerService = userService.NewFertilizerService(c.UserRepo, c.HolidayService)
-	c.CosmeticService = userService.NewCosmeticService(c.UserRepo)
 	c.NotificationService = notificationService.NewService(c.NotificationRepo)
+	c.CosmeticService = userService.NewCosmeticService(c.UserRepo, c.NotificationService)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
 	c.AttendanceSubmissionService = attendance.NewSubmissionService(c.AttendanceRepo, c.UserService)
