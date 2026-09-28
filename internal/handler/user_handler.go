@@ -724,6 +724,7 @@ func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
 			"selected_leaf":    u.SelectedLeaf,
 			"selected_flower":  u.SelectedFlower,
 			"selected_stem":    u.SelectedStem,
+			"equipped_cosmetics": u.EquippedCosmetics,
 		})
 	}
 
@@ -825,6 +826,7 @@ func (h *UserHandler) GetCohortGarden(c *fiber.Ctx) error {
 			"selected_leaf":    u.SelectedLeaf,
 			"selected_flower":  u.SelectedFlower,
 			"selected_stem":    u.SelectedStem,
+			"equipped_cosmetics": u.EquippedCosmetics,
 		})
 	}
 
