@@ -70,47 +70,50 @@ type SessionDetails struct {
 }
 
 type ProfileComment struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	UserID    primitive.ObjectID `bson:"userId" json:"userId"`
-	ZoomName  string             `bson:"zoomName" json:"zoomName"`
-	Cohort    int                `bson:"cohort" json:"cohort"`
-	Content   string             `bson:"content" json:"content"`
+	ID        primitive.ObjectID  `bson:"_id,omitempty" json:"id,omitempty"`
+	UserID    primitive.ObjectID  `bson:"userId" json:"userId"`
+	ZoomName  string              `bson:"zoomName" json:"zoomName"`
+	Cohort    int                 `bson:"cohort" json:"cohort"`
+	Content   string              `bson:"content" json:"content"`
 	ParentID  *primitive.ObjectID `bson:"parentId,omitempty" json:"parentId,omitempty"`
 	Replies   []ProfileComment    `bson:"replies,omitempty" json:"replies,omitempty"`
-	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
+	CreatedAt time.Time           `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time           `bson:"updatedAt" json:"updatedAt"`
 }
 
 type User struct {
-	ID               primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	JSDNumber        string             `bson:"jsd_number" json:"jsd_number"`
-	FirstName        string             `bson:"first_name" json:"first_name"`
-	LastName         string             `bson:"last_name" json:"last_name"`
-	Email            string             `bson:"email" json:"email"`
-	CohortNumber     int                `bson:"cohort_number" json:"cohort_number"`
-	Reflections      []Reflection       `bson:"reflections" json:"reflections"`
-	Password         string             `bson:"password,omitempty" json:"password,omitempty"`
-	Role             string             `bson:"role" json:"role"`
-	ProjectGroup     string             `bson:"project_group" json:"project_group"`
-	GenmateGroup     string             `bson:"genmate_group" json:"genmate_group"`
-	ZoomName         string             `bson:"zoom_name" json:"zoom_name"`
-	Badges           []Badge            `bson:"badges,omitempty" json:"badges,omitempty"`
-	SalesforceID     string             `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
-	AttendanceStatus string             `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
-	ProfileComments  []ProfileComment   `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
-	ProfileReactions []Reaction         `bson:"profile_reactions,omitempty" json:"profile_reactions,omitempty"`
-	PlantReactions   []Reaction         `bson:"plant_reactions,omitempty" json:"plant_reactions,omitempty"`
-	Bio              string             `bson:"bio,omitempty" json:"bio,omitempty"`
-	SocialLinks      SocialLinks        `bson:"social_links,omitempty" json:"social_links,omitempty"`
-	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
-	SelectedPalette  string             `bson:"selected_palette,omitempty" json:"selected_palette,omitempty"`
-	SelectedSpecies  string             `bson:"selected_species,omitempty" json:"selected_species,omitempty"`
-	SelectedPot      string             `bson:"selected_pot,omitempty" json:"selected_pot,omitempty"`
-	SelectedLeaf     string             `bson:"selected_leaf,omitempty" json:"selected_leaf,omitempty"`
-	SelectedFlower   string             `bson:"selected_flower,omitempty" json:"selected_flower,omitempty"`
-	SelectedStem     string             `bson:"selected_stem,omitempty" json:"selected_stem,omitempty"`
-	Deleted          bool               `bson:"deleted,omitempty" json:"deleted,omitempty"`
-	DeletedAt        *time.Time        `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
+	ID                primitive.ObjectID   `bson:"_id,omitempty" json:"_id"`
+	JSDNumber         string               `bson:"jsd_number" json:"jsd_number"`
+	FirstName         string               `bson:"first_name" json:"first_name"`
+	LastName          string               `bson:"last_name" json:"last_name"`
+	Email             string               `bson:"email" json:"email"`
+	CohortNumber      int                  `bson:"cohort_number" json:"cohort_number"`
+	Reflections       []Reflection         `bson:"reflections" json:"reflections"`
+	Password          string               `bson:"password,omitempty" json:"password,omitempty"`
+	Role              string               `bson:"role" json:"role"`
+	ProjectGroup      string               `bson:"project_group" json:"project_group"`
+	GenmateGroup      string               `bson:"genmate_group" json:"genmate_group"`
+	ZoomName          string               `bson:"zoom_name" json:"zoom_name"`
+	Badges            []Badge              `bson:"badges,omitempty" json:"badges,omitempty"`
+	SalesforceID      string               `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
+	AttendanceStatus  string               `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
+	ProfileComments   []ProfileComment     `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
+	ProfileReactions  []Reaction           `bson:"profile_reactions,omitempty" json:"profile_reactions,omitempty"`
+	PlantReactions    []Reaction           `bson:"plant_reactions,omitempty" json:"plant_reactions,omitempty"`
+	Bio               string               `bson:"bio,omitempty" json:"bio,omitempty"`
+	SocialLinks       SocialLinks          `bson:"social_links,omitempty" json:"social_links,omitempty"`
+	PinnedBadgeIDs    []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
+	SelectedPalette   string               `bson:"selected_palette,omitempty" json:"selected_palette,omitempty"`
+	SelectedSpecies   string               `bson:"selected_species,omitempty" json:"selected_species,omitempty"`
+	SelectedPot       string               `bson:"selected_pot,omitempty" json:"selected_pot,omitempty"`
+	SelectedLeaf      string               `bson:"selected_leaf,omitempty" json:"selected_leaf,omitempty"`
+	SelectedFlower    string               `bson:"selected_flower,omitempty" json:"selected_flower,omitempty"`
+	SelectedStem      string               `bson:"selected_stem,omitempty" json:"selected_stem,omitempty"`
+	OwnedCosmeticIDs  []string             `bson:"owned_cosmetic_ids,omitempty" json:"owned_cosmetic_ids,omitempty"`
+	NewCosmeticIDs    []string             `bson:"new_cosmetic_ids,omitempty" json:"new_cosmetic_ids,omitempty"`
+	EquippedCosmetics map[string]string    `bson:"equipped_cosmetics,omitempty" json:"equipped_cosmetics,omitempty"`
+	Deleted           bool                 `bson:"deleted,omitempty" json:"deleted,omitempty"`
+	DeletedAt         *time.Time           `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 	FertilizerBalance int                  `bson:"fertilizer_balance,omitempty" json:"fertilizer_balance,omitempty"`
 	GrowthPoints      int                  `bson:"growth_points,omitempty" json:"growth_points,omitempty"`
 	FertilizerLog     []FertilizerLogEntry `bson:"fertilizer_log,omitempty" json:"fertilizer_log,omitempty"`
@@ -119,27 +122,27 @@ type User struct {
 // UserSafe is a restricted version of User for non-admin users
 // Only contains public-safe fields like name, avatar, badges
 type UserSafe struct {
-	ID            primitive.ObjectID   `json:"_id"`
-	JSDNumber     string               `json:"jsd_number"`
-	FirstName     string               `json:"first_name"`
-	LastName      string               `json:"last_name"`
-	CohortNumber  int                  `json:"cohort_number"`
-	ProjectGroup  string               `json:"project_group"`
-	GenmateGroup  string               `json:"genmate_group"`
-	ZoomName      string               `json:"zoom_name"`
-	Badges        []Badge              `json:"badges,omitempty"`
-	Bio           string               `json:"bio,omitempty"`
-	SocialLinks   SocialLinks          `json:"social_links,omitempty"`
-	PinnedBadgeIDs []primitive.ObjectID `json:"pinned_badge_ids,omitempty"`
-	ProfileComments []ProfileComment   `json:"profile_comments,omitempty"`
-	ProfileReactions []Reaction        `json:"profile_reactions,omitempty"`
-	PlantReactions   []Reaction        `json:"plant_reactions,omitempty"`
-	SelectedPalette  string            `json:"selected_palette,omitempty"`
-	SelectedSpecies  string            `json:"selected_species,omitempty"`
-	SelectedPot      string            `json:"selected_pot,omitempty"`
-	SelectedLeaf     string            `json:"selected_leaf,omitempty"`
-	SelectedFlower   string            `json:"selected_flower,omitempty"`
-	SelectedStem     string            `json:"selected_stem,omitempty"`
+	ID                primitive.ObjectID   `json:"_id"`
+	JSDNumber         string               `json:"jsd_number"`
+	FirstName         string               `json:"first_name"`
+	LastName          string               `json:"last_name"`
+	CohortNumber      int                  `json:"cohort_number"`
+	ProjectGroup      string               `json:"project_group"`
+	GenmateGroup      string               `json:"genmate_group"`
+	ZoomName          string               `json:"zoom_name"`
+	Badges            []Badge              `json:"badges,omitempty"`
+	Bio               string               `json:"bio,omitempty"`
+	SocialLinks       SocialLinks          `json:"social_links,omitempty"`
+	PinnedBadgeIDs    []primitive.ObjectID `json:"pinned_badge_ids,omitempty"`
+	ProfileComments   []ProfileComment     `json:"profile_comments,omitempty"`
+	ProfileReactions  []Reaction           `json:"profile_reactions,omitempty"`
+	PlantReactions    []Reaction           `json:"plant_reactions,omitempty"`
+	SelectedPalette   string               `json:"selected_palette,omitempty"`
+	SelectedSpecies   string               `json:"selected_species,omitempty"`
+	SelectedPot       string               `json:"selected_pot,omitempty"`
+	SelectedLeaf      string               `json:"selected_leaf,omitempty"`
+	SelectedFlower    string               `json:"selected_flower,omitempty"`
+	SelectedStem      string               `json:"selected_stem,omitempty"`
 	FertilizerBalance int                  `json:"fertilizer_balance,omitempty"`
 	GrowthPoints      int                  `json:"growth_points,omitempty"`
 	FertilizerLog     []FertilizerLogEntry `json:"fertilizer_log,omitempty"`
@@ -148,27 +151,27 @@ type UserSafe struct {
 // ToSafe converts a User to UserSafe for non-admin responses
 func (u *User) ToSafe() UserSafe {
 	return UserSafe{
-		ID:            u.ID,
-		JSDNumber:    u.JSDNumber,
-		FirstName:     u.FirstName,
-		LastName:      u.LastName,
-		CohortNumber:  u.CohortNumber,
-		ProjectGroup:  u.ProjectGroup,
-		GenmateGroup:  u.GenmateGroup,
-		ZoomName:      u.ZoomName,
-		Badges:          u.Badges,
-		Bio:             u.Bio,
-		SocialLinks:     u.SocialLinks,
-		PinnedBadgeIDs:  u.PinnedBadgeIDs,
-		ProfileComments: u.ProfileComments,
-		ProfileReactions: u.ProfileReactions,
-		PlantReactions:  u.PlantReactions,
-		SelectedPalette: u.SelectedPalette,
-		SelectedSpecies: u.SelectedSpecies,
-		SelectedPot:     u.SelectedPot,
-		SelectedLeaf:    u.SelectedLeaf,
-		SelectedFlower:  u.SelectedFlower,
-		SelectedStem:    u.SelectedStem,
+		ID:                u.ID,
+		JSDNumber:         u.JSDNumber,
+		FirstName:         u.FirstName,
+		LastName:          u.LastName,
+		CohortNumber:      u.CohortNumber,
+		ProjectGroup:      u.ProjectGroup,
+		GenmateGroup:      u.GenmateGroup,
+		ZoomName:          u.ZoomName,
+		Badges:            u.Badges,
+		Bio:               u.Bio,
+		SocialLinks:       u.SocialLinks,
+		PinnedBadgeIDs:    u.PinnedBadgeIDs,
+		ProfileComments:   u.ProfileComments,
+		ProfileReactions:  u.ProfileReactions,
+		PlantReactions:    u.PlantReactions,
+		SelectedPalette:   u.SelectedPalette,
+		SelectedSpecies:   u.SelectedSpecies,
+		SelectedPot:       u.SelectedPot,
+		SelectedLeaf:      u.SelectedLeaf,
+		SelectedFlower:    u.SelectedFlower,
+		SelectedStem:      u.SelectedStem,
 		FertilizerBalance: u.FertilizerBalance,
 		GrowthPoints:      u.GrowthPoints,
 		FertilizerLog:     u.FertilizerLog,
@@ -243,4 +246,5 @@ type UserRepository interface {
 	DeleteProfileComment(ctx interface{}, userID primitive.ObjectID, commentID primitive.ObjectID) error
 	AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 	AddPlantReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
+	GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error)
 }

@@ -111,6 +111,19 @@ func (r *userRepository) AddBadge(ctx interface{}, userID primitive.ObjectID, ba
 	return err
 }
 
+func (r *userRepository) GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error) {
+	c := ctx.(context.Context)
+	result, err := r.collection.UpdateOne(
+		c,
+		bson.M{"_id": userID, "owned_cosmetic_ids": bson.M{"$ne": cosmeticID}},
+		bson.M{"$addToSet": bson.M{"owned_cosmetic_ids": cosmeticID, "new_cosmetic_ids": cosmeticID}},
+	)
+	if err != nil {
+		return false, err
+	}
+	return result.ModifiedCount == 1, nil
+}
+
 func (r *userRepository) GrantFertilizer(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error {
 	c := ctx.(context.Context)
 	entry := domain.FertilizerLogEntry{
@@ -309,8 +322,8 @@ func (r *userRepository) RescueFertilizer(ctx interface{}, giverID, recipientID 
 
 func (r *userRepository) hasProtectedDate(ctx context.Context, userID primitive.ObjectID, dateStr string) (bool, error) {
 	count, err := r.collection.CountDocuments(ctx, bson.M{
-		"_id":             userID,
-		"fertilizer_log":  bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
+		"_id":            userID,
+		"fertilizer_log": bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
 	})
 	if err != nil {
 		return false, err
@@ -434,7 +447,7 @@ func (r *userRepository) DeleteProfileComment(ctx interface{}, userID primitive.
 func (r *userRepository) AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction domain.Reaction) error {
 	c := ctx.(context.Context)
 	filter := bson.M{"_id": userID}
-	
+
 	// First, remove any existing reaction by this user
 	pull := bson.M{"$pull": bson.M{"profile_reactions": bson.M{"userId": reaction.UserID}}}
 	_, err := r.collection.UpdateOne(c, filter, pull)

@@ -38,6 +38,7 @@ type Container struct {
 	UserService                 *userService.Service
 	BadgeService                *userService.BadgeService
 	FertilizerService           *userService.FertilizerService
+	CosmeticService             *userService.CosmeticService
 	ReflectionService           *reflectionService.Service
 	BarometerService            *reflectionService.BarometerService
 	LeaveService                *leaveService.Service
@@ -58,6 +59,7 @@ type Container struct {
 	NotificationHandler *handler.NotificationHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
+	CosmeticHandler     *handler.CosmeticHandler
 
 	AuditMiddleware fiber.Handler
 }
@@ -103,6 +105,7 @@ func (c *Container) initServices() {
 	c.LeaveService = leaveService.NewService(c.LeaveRepo, c.UserService)
 	c.HolidayService = holiday.NewService(c.HolidayRepo, c.DB)
 	c.FertilizerService = userService.NewFertilizerService(c.UserRepo, c.HolidayService)
+	c.CosmeticService = userService.NewCosmeticService(c.UserRepo)
 	c.NotificationService = notificationService.NewService(c.NotificationRepo)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
@@ -129,6 +132,7 @@ func (c *Container) initHandlers() {
 	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
 	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
 	c.HistoryHandler = handler.NewHistoryHandler(c.AuditLogRepo, c.UserRepo)
+	c.CosmeticHandler = handler.NewCosmeticHandler(c.CosmeticService)
 
 	c.AuditMiddleware = middleware.AuditMiddleware(c.AuditLogRepo)
 }

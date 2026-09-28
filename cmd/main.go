@@ -131,6 +131,7 @@ func main() {
 		Notification: container.NotificationHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
+		Cosmetic:     container.CosmeticHandler,
 		Audit:        container.AuditMiddleware,
 	}
 

@@ -20,6 +20,7 @@ type Handlers struct {
 	Notification *handler.NotificationHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
+	Cosmetic     *handler.CosmeticHandler
 	Audit        fiber.Handler
 }
 
@@ -61,6 +62,10 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Post("/:id/fertilizer/feed", h.User.UseFertilizerFeed)
 	protected.Post("/:id/fertilizer/gift", h.User.GiftFertilizer)
 	protected.Post("/:id/fertilizer/rescue", h.User.RescueFertilizer)
+
+	cosmetics := app.Group("/plant-cosmetics", middleware.AuthMiddleware)
+	cosmetics.Get("/catalog", h.Cosmetic.GetCatalog)
+	cosmetics.Get("/collection", h.Cosmetic.GetCollection)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
