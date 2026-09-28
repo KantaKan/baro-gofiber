@@ -147,6 +147,45 @@ func (r *userRepository) RevokeCosmetic(ctx interface{}, userID primitive.Object
 	return result.ModifiedCount == 1, nil
 }
 
+func (r *userRepository) EquipCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error {
+	c := ctx.(context.Context)
+	filter := bson.M{"_id": userID}
+	if requiresOwnership {
+		filter["owned_cosmetic_ids"] = cosmeticID
+	}
+	result, err := r.collection.UpdateOne(
+		c,
+		filter,
+		bson.M{
+			"$set":  bson.M{"equipped_cosmetics." + slot: cosmeticID},
+			"$pull": bson.M{"new_cosmetic_ids": cosmeticID},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("cosmetic is not owned")
+	}
+	return nil
+}
+
+func (r *userRepository) UnequipCosmetic(ctx interface{}, userID primitive.ObjectID, slot string) error {
+	c := ctx.(context.Context)
+	result, err := r.collection.UpdateOne(
+		c,
+		bson.M{"_id": userID},
+		bson.M{"$unset": bson.M{"equipped_cosmetics." + slot: ""}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
 func (r *userRepository) GrantFertilizer(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error {
 	c := ctx.(context.Context)
 	entry := domain.FertilizerLogEntry{

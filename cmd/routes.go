@@ -66,6 +66,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	cosmetics := app.Group("/plant-cosmetics", middleware.AuthMiddleware)
 	cosmetics.Get("/catalog", h.Cosmetic.GetCatalog)
 	cosmetics.Get("/collection", h.Cosmetic.GetCollection)
+	cosmetics.Put("/equipment/:slot", h.Cosmetic.EquipCosmetic)
+	cosmetics.Delete("/equipment/:slot", h.Cosmetic.UnequipCosmetic)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,

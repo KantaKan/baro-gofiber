@@ -143,6 +143,7 @@ type UserSafe struct {
 	SelectedLeaf      string               `json:"selected_leaf,omitempty"`
 	SelectedFlower    string               `json:"selected_flower,omitempty"`
 	SelectedStem      string               `json:"selected_stem,omitempty"`
+	EquippedCosmetics map[string]string    `json:"equipped_cosmetics,omitempty"`
 	FertilizerBalance int                  `json:"fertilizer_balance,omitempty"`
 	GrowthPoints      int                  `json:"growth_points,omitempty"`
 	FertilizerLog     []FertilizerLogEntry `json:"fertilizer_log,omitempty"`
@@ -172,6 +173,7 @@ func (u *User) ToSafe() UserSafe {
 		SelectedLeaf:      u.SelectedLeaf,
 		SelectedFlower:    u.SelectedFlower,
 		SelectedStem:      u.SelectedStem,
+		EquippedCosmetics: u.EquippedCosmetics,
 		FertilizerBalance: u.FertilizerBalance,
 		GrowthPoints:      u.GrowthPoints,
 		FertilizerLog:     u.FertilizerLog,
@@ -248,4 +250,6 @@ type UserRepository interface {
 	AddPlantReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
 	GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error)
 	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string) (bool, error)
+	EquipCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error
+	UnequipCosmetic(ctx interface{}, userID primitive.ObjectID, slot string) error
 }

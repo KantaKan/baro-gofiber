@@ -13,6 +13,10 @@ type adminCosmeticGrantRequest struct {
 	Message string `json:"message"`
 }
 
+type equipCosmeticRequest struct {
+	CosmeticID string `json:"cosmetic_id"`
+}
+
 type CosmeticHandler struct {
 	service *user.CosmeticService
 }
@@ -71,4 +75,30 @@ func (h *CosmeticHandler) RevokeCosmetic(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Cosmetic revocation processed", fiber.Map{"revoked": revoked})
+}
+
+func (h *CosmeticHandler) EquipCosmetic(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body equipCosmeticRequest
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	if err := h.service.Equip(claims.UserID, c.Params("slot"), strings.TrimSpace(body.CosmeticID)); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Cosmetic equipped", nil)
+}
+
+func (h *CosmeticHandler) UnequipCosmetic(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if err := h.service.Unequip(claims.UserID, c.Params("slot")); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Cosmetic unequipped", nil)
 }

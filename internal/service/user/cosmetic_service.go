@@ -13,6 +13,8 @@ type cosmeticUserStore interface {
 	FindByID(ctx interface{}, id primitive.ObjectID) (*domain.User, error)
 	GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error)
 	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string) (bool, error)
+	EquipCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error
+	UnequipCosmetic(ctx interface{}, userID primitive.ObjectID, slot string) error
 }
 
 type cosmeticNotifier interface {
@@ -67,6 +69,70 @@ func (s *CosmeticService) Revoke(userID, cosmeticID string) (bool, error) {
 		return false, errors.New("cosmetic is not eligible for revocation")
 	}
 	return s.users.RevokeCosmetic(context.Background(), id, cosmeticID, item.Slot)
+}
+
+func (s *CosmeticService) Equip(userID, slot, cosmeticID string) error {
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return errors.New("invalid user ID")
+	}
+	item, found := findCosmetic(cosmeticID)
+	if !found {
+		return errors.New("unknown cosmetic")
+	}
+	if item.Slot != slot {
+		return errors.New("cosmetic does not belong to this slot")
+	}
+	learner, err := s.users.FindByID(context.Background(), id)
+	if err != nil {
+		return err
+	}
+	owned := item.Starter
+	for _, ownedID := range learner.OwnedCosmeticIDs {
+		if ownedID == item.ID {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		return errors.New("cosmetic is not owned")
+	}
+	if !cosmeticCompatible(item, learner.SelectedSpecies) {
+		return errors.New("cosmetic is not compatible with this plant")
+	}
+	return s.users.EquipCosmetic(context.Background(), id, cosmeticID, item.Slot, !item.Starter)
+}
+
+func (s *CosmeticService) Unequip(userID, slot string) error {
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return errors.New("invalid user ID")
+	}
+	if !validCosmeticSlot(slot) {
+		return errors.New("unknown cosmetic slot")
+	}
+	return s.users.UnequipCosmetic(context.Background(), id, slot)
+}
+
+func validCosmeticSlot(slot string) bool {
+	for _, candidate := range []string{"palette", "pot", "aura", "particle", "accessory", "mutation"} {
+		if candidate == slot {
+			return true
+		}
+	}
+	return false
+}
+
+func cosmeticCompatible(item domain.CosmeticCatalogItem, species string) bool {
+	if len(item.CompatibleSpecies) == 0 {
+		return true
+	}
+	for _, candidate := range item.CompatibleSpecies {
+		if candidate == species {
+			return true
+		}
+	}
+	return false
 }
 
 func findCosmetic(cosmeticID string) (domain.CosmeticCatalogItem, bool) {

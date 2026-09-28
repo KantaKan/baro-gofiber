@@ -1,6 +1,7 @@
 package user
 
 import (
+	"errors"
 	"testing"
 
 	"gofiber-baro/internal/domain"
@@ -9,8 +10,22 @@ import (
 )
 
 type cosmeticUserReaderStub struct {
-	user  *domain.User
-	owned map[string]bool
+	user     *domain.User
+	owned    map[string]bool
+	equipped map[string]string
+}
+
+func (s cosmeticUserReaderStub) EquipCosmetic(_ interface{}, _ primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error {
+	if requiresOwnership && !s.owned[cosmeticID] {
+		return errors.New("cosmetic is not owned")
+	}
+	s.equipped[slot] = cosmeticID
+	return nil
+}
+
+func (s cosmeticUserReaderStub) UnequipCosmetic(_ interface{}, _ primitive.ObjectID, slot string) error {
+	delete(s.equipped, slot)
+	return nil
 }
 
 func (s cosmeticUserReaderStub) GrantCosmetic(_ interface{}, _ primitive.ObjectID, cosmeticID string) (bool, error) {
@@ -128,4 +143,70 @@ func TestCosmeticCatalogCoversEverySlotAndRarity(t *testing.T) {
 			t.Fatalf("catalog is missing rarity %s", rarity)
 		}
 	}
+}
+
+func TestEquipValidatesEverySlotOwnershipAndCompatibility(t *testing.T) {
+	userID := primitive.NewObjectID()
+	owned := map[string]bool{}
+	equipped := map[string]string{}
+	for _, item := range cosmeticCatalog {
+		if !item.Starter {
+			owned[item.ID] = true
+		}
+	}
+	service := NewCosmeticService(cosmeticUserReaderStub{
+		user:     &domain.User{ID: userID, SelectedSpecies: "Lotus", OwnedCosmeticIDs: mapKeys(owned)},
+		owned:    owned,
+		equipped: equipped,
+	})
+	seen := map[string]bool{}
+	for _, item := range cosmeticCatalog {
+		if seen[item.Slot] {
+			continue
+		}
+		seen[item.Slot] = true
+		if err := service.Equip(userID.Hex(), item.Slot, item.ID); err != nil {
+			t.Fatalf("Equip rejected valid %s item: %v", item.Slot, err)
+		}
+		if equipped[item.Slot] != item.ID {
+			t.Fatalf("Equip did not save %s item", item.Slot)
+		}
+		if err := service.Equip(userID.Hex(), item.Slot, item.ID); err != nil {
+			t.Fatalf("retrying Equip for %s failed: %v", item.Slot, err)
+		}
+	}
+	if len(seen) != 6 {
+		t.Fatalf("tested %d slots, want 6", len(seen))
+	}
+	if err := service.Equip(userID.Hex(), "pot", "palette:ocean"); err == nil {
+		t.Fatal("Equip accepted a cosmetic in the wrong slot")
+	}
+	if err := service.Unequip(userID.Hex(), "not-a-slot"); err == nil {
+		t.Fatal("Unequip accepted an unknown slot")
+	}
+}
+
+func TestEquipRejectsUnownedAndIncompatibleCosmetics(t *testing.T) {
+	userID := primitive.NewObjectID()
+	service := NewCosmeticService(cosmeticUserReaderStub{
+		user:     &domain.User{ID: userID, SelectedSpecies: "Lotus"},
+		owned:    map[string]bool{},
+		equipped: map[string]string{},
+	})
+	if err := service.Equip(userID.Hex(), "palette", "palette:ocean"); err == nil {
+		t.Fatal("Equip accepted an unowned cosmetic")
+	}
+
+	incompatible := domain.CosmeticCatalogItem{ID: "test:species", Slot: "accessory", CompatibleSpecies: []string{"Mango"}}
+	if cosmeticCompatible(incompatible, "Lotus") {
+		t.Fatal("compatibility check accepted the wrong species")
+	}
+}
+
+func mapKeys(values map[string]bool) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
 }
