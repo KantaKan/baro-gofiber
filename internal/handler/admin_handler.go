@@ -132,9 +132,9 @@ func (h *AdminHandler) AwardBadge(c *fiber.Ctx) error {
 
 func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
 	type RequestBody struct {
-		UserIDs []string `json:"userIds"`
-		Type    string   `json:"type"`
-		Name    string   `json:"name"`
+		UserIDs  []string `json:"userIds"`
+		Type     string   `json:"type"`
+		Name     string   `json:"name"`
 		Emoji    string   `json:"emoji"`
 		ImageUrl string   `json:"imageUrl"`
 		Color    string   `json:"color"`
@@ -531,7 +531,7 @@ func (h *AdminHandler) UpdatePlantOverride(c *fiber.Ctx) error {
 		"selected_stem":    body.Stem,
 	}
 
-	if err := h.userService.UpdateUser(id, update); err != nil {
+	if err := h.userService.UpdatePlantOverride(id, update, body.Palette, body.Pot); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating plant override")
 	}
 
