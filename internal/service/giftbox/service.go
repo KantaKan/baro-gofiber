@@ -16,7 +16,21 @@ var ErrBoxNotFound = errors.New("gift box not found")
 
 type Store interface {
 	Create(ctx context.Context, box domain.TeacherGiftBox) error
+	CreateOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error)
 	ListForUser(ctx context.Context, userID primitive.ObjectID) ([]domain.TeacherGiftBox, error)
+	ListCohortLearners(ctx context.Context, cohort int) ([]primitive.ObjectID, error)
+}
+
+type CohortGrantFailure struct {
+	UserID string `json:"user_id"`
+	Error  string `json:"error"`
+}
+
+type CohortGrantResult struct {
+	Total    int                  `json:"total"`
+	Created  int                  `json:"created"`
+	Existing int                  `json:"existing"`
+	Failures []CohortGrantFailure `json:"failures"`
 }
 
 type Drawer interface {
@@ -54,6 +68,38 @@ func (s *Service) Grant(ctx context.Context, userID, adminID, minimumRarity, mes
 		return nil, err
 	}
 	return &box, nil
+}
+
+func (s *Service) GrantCohort(ctx context.Context, cohort int, adminID, minimumRarity, message, idempotencyKey string) (*CohortGrantResult, error) {
+	admin, err := primitive.ObjectIDFromHex(adminID)
+	if err != nil {
+		return nil, errors.New("invalid admin ID")
+	}
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if cohort <= 0 || idempotencyKey == "" {
+		return nil, errors.New("cohort and idempotency key are required")
+	}
+	learners, err := s.store.ListCohortLearners(ctx, cohort)
+	if err != nil {
+		return nil, err
+	}
+	result := &CohortGrantResult{Total: len(learners), Failures: []CohortGrantFailure{}}
+	for _, learner := range learners {
+		box := domain.TeacherGiftBox{
+			ID: primitive.NewObjectID(), UserID: learner, MinimumRarity: minimumRarity,
+			Message: strings.TrimSpace(message), GrantedBy: admin, Status: "unopened",
+			CreatedAt: time.Now(), GrantKey: idempotencyKey + ":" + learner.Hex(),
+		}
+		created, createErr := s.store.CreateOnce(ctx, box)
+		if createErr != nil {
+			result.Failures = append(result.Failures, CohortGrantFailure{UserID: learner.Hex(), Error: createErr.Error()})
+		} else if created {
+			result.Created++
+		} else {
+			result.Existing++
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) List(ctx context.Context, userID string) ([]domain.TeacherGiftBox, error) {

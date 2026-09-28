@@ -16,4 +16,5 @@ type TeacherGiftBox struct {
 	Reward        *CosmeticCatalogItem `bson:"reward,omitempty" json:"reward,omitempty"`
 	CreatedAt     time.Time            `bson:"created_at" json:"created_at"`
 	OpenedAt      *time.Time           `bson:"opened_at,omitempty" json:"opened_at,omitempty"`
+	GrantKey      string               `bson:"grant_key,omitempty" json:"-"`
 }

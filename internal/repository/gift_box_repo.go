@@ -32,6 +32,46 @@ func (r *GiftBoxRepository) Create(ctx context.Context, box domain.TeacherGiftBo
 	return nil
 }
 
+func (r *GiftBoxRepository) CreateOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error) {
+	result, err := r.users.UpdateOne(ctx, bson.M{
+		"_id":                  box.UserID,
+		"gift_boxes.grant_key": bson.M{"$ne": box.GrantKey},
+	}, bson.M{"$push": bson.M{"gift_boxes": box}})
+	if err != nil {
+		return false, err
+	}
+	if result.ModifiedCount == 1 {
+		return true, nil
+	}
+	count, err := r.users.CountDocuments(ctx, bson.M{"_id": box.UserID, "gift_boxes.grant_key": box.GrantKey})
+	if err != nil {
+		return false, err
+	}
+	if count == 1 {
+		return false, nil
+	}
+	return false, domain.ErrUserNotFound
+}
+
+func (r *GiftBoxRepository) ListCohortLearners(ctx context.Context, cohort int) ([]primitive.ObjectID, error) {
+	cursor, err := r.users.Find(ctx, bson.M{"cohort_number": cohort, "role": "learner", "deleted": bson.M{"$ne": true}})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	ids := []primitive.ObjectID{}
+	for cursor.Next(ctx) {
+		var user struct {
+			ID primitive.ObjectID `bson:"_id"`
+		}
+		if err := cursor.Decode(&user); err != nil {
+			return nil, err
+		}
+		ids = append(ids, user.ID)
+	}
+	return ids, cursor.Err()
+}
+
 func (r *GiftBoxRepository) ListForUser(ctx context.Context, userID primitive.ObjectID) ([]domain.TeacherGiftBox, error) {
 	var result struct {
 		GiftBoxes []domain.TeacherGiftBox `bson:"gift_boxes"`

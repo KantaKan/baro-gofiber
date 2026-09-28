@@ -100,6 +100,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.GrantCosmetic)
 	admin.Delete("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.RevokeCosmetic)
 	admin.Post("/users/:id/gift-boxes", h.GiftBox.Grant)
+	admin.Post("/cohorts/:cohortNumber/gift-boxes", h.GiftBox.GrantCohort)
 	admin.Post("/users/bulk-register", h.Admin.BulkRegisterUsers)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)

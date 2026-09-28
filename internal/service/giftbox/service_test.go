@@ -2,6 +2,7 @@ package giftbox
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -12,8 +13,30 @@ import (
 )
 
 type fakeStore struct {
-	mu    sync.Mutex
-	boxes map[primitive.ObjectID]domain.TeacherGiftBox
+	mu        sync.Mutex
+	boxes     map[primitive.ObjectID]domain.TeacherGiftBox
+	cohorts   map[int][]primitive.ObjectID
+	grantKeys map[string]bool
+	failUser  primitive.ObjectID
+}
+
+func (s *fakeStore) ListCohortLearners(_ context.Context, cohort int) ([]primitive.ObjectID, error) {
+	return s.cohorts[cohort], nil
+}
+
+func (s *fakeStore) CreateOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if box.UserID == s.failUser {
+		s.failUser = primitive.NilObjectID
+		return false, errors.New("temporary write failure")
+	}
+	if s.grantKeys[box.GrantKey] {
+		return false, nil
+	}
+	s.grantKeys[box.GrantKey] = true
+	s.boxes[box.ID] = box
+	return true, nil
 }
 
 func (s *fakeStore) Create(_ context.Context, box domain.TeacherGiftBox) error {
@@ -21,6 +44,30 @@ func (s *fakeStore) Create(_ context.Context, box domain.TeacherGiftBox) error {
 	defer s.mu.Unlock()
 	s.boxes[box.ID] = box
 	return nil
+}
+
+func TestCohortGrantReportsPartialFailuresAndRetriesWithoutDuplicates(t *testing.T) {
+	learners := []primitive.ObjectID{primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()}
+	store := &fakeStore{
+		boxes:     map[primitive.ObjectID]domain.TeacherGiftBox{},
+		cohorts:   map[int][]primitive.ObjectID{16: learners},
+		grantKeys: map[string]bool{},
+		failUser:  learners[1],
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+	admin := primitive.NewObjectID()
+
+	first, err := service.GrantCohort(context.Background(), 16, admin.Hex(), "Epic", "For a strong sprint", "sprint-16")
+	if err != nil || first.Created != 2 || len(first.Failures) != 1 {
+		t.Fatalf("first cohort grant = %+v, err=%v", first, err)
+	}
+	second, err := service.GrantCohort(context.Background(), 16, admin.Hex(), "Epic", "For a strong sprint", "sprint-16")
+	if err != nil || second.Created != 1 || second.Existing != 2 || len(second.Failures) != 0 {
+		t.Fatalf("retry cohort grant = %+v, err=%v", second, err)
+	}
+	if len(store.boxes) != 3 {
+		t.Fatalf("retry created duplicates: %d boxes", len(store.boxes))
+	}
 }
 
 func (s *fakeStore) ListForUser(_ context.Context, userID primitive.ObjectID) ([]domain.TeacherGiftBox, error) {

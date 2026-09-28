@@ -20,6 +20,12 @@ type grantGiftBoxRequest struct {
 	Message       string `json:"message"`
 }
 
+type grantCohortGiftBoxesRequest struct {
+	MinimumRarity  string `json:"minimum_rarity"`
+	Message        string `json:"message"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
 func NewGiftBoxHandler(service *giftbox.Service) *GiftBoxHandler {
 	return &GiftBoxHandler{service: service}
 }
@@ -43,6 +49,32 @@ func (h *GiftBoxHandler) Grant(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SendResponse(c, fiber.StatusCreated, "Gift box sent", box)
+}
+
+func (h *GiftBoxHandler) GrantCohort(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body grantCohortGiftBoxesRequest
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	body.MinimumRarity = strings.TrimSpace(body.MinimumRarity)
+	body.Message = strings.TrimSpace(body.Message)
+	body.IdempotencyKey = strings.TrimSpace(body.IdempotencyKey)
+	if !validMinimumRarity(body.MinimumRarity) || body.Message == "" || len(body.Message) > 500 || body.IdempotencyKey == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "A valid rarity, message, and idempotency key are required")
+	}
+	cohort, err := c.ParamsInt("cohortNumber")
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort number")
+	}
+	result, err := h.service.GrantCohort(context.Background(), cohort, claims.UserID, body.MinimumRarity, body.Message, body.IdempotencyKey)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Cohort gift boxes processed", result)
 }
 
 func (h *GiftBoxHandler) List(c *fiber.Ctx) error {
