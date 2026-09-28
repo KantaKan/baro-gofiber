@@ -65,6 +65,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Post("/:id/fertilizer/gift", h.User.GiftFertilizer)
 	protected.Post("/:id/fertilizer/rescue", h.User.RescueFertilizer)
 
+	app.Get("/holidays", middleware.AuthMiddleware, h.Holiday.GetHolidays)
+
 	cosmetics := app.Group("/plant-cosmetics", middleware.AuthMiddleware)
 	cosmetics.Get("/catalog", h.Cosmetic.GetCatalog)
 	cosmetics.Get("/collection", h.Cosmetic.GetCollection)
