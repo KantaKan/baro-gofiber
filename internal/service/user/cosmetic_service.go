@@ -12,7 +12,7 @@ import (
 type cosmeticUserStore interface {
 	FindByID(ctx interface{}, id primitive.ObjectID) (*domain.User, error)
 	GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error)
-	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string) (bool, error)
+	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot, legacyValue string) (bool, error)
 	EquipCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error
 	UnequipCosmetic(ctx interface{}, userID primitive.ObjectID, slot string) error
 }
@@ -68,7 +68,7 @@ func (s *CosmeticService) Revoke(userID, cosmeticID string) (bool, error) {
 	if !found || item.Starter {
 		return false, errors.New("cosmetic is not eligible for revocation")
 	}
-	return s.users.RevokeCosmetic(context.Background(), id, cosmeticID, item.Slot)
+	return s.users.RevokeCosmetic(context.Background(), id, cosmeticID, item.Slot, item.PreviewValue)
 }
 
 func (s *CosmeticService) Equip(userID, slot, cosmeticID string) error {

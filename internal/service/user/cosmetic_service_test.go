@@ -10,9 +10,10 @@ import (
 )
 
 type cosmeticUserReaderStub struct {
-	user     *domain.User
-	owned    map[string]bool
-	equipped map[string]string
+	user               *domain.User
+	owned              map[string]bool
+	equipped           map[string]string
+	revokedLegacyValue *string
 }
 
 func (s cosmeticUserReaderStub) EquipCosmetic(_ interface{}, _ primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error {
@@ -36,7 +37,10 @@ func (s cosmeticUserReaderStub) GrantCosmetic(_ interface{}, _ primitive.ObjectI
 	return true, nil
 }
 
-func (s cosmeticUserReaderStub) RevokeCosmetic(_ interface{}, _ primitive.ObjectID, cosmeticID, _ string) (bool, error) {
+func (s cosmeticUserReaderStub) RevokeCosmetic(_ interface{}, _ primitive.ObjectID, cosmeticID, _, legacyValue string) (bool, error) {
+	if s.revokedLegacyValue != nil {
+		*s.revokedLegacyValue = legacyValue
+	}
 	if !s.owned[cosmeticID] {
 		return false, nil
 	}
@@ -62,8 +66,9 @@ func (s cosmeticUserReaderStub) FindByID(_ interface{}, _ primitive.ObjectID) (*
 func TestCosmeticOwnershipIsDuplicateSafe(t *testing.T) {
 	userID := primitive.NewObjectID()
 	owned := map[string]bool{}
+	legacyValue := ""
 	notifier := &cosmeticNotifierStub{}
-	service := NewCosmeticService(cosmeticUserReaderStub{owned: owned}, notifier)
+	service := NewCosmeticService(cosmeticUserReaderStub{owned: owned, revokedLegacyValue: &legacyValue}, notifier)
 
 	granted, err := service.Grant(userID.Hex(), "palette:ocean", "Your thoughtful reflection earned this color.")
 	if err != nil || !granted {
@@ -80,6 +85,9 @@ func TestCosmeticOwnershipIsDuplicateSafe(t *testing.T) {
 	revoked, err := service.Revoke(userID.Hex(), "palette:ocean")
 	if err != nil || !revoked || owned["palette:ocean"] {
 		t.Fatalf("revoke failed: revoked=%v err=%v owned=%v", revoked, err, owned)
+	}
+	if legacyValue != "Ocean" {
+		t.Fatalf("revoke did not identify matching legacy selection: %q", legacyValue)
 	}
 }
 

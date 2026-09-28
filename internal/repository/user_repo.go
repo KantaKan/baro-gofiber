@@ -124,7 +124,7 @@ func (r *userRepository) GrantCosmetic(ctx interface{}, userID primitive.ObjectI
 	return result.ModifiedCount == 1, nil
 }
 
-func (r *userRepository) RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string) (bool, error) {
+func (r *userRepository) RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot, legacyValue string) (bool, error) {
 	c := ctx.(context.Context)
 	result, err := r.collection.UpdateOne(
 		c,
@@ -142,6 +142,17 @@ func (r *userRepository) RevokeCosmetic(ctx interface{}, userID primitive.Object
 		)
 		if err != nil {
 			return true, err
+		}
+		if slot == "palette" || slot == "pot" {
+			legacyField := "selected_" + slot
+			_, err = r.collection.UpdateOne(
+				c,
+				bson.M{"_id": userID, legacyField: legacyValue},
+				bson.M{"$unset": bson.M{legacyField: ""}},
+			)
+			if err != nil {
+				return true, err
+			}
 		}
 	}
 	return result.ModifiedCount == 1, nil
