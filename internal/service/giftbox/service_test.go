@@ -83,9 +83,10 @@ func (s *fakeStore) ListForUser(_ context.Context, userID primitive.ObjectID) ([
 }
 
 type fakeDrawer struct {
-	mu      sync.Mutex
-	results map[string]*reward.DrawResult
-	calls   int
+	mu       sync.Mutex
+	results  map[string]*reward.DrawResult
+	calls    int
+	requests []reward.DrawRequest
 }
 
 func (d *fakeDrawer) Open(_ context.Context, request reward.DrawRequest) (*reward.DrawResult, error) {
@@ -95,9 +96,27 @@ func (d *fakeDrawer) Open(_ context.Context, request reward.DrawRequest) (*rewar
 		return result, nil
 	}
 	d.calls++
+	d.requests = append(d.requests, request)
 	result := &reward.DrawResult{IdempotencyKey: request.IdempotencyKey, UserID: request.UserID, Item: domain.CosmeticCatalogItem{ID: "pot:starlight", Name: "Starlight Pot"}}
 	d.results[request.IdempotencyKey] = result
 	return result, nil
+}
+
+func TestAchievementBoxesDrawFromAchievementPool(t *testing.T) {
+	learner := primitive.NewObjectID()
+	boxID := primitive.NewObjectID()
+	store := &fakeStore{boxes: map[primitive.ObjectID]domain.TeacherGiftBox{
+		boxID: {ID: boxID, UserID: learner, MinimumRarity: "Epic", Status: "unopened", Source: "achievement"},
+	}}
+	drawer := &fakeDrawer{results: map[string]*reward.DrawResult{}}
+	service := NewService(store, drawer)
+
+	if _, err := service.Open(context.Background(), learner.Hex(), boxID.Hex()); err != nil {
+		t.Fatal(err)
+	}
+	if len(drawer.requests) != 1 || drawer.requests[0].Pool != "achievement" {
+		t.Fatalf("draw request = %+v", drawer.requests)
+	}
 }
 
 func TestGiftBoxesAreVisibleOnlyToTheirLearner(t *testing.T) {

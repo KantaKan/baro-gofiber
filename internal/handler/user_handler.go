@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/achievement"
 	"gofiber-baro/internal/service/milestone"
 	"gofiber-baro/internal/service/user"
 	middleware "gofiber-baro/pkg/middleware"
@@ -23,11 +24,17 @@ type UserHandler struct {
 	userService       *user.Service
 	fertilizerService *user.FertilizerService
 	milestones        milestoneReconciler
+	achievements      achievementReconciler
 	db                interface{}
 }
 
 type milestoneReconciler interface {
 	Reconcile(ctx context.Context, userID primitive.ObjectID, now time.Time) ([]domain.TeacherGiftBox, error)
+}
+
+type achievementReconciler interface {
+	Reconcile(ctx context.Context, userID primitive.ObjectID, now time.Time) ([]domain.TeacherGiftBox, error)
+	RecordSocial(ctx context.Context, userID primitive.ObjectID, event string, now time.Time) (*domain.TeacherGiftBox, error)
 }
 
 // ponytail: mirrors the PALETTES name list in react-genbaro/src/lib/plant-variants.ts — keep in sync
@@ -57,8 +64,8 @@ var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide":
 var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
 var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
 
-func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService, milestones *milestone.Service) *UserHandler {
-	return &UserHandler{userService: userService, fertilizerService: fertilizerService, milestones: milestones}
+func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService, milestones *milestone.Service, achievements *achievement.Service) *UserHandler {
+	return &UserHandler{userService: userService, fertilizerService: fertilizerService, milestones: milestones, achievements: achievements}
 }
 
 func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
@@ -183,6 +190,13 @@ func (h *UserHandler) ReconcileReflectionMilestones(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to reconcile rewards for this user")
 	}
 	boxes, err := h.milestones.Reconcile(c.UserContext(), objectID, utils.GetThailandTime())
+	if h.achievements != nil {
+		achievementBoxes, achievementErr := h.achievements.Reconcile(c.UserContext(), objectID, utils.GetThailandTime())
+		boxes = append(boxes, achievementBoxes...)
+		if err == nil {
+			err = achievementErr
+		}
+	}
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Reward reconciliation can be retried")
 	}
@@ -195,9 +209,25 @@ func (h *UserHandler) attachMilestoneRewards(ctx context.Context, userID primiti
 	}
 	boxes, err := h.milestones.Reconcile(ctx, userID, utils.GetThailandTime())
 	reflection.RewardBoxes = boxes
+	if h.achievements != nil {
+		achievementBoxes, achievementErr := h.achievements.Reconcile(ctx, userID, utils.GetThailandTime())
+		reflection.RewardBoxes = append(reflection.RewardBoxes, achievementBoxes...)
+		if err == nil {
+			err = achievementErr
+		}
+	}
 	if err != nil {
 		log.Printf("milestone reconciliation error for user %s: %v", userID.Hex(), err)
 		reflection.RewardWarning = "Your reflection was saved. Your reward will be checked again shortly."
+	}
+}
+
+func (h *UserHandler) recordSocialAchievement(ctx context.Context, userID primitive.ObjectID, event string) {
+	if h.achievements == nil {
+		return
+	}
+	if _, err := h.achievements.RecordSocial(ctx, userID, event, utils.GetThailandTime()); err != nil {
+		log.Printf("social achievement error for user %s: %v", userID.Hex(), err)
 	}
 }
 
@@ -469,6 +499,7 @@ func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
 		}
 	}
 
+	h.recordSocialAchievement(c.UserContext(), giverOID, "fertilizer-gift")
 	return utils.SendResponse(c, fiber.StatusOK, "Fertilizer sent", nil)
 }
 
@@ -502,6 +533,7 @@ func (h *UserHandler) RescueFertilizer(c *fiber.Ctx) error {
 		}
 	}
 
+	h.recordSocialAchievement(c.UserContext(), giverOID, "streak-rescue")
 	return utils.SendResponse(c, fiber.StatusOK, "Day rescued", nil)
 }
 
@@ -544,8 +576,8 @@ func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 	}
 
 	update := bson.M{
-		"bio": body.Bio,
-		"social_links": body.SocialLinks,
+		"bio":              body.Bio,
+		"social_links":     body.SocialLinks,
 		"selected_palette": body.SelectedPalette,
 	}
 
@@ -983,6 +1015,7 @@ func (h *UserHandler) AddProfileReaction(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
 
+	h.recordSocialAchievement(c.UserContext(), reactorOID, "profile-reaction")
 	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
 }
 
@@ -1037,6 +1070,7 @@ func (h *UserHandler) AddPlantReaction(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
 
+	h.recordSocialAchievement(c.UserContext(), reactorOID, "garden-cheer")
 	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
 }
 

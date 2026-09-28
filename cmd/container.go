@@ -6,6 +6,7 @@ import (
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/handler"
 	"gofiber-baro/internal/repository"
+	"gofiber-baro/internal/service/achievement"
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/giftbox"
 	"gofiber-baro/internal/service/holiday"
@@ -51,6 +52,7 @@ type Container struct {
 	RewardService               *reward.Service
 	GiftBoxService              *giftbox.Service
 	MilestoneService            *milestone.Service
+	AchievementService          *achievement.Service
 	AttendanceCodeService       *attendance.CodeService
 	AttendanceSubmissionService *attendance.SubmissionService
 	AttendanceStatsService      *attendance.StatsService
@@ -119,6 +121,7 @@ func (c *Container) initServices() {
 	c.RewardService = reward.NewService(c.GiftBoxRepo, reward.NewSelector(reward.SystemRandom{}), c.CosmeticService.Catalog())
 	c.GiftBoxService = giftbox.NewService(c.GiftBoxRepo, c.RewardService)
 	c.MilestoneService = milestone.NewService(c.UserRepo, c.GiftBoxRepo, c.HolidayService)
+	c.AchievementService = achievement.NewService(c.UserRepo, c.GiftBoxRepo, c.HolidayService)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
 	c.AttendanceSubmissionService = attendance.NewSubmissionService(c.AttendanceRepo, c.UserService)
@@ -128,7 +131,7 @@ func (c *Container) initServices() {
 }
 
 func (c *Container) initHandlers() {
-	c.UserHandler = handler.NewUserHandler(c.UserService, c.FertilizerService, c.MilestoneService)
+	c.UserHandler = handler.NewUserHandler(c.UserService, c.FertilizerService, c.MilestoneService, c.AchievementService)
 	c.AdminHandler = handler.NewAdminHandler(c.UserService, c.BadgeService, c.FertilizerService, c.ReflectionService, c.BarometerService)
 	c.AttendanceHandler = handler.NewAttendanceHandler(
 		c.AttendanceCodeService,
