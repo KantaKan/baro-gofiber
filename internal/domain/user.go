@@ -117,6 +117,7 @@ type User struct {
 	FertilizerBalance int                  `bson:"fertilizer_balance,omitempty" json:"fertilizer_balance,omitempty"`
 	GrowthPoints      int                  `bson:"growth_points,omitempty" json:"growth_points,omitempty"`
 	FertilizerLog     []FertilizerLogEntry `bson:"fertilizer_log,omitempty" json:"fertilizer_log,omitempty"`
+	GiftBoxes         []TeacherGiftBox     `bson:"gift_boxes,omitempty" json:"gift_boxes,omitempty"`
 }
 
 // UserSafe is a restricted version of User for non-admin users

@@ -7,10 +7,12 @@ import (
 	"gofiber-baro/internal/handler"
 	"gofiber-baro/internal/repository"
 	"gofiber-baro/internal/service/attendance"
+	"gofiber-baro/internal/service/giftbox"
 	"gofiber-baro/internal/service/holiday"
 	leaveService "gofiber-baro/internal/service/leave"
 	notificationService "gofiber-baro/internal/service/notification"
 	reflectionService "gofiber-baro/internal/service/reflection"
+	"gofiber-baro/internal/service/reward"
 	userService "gofiber-baro/internal/service/user"
 	"gofiber-baro/internal/storage"
 	"gofiber-baro/pkg/middleware"
@@ -32,6 +34,7 @@ type Container struct {
 	StampRepo          domain.StampRepository
 	CohortRepo         domain.CohortRepository
 	AuditLogRepo       domain.AuditLogRepository
+	GiftBoxRepo        *repository.GiftBoxRepository
 
 	StampStorage storage.Storage
 
@@ -44,6 +47,8 @@ type Container struct {
 	LeaveService                *leaveService.Service
 	HolidayService              *holiday.Service
 	NotificationService         *notificationService.Service
+	RewardService               *reward.Service
+	GiftBoxService              *giftbox.Service
 	AttendanceCodeService       *attendance.CodeService
 	AttendanceSubmissionService *attendance.SubmissionService
 	AttendanceStatsService      *attendance.StatsService
@@ -60,6 +65,7 @@ type Container struct {
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
 	CosmeticHandler     *handler.CosmeticHandler
+	GiftBoxHandler      *handler.GiftBoxHandler
 
 	AuditMiddleware fiber.Handler
 }
@@ -86,6 +92,7 @@ func (c *Container) initRepositories() {
 	c.StampRepo = repository.NewStampRepository(c.DB)
 	c.CohortRepo = repository.NewCohortRepository(c.DB)
 	c.AuditLogRepo = repository.NewAuditLogRepository(c.DB)
+	c.GiftBoxRepo = repository.NewGiftBoxRepository(c.DB)
 }
 
 func (c *Container) initStorage() {
@@ -107,6 +114,8 @@ func (c *Container) initServices() {
 	c.FertilizerService = userService.NewFertilizerService(c.UserRepo, c.HolidayService)
 	c.NotificationService = notificationService.NewService(c.NotificationRepo)
 	c.CosmeticService = userService.NewCosmeticService(c.UserRepo, c.NotificationService)
+	c.RewardService = reward.NewService(c.GiftBoxRepo, reward.NewSelector(reward.SystemRandom{}), c.CosmeticService.Catalog())
+	c.GiftBoxService = giftbox.NewService(c.GiftBoxRepo, c.RewardService)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
 	c.AttendanceSubmissionService = attendance.NewSubmissionService(c.AttendanceRepo, c.UserService)
@@ -133,6 +142,7 @@ func (c *Container) initHandlers() {
 	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
 	c.HistoryHandler = handler.NewHistoryHandler(c.AuditLogRepo, c.UserRepo)
 	c.CosmeticHandler = handler.NewCosmeticHandler(c.CosmeticService)
+	c.GiftBoxHandler = handler.NewGiftBoxHandler(c.GiftBoxService)
 
 	c.AuditMiddleware = middleware.AuditMiddleware(c.AuditLogRepo)
 }

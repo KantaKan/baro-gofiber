@@ -3,6 +3,7 @@ package reward
 import (
 	"errors"
 	"math"
+	"math/rand/v2"
 
 	"gofiber-baro/internal/domain"
 )
@@ -15,6 +16,12 @@ var standardWeights = map[string]float64{"Common": 55, "Rare": 30, "Epic": 12, "
 
 type RandomSource interface {
 	Float64() float64
+}
+
+type SystemRandom struct{}
+
+func (SystemRandom) Float64() float64 {
+	return rand.Float64()
 }
 
 type SelectionInput struct {

@@ -21,6 +21,7 @@ type Handlers struct {
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
+	GiftBox      *handler.GiftBoxHandler
 	Audit        fiber.Handler
 }
 
@@ -69,6 +70,10 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	cosmetics.Put("/equipment/:slot", h.Cosmetic.EquipCosmetic)
 	cosmetics.Delete("/equipment/:slot", h.Cosmetic.UnequipCosmetic)
 
+	giftBoxes := app.Group("/gift-boxes", middleware.AuthMiddleware)
+	giftBoxes.Get("", h.GiftBox.List)
+	giftBoxes.Post("/:id/open", h.GiftBox.Open)
+
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
 		Expiration: 1 * time.Minute,
@@ -94,6 +99,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Get("/users/:id/cosmetics", h.Cosmetic.GetAdminCollection)
 	admin.Post("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.GrantCosmetic)
 	admin.Delete("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.RevokeCosmetic)
+	admin.Post("/users/:id/gift-boxes", h.GiftBox.Grant)
 	admin.Post("/users/bulk-register", h.Admin.BulkRegisterUsers)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)
