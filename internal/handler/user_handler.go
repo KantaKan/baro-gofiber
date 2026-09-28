@@ -1015,7 +1015,9 @@ func (h *UserHandler) AddProfileReaction(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
 
-	h.recordSocialAchievement(c.UserContext(), reactorOID, "profile-reaction")
+	if targetOID != reactorOID {
+		h.recordSocialAchievement(c.UserContext(), reactorOID, "profile-reaction")
+	}
 	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
 }
 
@@ -1070,7 +1072,9 @@ func (h *UserHandler) AddPlantReaction(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
 
-	h.recordSocialAchievement(c.UserContext(), reactorOID, "garden-cheer")
+	if targetOID != reactorOID {
+		h.recordSocialAchievement(c.UserContext(), reactorOID, "garden-cheer")
+	}
 	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
 }
 

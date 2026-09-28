@@ -125,16 +125,21 @@ func (s *Service) Open(ctx context.Context, userID, boxID string) (*reward.DrawR
 	if box == nil {
 		return nil, ErrBoxNotFound
 	}
-	pool := "teacher-box"
-	if box.Source == "reflection-milestone" {
-		pool = "reflection"
-	} else if box.Source == "achievement" {
-		pool = "achievement"
-	}
 	return s.drawer.Open(ctx, reward.DrawRequest{
 		IdempotencyKey: box.ID.Hex(),
 		UserID:         userID,
-		Pool:           pool,
+		Pool:           drawPool(box.Source),
 		MinimumRarity:  box.MinimumRarity,
 	})
+}
+
+func drawPool(source string) string {
+	switch source {
+	case "achievement":
+		return "achievement"
+	case "reflection-milestone":
+		return "reflection"
+	default:
+		return "teacher-box"
+	}
 }

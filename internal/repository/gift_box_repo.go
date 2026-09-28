@@ -172,9 +172,20 @@ func drawResult(userID primitive.ObjectID, box domain.TeacherGiftBox) *reward.Dr
 	return &reward.DrawResult{
 		IdempotencyKey: box.ID.Hex(),
 		UserID:         userID.Hex(),
-		Pool:           "teacher-box",
+		Pool:           giftBoxPool(box.Source),
 		MinimumRarity:  box.MinimumRarity,
 		Item:           *box.Reward,
 		CreatedAt:      createdAt,
+	}
+}
+
+func giftBoxPool(source string) string {
+	switch source {
+	case "achievement":
+		return "achievement"
+	case "reflection-milestone":
+		return "reflection"
+	default:
+		return "teacher-box"
 	}
 }
