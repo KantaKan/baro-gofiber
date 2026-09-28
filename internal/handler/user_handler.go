@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"html"
 	"log"
 	"strings"
 	"time"
+
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/milestone"
 	"gofiber-baro/internal/service/user"
 	middleware "gofiber-baro/pkg/middleware"
 	"gofiber-baro/pkg/utils"
@@ -19,7 +22,12 @@ import (
 type UserHandler struct {
 	userService       *user.Service
 	fertilizerService *user.FertilizerService
+	milestones        milestoneReconciler
 	db                interface{}
+}
+
+type milestoneReconciler interface {
+	Reconcile(ctx context.Context, userID primitive.ObjectID, now time.Time) ([]domain.TeacherGiftBox, error)
 }
 
 // ponytail: mirrors the PALETTES name list in react-genbaro/src/lib/plant-variants.ts — keep in sync
@@ -49,8 +57,8 @@ var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide":
 var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
 var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
 
-func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService) *UserHandler {
-	return &UserHandler{userService: userService, fertilizerService: fertilizerService}
+func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService, milestones *milestone.Service) *UserHandler {
+	return &UserHandler{userService: userService, fertilizerService: fertilizerService, milestones: milestones}
 }
 
 func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
@@ -156,8 +164,41 @@ func (h *UserHandler) CreateReflection(c *fiber.Ctx) error {
 		log.Printf("CreateReflection error for user %s: %v", objectID.Hex(), err)
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error creating reflection")
 	}
+	h.attachMilestoneRewards(c.UserContext(), objectID, createdReflection)
 
 	return utils.SendResponse(c, fiber.StatusCreated, "Reflection successfully created", createdReflection)
+}
+
+func (h *UserHandler) ReconcileReflectionMilestones(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.Role != "admin" && claims.UserID != userID {
+		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to reconcile rewards for this user")
+	}
+	boxes, err := h.milestones.Reconcile(c.UserContext(), objectID, utils.GetThailandTime())
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Reward reconciliation can be retried")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Reflection rewards reconciled", boxes)
+}
+
+func (h *UserHandler) attachMilestoneRewards(ctx context.Context, userID primitive.ObjectID, reflection *domain.Reflection) {
+	if h.milestones == nil || reflection == nil {
+		return
+	}
+	boxes, err := h.milestones.Reconcile(ctx, userID, utils.GetThailandTime())
+	reflection.RewardBoxes = boxes
+	if err != nil {
+		log.Printf("milestone reconciliation error for user %s: %v", userID.Hex(), err)
+		reflection.RewardWarning = "Your reflection was saved. Your reward will be checked again shortly."
+	}
 }
 
 func (h *UserHandler) GetUserReflections(c *fiber.Ctx) error {

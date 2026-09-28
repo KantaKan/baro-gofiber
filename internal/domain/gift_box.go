@@ -17,4 +17,5 @@ type TeacherGiftBox struct {
 	CreatedAt     time.Time            `bson:"created_at" json:"created_at"`
 	OpenedAt      *time.Time           `bson:"opened_at,omitempty" json:"opened_at,omitempty"`
 	GrantKey      string               `bson:"grant_key,omitempty" json:"-"`
+	Source        string               `bson:"source,omitempty" json:"source,omitempty"`
 }

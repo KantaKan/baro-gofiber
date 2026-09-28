@@ -41,6 +41,8 @@ type Reflection struct {
 	CreatedAt      time.Time          `bson:"createdAt" json:"createdAt"`
 	ReflectionData ReflectionContent  `bson:"reflection" json:"reflection"`
 	AdminFeedback  string             `bson:"admin_feedback,omitempty" json:"admin_feedback,omitempty"`
+	RewardBoxes    []TeacherGiftBox   `bson:"-" json:"reward_boxes,omitempty"`
+	RewardWarning  string             `bson:"-" json:"reward_warning,omitempty"`
 }
 
 func (r Reflection) MarshalJSON() ([]byte, error) {

@@ -54,6 +54,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Put("/:id", h.User.UpdateUser)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
 	protected.Get("/:id/reflections", h.User.GetUserReflections)
+	protected.Post("/:id/reflection-rewards/reconcile", h.User.ReconcileReflectionMilestones)
 	protected.Put("/:id/personal-details", h.User.UpdatePersonalDetails)
 	protected.Post("/:id/profile/comments", h.User.AddProfileComment)
 	protected.Delete("/:id/profile/comments/:commentId", h.User.DeleteProfileComment)
