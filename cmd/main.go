@@ -69,6 +69,18 @@ func main() {
 	log.Println("Successfully connected to MongoDB")
 
 	container := NewContainer(config.DB)
+	indexCtx, cancelIndexes := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.CharacterRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure Baro character indexes:", err)
+	}
+	cancelIndexes()
+	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.GodEventRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure GOD event indexes:", err)
+	}
+	cancelIndexes()
 
 	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
 
@@ -131,6 +143,11 @@ func main() {
 		Notification: container.NotificationHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
+		Cosmetic:     container.CosmeticHandler,
+		GiftBox:      container.GiftBoxHandler,
+		Character:    container.CharacterHandler,
+		Showcase:     container.ShowcaseHandler,
+		GodEvent:     container.GodEventHandler,
 		Audit:        container.AuditMiddleware,
 	}
 

@@ -20,6 +20,11 @@ type Handlers struct {
 	Notification *handler.NotificationHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
+	Cosmetic     *handler.CosmeticHandler
+	GiftBox      *handler.GiftBoxHandler
+	Character    *handler.BaroCharacterHandler
+	Showcase     *handler.ShowcaseHandler
+	GodEvent     *handler.GodEventHandler
 	Audit        fiber.Handler
 }
 
@@ -52,15 +57,56 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Put("/:id", h.User.UpdateUser)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
 	protected.Get("/:id/reflections", h.User.GetUserReflections)
+	protected.Post("/:id/reflection-rewards/reconcile", h.User.ReconcileReflectionMilestones)
 	protected.Put("/:id/personal-details", h.User.UpdatePersonalDetails)
 	protected.Post("/:id/profile/comments", h.User.AddProfileComment)
 	protected.Delete("/:id/profile/comments/:commentId", h.User.DeleteProfileComment)
 	protected.Post("/:id/profile/reactions", h.User.AddProfileReaction)
 	protected.Post("/:id/plant/reactions", h.User.AddPlantReaction)
-	protected.Post("/:id/fertilizer/protect", h.User.UseFertilizerProtect)
-	protected.Post("/:id/fertilizer/feed", h.User.UseFertilizerFeed)
-	protected.Post("/:id/fertilizer/gift", h.User.GiftFertilizer)
-	protected.Post("/:id/fertilizer/rescue", h.User.RescueFertilizer)
+	protected.Get("/:id/care-energy", h.User.GetCareEnergy)
+	protected.Post("/:id/care-energy/protect", h.User.UseCareEnergyProtect)
+	protected.Post("/:id/care-energy/feed", h.User.UseCareEnergyFeed)
+	protected.Post("/:id/care-energy/gift", h.User.GiftCareEnergy)
+	protected.Post("/:id/care-energy/rescue", h.User.RescueCareEnergy)
+	protected.Post("/:id/care-energy/character-care", h.User.CareForCharacter)
+
+	app.Get("/holidays", middleware.AuthMiddleware, h.Holiday.GetHolidays)
+
+	cosmetics := app.Group("/plant-cosmetics", middleware.AuthMiddleware)
+	cosmetics.Get("/catalog", h.Cosmetic.GetCatalog)
+	cosmetics.Get("/collection", h.Cosmetic.GetCollection)
+	cosmetics.Put("/equipment/:slot", h.Cosmetic.EquipCosmetic)
+	cosmetics.Delete("/equipment/:slot", h.Cosmetic.UnequipCosmetic)
+
+	characterCosmetics := app.Group("/character-cosmetics", middleware.AuthMiddleware)
+	characterCosmetics.Get("/catalog", h.Cosmetic.GetCharacterCatalog)
+	characterCosmetics.Get("/collection", h.Cosmetic.GetCharacterCollection)
+	characterCosmetics.Put("/equipment/:slot", h.Cosmetic.EquipCharacterCosmetic)
+	characterCosmetics.Delete("/equipment/:slot", h.Cosmetic.UnequipCharacterCosmetic)
+
+	giftBoxes := app.Group("/gift-boxes", middleware.AuthMiddleware)
+	giftBoxes.Get("", h.GiftBox.List)
+	giftBoxes.Get("/recipients", h.GiftBox.SearchRecipients)
+	giftBoxes.Get("/:id/odds", h.GiftBox.Odds)
+	giftBoxes.Post("/:id/open", h.GiftBox.Open)
+	giftBoxes.Post("/:id/transfer", h.GiftBox.Transfer)
+
+	characters := app.Group("/baro-characters", middleware.AuthMiddleware)
+	characters.Get("", h.Character.Collection)
+	characters.Get("/growth", h.Character.Growth)
+	characters.Get("/selection", h.Character.Selection)
+	characters.Put("/equipped", h.Character.Equip)
+	characters.Put("/pinned", h.Character.Pin)
+	characters.Post("/reveal", h.Character.RevealStarter)
+
+	lawn := app.Group("/showcase-lawn", middleware.AuthMiddleware)
+	lawn.Get("", h.Showcase.List)
+	lawn.Get("/me", h.Showcase.Mine)
+	lawn.Put("/me", h.Showcase.Save)
+	lawn.Delete("/me", h.Showcase.Remove)
+	lawn.Post("/:ownerId/reactions", h.Showcase.React)
+
+	app.Get("/god-events", middleware.AuthMiddleware, h.GodEvent.List)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
@@ -81,9 +127,24 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)
 	admin.Delete("/users/:id", h.Admin.DeleteUser)
 	admin.Post("/badges/bulk", h.Admin.BulkAwardBadge)
-	admin.Post("/users/:id/fertilizer", h.Admin.GrantFertilizer)
-	admin.Post("/fertilizer/bulk", h.Admin.BulkGrantFertilizer)
+	admin.Post("/users/:id/care-energy", h.Admin.GrantCareEnergy)
+	admin.Post("/care-energy/bulk", h.Admin.BulkGrantCareEnergy)
 	admin.Patch("/users/:id/plant", h.Admin.UpdatePlantOverride)
+	admin.Get("/users/:id/cosmetics", h.Cosmetic.GetAdminCollection)
+	admin.Post("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.GrantCosmetic)
+	admin.Get("/users/:id/character-cosmetics", h.Cosmetic.GetAdminCharacterCollection)
+	admin.Post("/users/:id/character-cosmetics/:cosmeticId", h.Cosmetic.GrantCharacterCosmetic)
+	admin.Get("/users/:id/baro-characters", h.Character.AdminCollection)
+	admin.Get("/users/:id/baro-characters/selection", h.Character.AdminSelection)
+	admin.Post("/users/:id/baro-characters", h.Character.AdminGrant)
+	admin.Put("/users/:id/baro-characters/equipped", h.Character.AdminEquip)
+	admin.Put("/users/:id/baro-characters/pinned", h.Character.AdminPin)
+	admin.Delete("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.RevokeCosmetic)
+	admin.Post("/users/:id/gift-boxes", h.GiftBox.Grant)
+	admin.Post("/cohorts/:cohortNumber/gift-boxes", h.GiftBox.GrantCohort)
+	admin.Put("/showcase-lawn/:ownerId/moderation", h.Showcase.Moderate)
+	admin.Post("/god-events", handler.GodEventCastLimiter(), h.GodEvent.Cast)
+	admin.Get("/cohorts/:cohortNumber/gift-boxes/recipients", h.GiftBox.PreviewAudience)
 	admin.Post("/users/bulk-register", h.Admin.BulkRegisterUsers)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)

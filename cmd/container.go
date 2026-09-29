@@ -6,11 +6,18 @@ import (
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/handler"
 	"gofiber-baro/internal/repository"
+	"gofiber-baro/internal/service/achievement"
 	"gofiber-baro/internal/service/attendance"
+	"gofiber-baro/internal/service/character"
+	"gofiber-baro/internal/service/giftbox"
+	"gofiber-baro/internal/service/godevent"
 	"gofiber-baro/internal/service/holiday"
 	leaveService "gofiber-baro/internal/service/leave"
+	"gofiber-baro/internal/service/milestone"
 	notificationService "gofiber-baro/internal/service/notification"
 	reflectionService "gofiber-baro/internal/service/reflection"
+	"gofiber-baro/internal/service/reward"
+	"gofiber-baro/internal/service/showcase"
 	userService "gofiber-baro/internal/service/user"
 	"gofiber-baro/internal/storage"
 	"gofiber-baro/pkg/middleware"
@@ -32,17 +39,31 @@ type Container struct {
 	StampRepo          domain.StampRepository
 	CohortRepo         domain.CohortRepository
 	AuditLogRepo       domain.AuditLogRepository
+	GiftBoxRepo        *repository.GiftBoxRepository
+	CharacterRepo      *repository.BaroCharacterRepository
+	ShowcaseRepo       *repository.ShowcaseRepository
+	GodEventRepo       *repository.GodEventRepository
 
 	StampStorage storage.Storage
 
 	UserService                 *userService.Service
 	BadgeService                *userService.BadgeService
-	FertilizerService           *userService.FertilizerService
+	CareEnergyService           *userService.CareEnergyService
+	CosmeticService             *userService.CosmeticService
 	ReflectionService           *reflectionService.Service
 	BarometerService            *reflectionService.BarometerService
 	LeaveService                *leaveService.Service
 	HolidayService              *holiday.Service
 	NotificationService         *notificationService.Service
+	RewardService               *reward.Service
+	GiftBoxService              *giftbox.Service
+	CharacterService            *character.Service
+	CharacterGrowthService      *character.GrowthService
+	CharacterOwnershipService   *character.OwnershipService
+	ShowcaseService             *showcase.Service
+	GodEventService             *godevent.Service
+	MilestoneService            *milestone.Service
+	AchievementService          *achievement.Service
 	AttendanceCodeService       *attendance.CodeService
 	AttendanceSubmissionService *attendance.SubmissionService
 	AttendanceStatsService      *attendance.StatsService
@@ -58,6 +79,11 @@ type Container struct {
 	NotificationHandler *handler.NotificationHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
+	CosmeticHandler     *handler.CosmeticHandler
+	GiftBoxHandler      *handler.GiftBoxHandler
+	CharacterHandler    *handler.BaroCharacterHandler
+	ShowcaseHandler     *handler.ShowcaseHandler
+	GodEventHandler     *handler.GodEventHandler
 
 	AuditMiddleware fiber.Handler
 }
@@ -84,6 +110,10 @@ func (c *Container) initRepositories() {
 	c.StampRepo = repository.NewStampRepository(c.DB)
 	c.CohortRepo = repository.NewCohortRepository(c.DB)
 	c.AuditLogRepo = repository.NewAuditLogRepository(c.DB)
+	c.GiftBoxRepo = repository.NewGiftBoxRepository(c.DB)
+	c.CharacterRepo = repository.NewBaroCharacterRepository(c.DB)
+	c.ShowcaseRepo = repository.NewShowcaseRepository(c.DB)
+	c.GodEventRepo = repository.NewGodEventRepository(c.DB)
 }
 
 func (c *Container) initStorage() {
@@ -102,8 +132,19 @@ func (c *Container) initServices() {
 	c.BarometerService = reflectionService.NewBarometerService(c.DB)
 	c.LeaveService = leaveService.NewService(c.LeaveRepo, c.UserService)
 	c.HolidayService = holiday.NewService(c.HolidayRepo, c.DB)
-	c.FertilizerService = userService.NewFertilizerService(c.UserRepo, c.HolidayService)
+	c.CareEnergyService = userService.NewCareEnergyService(c.UserRepo, c.HolidayService)
 	c.NotificationService = notificationService.NewService(c.NotificationRepo)
+	c.CosmeticService = userService.NewCosmeticService(c.UserRepo, c.NotificationService)
+	rewardCatalog := append(c.CosmeticService.Catalog(), c.CosmeticService.CharacterCatalog()...)
+	c.RewardService = reward.NewService(c.GiftBoxRepo, reward.NewSelector(reward.SystemRandom{}), rewardCatalog)
+	c.GiftBoxService = giftbox.NewService(c.GiftBoxRepo, c.RewardService)
+	c.CharacterService = character.NewService(c.CharacterRepo, character.SecurePicker{})
+	c.CharacterGrowthService = character.NewGrowthService(c.UserRepo, c.HolidayService)
+	c.CharacterOwnershipService = character.NewOwnershipService(c.CharacterRepo, character.SecurePicker{})
+	c.ShowcaseService = showcase.NewService(c.ShowcaseRepo)
+	c.GodEventService = godevent.NewService(c.GodEventRepo)
+	c.MilestoneService = milestone.NewService(c.UserRepo, c.GiftBoxRepo, c.HolidayService)
+	c.AchievementService = achievement.NewService(c.UserRepo, c.GiftBoxRepo, c.HolidayService)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
 	c.AttendanceSubmissionService = attendance.NewSubmissionService(c.AttendanceRepo, c.UserService)
@@ -113,8 +154,8 @@ func (c *Container) initServices() {
 }
 
 func (c *Container) initHandlers() {
-	c.UserHandler = handler.NewUserHandler(c.UserService, c.FertilizerService)
-	c.AdminHandler = handler.NewAdminHandler(c.UserService, c.BadgeService, c.FertilizerService, c.ReflectionService, c.BarometerService)
+	c.UserHandler = handler.NewUserHandler(c.UserService, c.CareEnergyService, c.MilestoneService, c.AchievementService)
+	c.AdminHandler = handler.NewAdminHandler(c.UserService, c.BadgeService, c.CareEnergyService, c.ReflectionService, c.BarometerService)
 	c.AttendanceHandler = handler.NewAttendanceHandler(
 		c.AttendanceCodeService,
 		c.AttendanceSubmissionService,
@@ -129,6 +170,11 @@ func (c *Container) initHandlers() {
 	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
 	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
 	c.HistoryHandler = handler.NewHistoryHandler(c.AuditLogRepo, c.UserRepo)
+	c.CosmeticHandler = handler.NewCosmeticHandler(c.CosmeticService)
+	c.GiftBoxHandler = handler.NewGiftBoxHandler(c.GiftBoxService)
+	c.CharacterHandler = handler.NewBaroCharacterHandler(c.CharacterService, c.CharacterGrowthService, c.CharacterOwnershipService)
+	c.ShowcaseHandler = handler.NewShowcaseHandler(c.ShowcaseService)
+	c.GodEventHandler = handler.NewGodEventHandler(c.GodEventService)
 
 	c.AuditMiddleware = middleware.AuditMiddleware(c.AuditLogRepo)
 }

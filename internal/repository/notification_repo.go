@@ -87,6 +87,32 @@ func (r *notificationRepository) GetActive() ([]domain.Notification, error) {
 	return notifications, nil
 }
 
+func (r *notificationRepository) GetActiveForUser(userID primitive.ObjectID) ([]domain.Notification, error) {
+	now := time.Now()
+	filter := bson.M{
+		"is_active":  true,
+		"start_date": bson.M{"$lte": now},
+		"end_date":   bson.M{"$gte": now},
+		"$or": bson.A{
+			bson.M{"recipient_ids": bson.M{"$exists": false}},
+			bson.M{"recipient_ids": bson.M{"$size": 0}},
+			bson.M{"recipient_ids": userID},
+		},
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
+	cursor, err := r.collection.Find(context.Background(), filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var notifications []domain.Notification
+	if err := cursor.All(context.Background(), &notifications); err != nil {
+		return nil, err
+	}
+	return notifications, nil
+}
+
 func (r *notificationRepository) Update(id primitive.ObjectID, updates map[string]interface{}) error {
 	if len(updates) == 0 {
 		return nil

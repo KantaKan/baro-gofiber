@@ -111,9 +111,95 @@ func (r *userRepository) AddBadge(ctx interface{}, userID primitive.ObjectID, ba
 	return err
 }
 
-func (r *userRepository) GrantFertilizer(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error {
+func (r *userRepository) GrantCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID string) (bool, error) {
 	c := ctx.(context.Context)
-	entry := domain.FertilizerLogEntry{
+	result, err := r.collection.UpdateOne(
+		c,
+		bson.M{"_id": userID, "owned_cosmetic_ids": bson.M{"$ne": cosmeticID}},
+		bson.M{"$addToSet": bson.M{"owned_cosmetic_ids": cosmeticID, "new_cosmetic_ids": cosmeticID}},
+	)
+	if err != nil {
+		return false, err
+	}
+	return result.ModifiedCount == 1, nil
+}
+
+func (r *userRepository) RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot, legacyValue string) (bool, error) {
+	c := ctx.(context.Context)
+	result, err := r.collection.UpdateOne(
+		c,
+		bson.M{"_id": userID, "owned_cosmetic_ids": cosmeticID},
+		bson.M{"$pull": bson.M{"owned_cosmetic_ids": cosmeticID, "new_cosmetic_ids": cosmeticID}},
+	)
+	if err != nil {
+		return false, err
+	}
+	if result.ModifiedCount == 1 {
+		_, err = r.collection.UpdateOne(
+			c,
+			bson.M{"_id": userID, "equipped_cosmetics." + slot: cosmeticID},
+			bson.M{"$unset": bson.M{"equipped_cosmetics." + slot: ""}},
+		)
+		if err != nil {
+			return true, err
+		}
+		if slot == "palette" || slot == "pot" {
+			legacyField := "selected_" + slot
+			_, err = r.collection.UpdateOne(
+				c,
+				bson.M{"_id": userID, legacyField: legacyValue},
+				bson.M{"$unset": bson.M{legacyField: ""}},
+			)
+			if err != nil {
+				return true, err
+			}
+		}
+	}
+	return result.ModifiedCount == 1, nil
+}
+
+func (r *userRepository) EquipCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error {
+	c := ctx.(context.Context)
+	filter := bson.M{"_id": userID}
+	if requiresOwnership {
+		filter["owned_cosmetic_ids"] = cosmeticID
+	}
+	result, err := r.collection.UpdateOne(
+		c,
+		filter,
+		bson.M{
+			"$set":  bson.M{"equipped_cosmetics." + slot: cosmeticID},
+			"$pull": bson.M{"new_cosmetic_ids": cosmeticID},
+		},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("cosmetic is not owned")
+	}
+	return nil
+}
+
+func (r *userRepository) UnequipCosmetic(ctx interface{}, userID primitive.ObjectID, slot string) error {
+	c := ctx.(context.Context)
+	result, err := r.collection.UpdateOne(
+		c,
+		bson.M{"_id": userID},
+		bson.M{"$unset": bson.M{"equipped_cosmetics." + slot: ""}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *userRepository) GrantCareEnergy(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error {
+	c := ctx.(context.Context)
+	entry := domain.CareEnergyLogEntry{
 		ID:        primitive.NewObjectID(),
 		Kind:      "grant",
 		Amount:    amount,
@@ -123,8 +209,8 @@ func (r *userRepository) GrantFertilizer(ctx interface{}, userID primitive.Objec
 	}
 	filter := bson.M{"_id": userID}
 	update := bson.M{
-		"$inc":  bson.M{"fertilizer_balance": amount},
-		"$push": bson.M{"fertilizer_log": entry},
+		"$inc":  bson.M{"care_energy_balance": amount},
+		"$push": bson.M{"care_energy_log": entry},
 	}
 	result, err := r.collection.UpdateOne(c, filter, update)
 	if err != nil {
@@ -136,16 +222,16 @@ func (r *userRepository) GrantFertilizer(ctx interface{}, userID primitive.Objec
 	return nil
 }
 
-func (r *userRepository) UseFertilizerProtect(ctx interface{}, userID primitive.ObjectID, dateStr string) error {
+func (r *userRepository) UseCareEnergyProtect(ctx interface{}, userID primitive.ObjectID, dateStr string) error {
 	c := ctx.(context.Context)
 	filter := bson.M{
-		"_id":                userID,
-		"fertilizer_balance": bson.M{"$gte": 1},
-		"fertilizer_log": bson.M{
+		"_id":                 userID,
+		"care_energy_balance": bson.M{"$gte": 1},
+		"care_energy_log": bson.M{
 			"$not": bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
 		},
 	}
-	entry := domain.FertilizerLogEntry{
+	entry := domain.CareEnergyLogEntry{
 		ID:          primitive.NewObjectID(),
 		Kind:        "protect",
 		Amount:      1,
@@ -153,8 +239,8 @@ func (r *userRepository) UseFertilizerProtect(ctx interface{}, userID primitive.
 		CreatedAt:   time.Now(),
 	}
 	update := bson.M{
-		"$inc":  bson.M{"fertilizer_balance": -1},
-		"$push": bson.M{"fertilizer_log": entry},
+		"$inc":  bson.M{"care_energy_balance": -1},
+		"$push": bson.M{"care_energy_log": entry},
 	}
 	result, err := r.collection.UpdateOne(c, filter, update)
 	if err != nil {
@@ -165,42 +251,60 @@ func (r *userRepository) UseFertilizerProtect(ctx interface{}, userID primitive.
 		if checkErr == nil && exists {
 			return domain.ErrDateAlreadyProtected
 		}
-		return domain.ErrInsufficientFertilizer
+		return domain.ErrInsufficientCareEnergy
 	}
 	return nil
 }
 
-func (r *userRepository) UseFertilizerFeed(ctx interface{}, userID primitive.ObjectID, quantity, points int) error {
+func (r *userRepository) UseCareEnergyFeed(ctx interface{}, userID primitive.ObjectID, quantity, points int) error {
 	c := ctx.(context.Context)
 	filter := bson.M{
-		"_id":                userID,
-		"fertilizer_balance": bson.M{"$gte": quantity},
+		"_id":                 userID,
+		"care_energy_balance": bson.M{"$gte": quantity},
 	}
-	entry := domain.FertilizerLogEntry{
+	entry := domain.CareEnergyLogEntry{
 		ID:        primitive.NewObjectID(),
 		Kind:      "feed",
 		Amount:    points,
 		CreatedAt: time.Now(),
 	}
 	update := bson.M{
-		"$inc":  bson.M{"fertilizer_balance": -quantity, "growth_points": points},
-		"$push": bson.M{"fertilizer_log": entry},
+		"$inc":  bson.M{"care_energy_balance": -quantity, "growth_points": points},
+		"$push": bson.M{"care_energy_log": entry},
 	}
 	result, err := r.collection.UpdateOne(c, filter, update)
 	if err != nil {
 		return err
 	}
 	if result.ModifiedCount == 0 {
-		return domain.ErrInsufficientFertilizer
+		return domain.ErrInsufficientCareEnergy
+	}
+	return nil
+}
+
+func (r *userRepository) UseCareEnergyCharacter(ctx interface{}, userID primitive.ObjectID, effect string) error {
+	c := ctx.(context.Context)
+	now := time.Now().UTC()
+	entry := domain.CareEnergyLogEntry{ID: primitive.NewObjectID(), Kind: "character-care", Amount: 1, Note: effect, CreatedAt: now}
+	result, err := r.collection.UpdateOne(c, bson.M{"_id": userID, "deleted": bson.M{"$ne": true}, "care_energy_balance": bson.M{"$gte": 1}}, bson.M{
+		"$inc":  bson.M{"care_energy_balance": -1, "character_care_count": 1},
+		"$set":  bson.M{"last_cared_at": now},
+		"$push": bson.M{"care_energy_log": entry},
+	})
+	if err != nil {
+		return err
+	}
+	if result.ModifiedCount == 0 {
+		return domain.ErrInsufficientCareEnergy
 	}
 	return nil
 }
 
 // ponytail: no txn - compensating refund on credit failure; use a mongo session if gifts ever batch
-func (r *userRepository) GiftFertilizer(ctx interface{}, giverID, recipientID primitive.ObjectID, quantity, points int, note string) error {
+func (r *userRepository) GiftCareEnergy(ctx interface{}, giverID, recipientID primitive.ObjectID, quantity, points int, note string) error {
 	c := ctx.(context.Context)
 
-	giftEntry := domain.FertilizerLogEntry{
+	giftEntry := domain.CareEnergyLogEntry{
 		ID:        primitive.NewObjectID(),
 		Kind:      "gift",
 		Amount:    quantity,
@@ -208,23 +312,23 @@ func (r *userRepository) GiftFertilizer(ctx interface{}, giverID, recipientID pr
 		CreatedAt: time.Now(),
 	}
 	debit := bson.M{
-		"$inc":  bson.M{"fertilizer_balance": -quantity},
-		"$push": bson.M{"fertilizer_log": giftEntry},
+		"$inc":  bson.M{"care_energy_balance": -quantity},
+		"$push": bson.M{"care_energy_log": giftEntry},
 	}
 	debited, err := r.collection.UpdateOne(c, bson.M{
-		"_id":                giverID,
-		"fertilizer_balance": bson.M{"$gte": quantity},
+		"_id":                 giverID,
+		"care_energy_balance": bson.M{"$gte": quantity},
 	}, debit)
 	if err != nil {
 		return err
 	}
 	if debited.ModifiedCount == 0 {
-		return domain.ErrInsufficientFertilizer
+		return domain.ErrInsufficientCareEnergy
 	}
 
 	credit := bson.M{
 		"$inc": bson.M{"growth_points": points},
-		"$push": bson.M{"fertilizer_log": domain.FertilizerLogEntry{
+		"$push": bson.M{"care_energy_log": domain.CareEnergyLogEntry{
 			ID:        primitive.NewObjectID(),
 			Kind:      "gifted",
 			Amount:    points,
@@ -238,8 +342,8 @@ func (r *userRepository) GiftFertilizer(ctx interface{}, giverID, recipientID pr
 	}
 	if credErr != nil {
 		_, _ = r.collection.UpdateOne(c, bson.M{"_id": giverID}, bson.M{
-			"$inc":  bson.M{"fertilizer_balance": quantity},
-			"$pull": bson.M{"fertilizer_log": bson.M{"_id": giftEntry.ID}},
+			"$inc":  bson.M{"care_energy_balance": quantity},
+			"$pull": bson.M{"care_energy_log": bson.M{"_id": giftEntry.ID}},
 		})
 		return credErr
 	}
@@ -248,10 +352,10 @@ func (r *userRepository) GiftFertilizer(ctx interface{}, giverID, recipientID pr
 }
 
 // ponytail: no txn - compensating refund on credit failure; use a mongo session if rescues ever batch
-func (r *userRepository) RescueFertilizer(ctx interface{}, giverID, recipientID primitive.ObjectID, dateStr, note string) error {
+func (r *userRepository) RescueCareEnergy(ctx interface{}, giverID, recipientID primitive.ObjectID, dateStr, note string) error {
 	c := ctx.(context.Context)
 
-	spendEntry := domain.FertilizerLogEntry{
+	spendEntry := domain.CareEnergyLogEntry{
 		ID:          primitive.NewObjectID(),
 		Kind:        "rescue",
 		Amount:      1,
@@ -260,28 +364,28 @@ func (r *userRepository) RescueFertilizer(ctx interface{}, giverID, recipientID 
 		CreatedAt:   time.Now(),
 	}
 	debited, err := r.collection.UpdateOne(c, bson.M{
-		"_id":                giverID,
-		"fertilizer_balance": bson.M{"$gte": 1},
+		"_id":                 giverID,
+		"care_energy_balance": bson.M{"$gte": 1},
 	}, bson.M{
-		"$inc":  bson.M{"fertilizer_balance": -1},
-		"$push": bson.M{"fertilizer_log": spendEntry},
+		"$inc":  bson.M{"care_energy_balance": -1},
+		"$push": bson.M{"care_energy_log": spendEntry},
 	})
 	if err != nil {
 		return err
 	}
 	if debited.ModifiedCount == 0 {
-		return domain.ErrInsufficientFertilizer
+		return domain.ErrInsufficientCareEnergy
 	}
 
-	// Same shape as UseFertilizerProtect so the recipient's streak math and the
+	// Same shape as UseCareEnergyProtect so the recipient's streak math and the
 	// "already protected" guard stay identical whether they paid or a genmate did.
 	protected, credErr := r.collection.UpdateOne(c, bson.M{
 		"_id": recipientID,
-		"fertilizer_log": bson.M{
+		"care_energy_log": bson.M{
 			"$not": bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
 		},
 	}, bson.M{
-		"$push": bson.M{"fertilizer_log": domain.FertilizerLogEntry{
+		"$push": bson.M{"care_energy_log": domain.CareEnergyLogEntry{
 			ID:          primitive.NewObjectID(),
 			Kind:        "protect",
 			Amount:      1,
@@ -298,8 +402,8 @@ func (r *userRepository) RescueFertilizer(ctx interface{}, giverID, recipientID 
 	}
 	if credErr != nil {
 		_, _ = r.collection.UpdateOne(c, bson.M{"_id": giverID}, bson.M{
-			"$inc":  bson.M{"fertilizer_balance": 1},
-			"$pull": bson.M{"fertilizer_log": bson.M{"_id": spendEntry.ID}},
+			"$inc":  bson.M{"care_energy_balance": 1},
+			"$pull": bson.M{"care_energy_log": bson.M{"_id": spendEntry.ID}},
 		})
 		return credErr
 	}
@@ -310,7 +414,7 @@ func (r *userRepository) RescueFertilizer(ctx interface{}, giverID, recipientID 
 func (r *userRepository) hasProtectedDate(ctx context.Context, userID primitive.ObjectID, dateStr string) (bool, error) {
 	count, err := r.collection.CountDocuments(ctx, bson.M{
 		"_id":             userID,
-		"fertilizer_log":  bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
+		"care_energy_log": bson.M{"$elemMatch": bson.M{"kind": "protect", "relatedDate": dateStr}},
 	})
 	if err != nil {
 		return false, err
@@ -434,7 +538,7 @@ func (r *userRepository) DeleteProfileComment(ctx interface{}, userID primitive.
 func (r *userRepository) AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction domain.Reaction) error {
 	c := ctx.(context.Context)
 	filter := bson.M{"_id": userID}
-	
+
 	// First, remove any existing reaction by this user
 	pull := bson.M{"$pull": bson.M{"profile_reactions": bson.M{"userId": reaction.UserID}}}
 	_, err := r.collection.UpdateOne(c, filter, pull)

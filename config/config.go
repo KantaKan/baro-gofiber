@@ -71,6 +71,9 @@ func createIndexes(ctx context.Context) error {
 		{
 			Keys: bson.D{{Key: "jsd_number", Value: 1}},
 		},
+		{
+			Keys: bson.D{{Key: "gift_boxes._id", Value: 1}},
+		},
 	}
 	_, err := usersColl.Indexes().CreateMany(ctx, userIndexes)
 	if err != nil {
