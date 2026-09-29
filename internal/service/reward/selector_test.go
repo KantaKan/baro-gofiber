@@ -128,3 +128,30 @@ func TestSelectorChoosesWithinRarityWithControlledRandomness(t *testing.T) {
 		t.Fatalf("controlled item roll selected %+v with error %v", item, err)
 	}
 }
+
+func TestEligibilityOddsUseOnlyUnownedItemsInTheSelectedPool(t *testing.T) {
+	selector := NewSelector(&sequenceRandom{values: []float64{0, 0}})
+	input := SelectionInput{Catalog: []domain.CosmeticCatalogItem{
+		{ID: "prop-common", Rarity: "Common", RewardPools: []string{"character-box"}},
+		{ID: "prop-rare", Rarity: "Rare", RewardPools: []string{"character-box"}},
+		{ID: "plant-rare", Rarity: "Rare", RewardPools: []string{"teacher-box"}},
+		{ID: "prop-legendary", Rarity: "Legendary", RewardPools: []string{"character-box"}},
+	}, Pool: "character-box", OwnedIDs: map[string]bool{"prop-common": true}, MinimumRarity: "Common"}
+	preview := selector.Eligibility(input)
+	if preview.Complete || preview.EligibleCount != 2 || math.Abs(preview.Odds["Rare"]-30.0/33.0) > 0.000001 || math.Abs(preview.Odds["Legendary"]-3.0/33.0) > 0.000001 || preview.Odds["Common"] != 0 {
+		t.Fatalf("eligibility odds = %+v", preview)
+	}
+	item, err := selector.Select(input)
+	if err != nil || item.ID != "prop-rare" {
+		t.Fatalf("selected item = %+v, err=%v", item, err)
+	}
+	input.OwnedIDs["prop-rare"] = true
+	input.OwnedIDs["prop-legendary"] = true
+	complete := selector.Eligibility(input)
+	if !complete.Complete || complete.EligibleCount != 0 || len(complete.Odds) != 0 {
+		t.Fatalf("complete preview = %+v", complete)
+	}
+	if _, err := selector.Select(input); !errors.Is(err, ErrPoolComplete) {
+		t.Fatalf("complete pool draw error = %v", err)
+	}
+}

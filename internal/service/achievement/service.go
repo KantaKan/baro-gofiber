@@ -80,8 +80,8 @@ func (s *Service) Reconcile(ctx context.Context, userID primitive.ObjectID, now 
 	if err != nil {
 		return nil, err
 	}
-	protected := make([]string, 0, len(user.FertilizerLog))
-	for _, entry := range user.FertilizerLog {
+	protected := make([]string, 0, len(user.CareEnergyLog))
+	for _, entry := range user.CareEnergyLog {
 		if entry.Kind == "protect" && entry.RelatedDate != "" {
 			protected = append(protected, entry.RelatedDate)
 		}
@@ -91,7 +91,7 @@ func (s *Service) Reconcile(ctx context.Context, userID primitive.ObjectID, now 
 }
 
 func (s *Service) RecordSocial(ctx context.Context, userID primitive.ObjectID, event string, now time.Time) (*domain.TeacherGiftBox, error) {
-	if event != "garden-cheer" && event != "profile-reaction" && event != "fertilizer-gift" && event != "streak-rescue" {
+	if event != "garden-cheer" && event != "profile-reaction" && event != "care-energy-gift" && event != "streak-rescue" {
 		return nil, errors.New("unsupported social achievement event")
 	}
 	boxes, err := s.grant(ctx, userID, []Entitlement{

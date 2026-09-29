@@ -100,10 +100,10 @@ func TestRecordSocialIsOneTimeAcrossReplayedEvents(t *testing.T) {
 func TestAchievementDefinitionsHaveStableRepeatPolicies(t *testing.T) {
 	want := map[string]string{
 		"weekly-consistency": "once-per-iso-week",
-		"songkran-growth": "once-per-year",
-		"gentle-comeback": "once",
-		"quiet-gardener": "once",
-		"social-gardener": "once",
+		"songkran-growth":    "once-per-year",
+		"gentle-comeback":    "once",
+		"quiet-gardener":     "once",
+		"social-gardener":    "once",
 	}
 	for _, definition := range Definitions() {
 		if want[definition.Identity] != definition.RepeatPolicy {

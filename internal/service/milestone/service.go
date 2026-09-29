@@ -67,7 +67,7 @@ func (s *Service) Reconcile(ctx context.Context, userID primitive.ObjectID, now 
 		}
 	}
 	protectedDates := []string{}
-	for _, entry := range user.FertilizerLog {
+	for _, entry := range user.CareEnergyLog {
 		if entry.Kind == "protect" && entry.RelatedDate != "" {
 			protectedDates = append(protectedDates, entry.RelatedDate)
 		}

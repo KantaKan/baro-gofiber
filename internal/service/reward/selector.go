@@ -36,6 +36,12 @@ type Selector struct {
 	random RandomSource
 }
 
+type Eligibility struct {
+	EligibleCount int                `json:"eligible_count"`
+	Odds          map[string]float64 `json:"odds"`
+	Complete      bool               `json:"complete"`
+}
+
 func NewSelector(random RandomSource) *Selector {
 	return &Selector{random: random}
 }
@@ -61,17 +67,7 @@ func DisclosedOdds(minimumRarity string) map[string]float64 {
 }
 
 func (s *Selector) Select(input SelectionInput) (domain.CosmeticCatalogItem, error) {
-	candidates := map[string][]domain.CosmeticCatalogItem{}
-	floor := rarityIndex(input.MinimumRarity)
-	if floor < 0 {
-		floor = 0
-	}
-	for _, item := range input.Catalog {
-		if item.Starter || input.OwnedIDs[item.ID] || rarityIndex(item.Rarity) < floor || !inPool(item, input.Pool) || !compatible(item, input.Species) {
-			continue
-		}
-		candidates[item.Rarity] = append(candidates[item.Rarity], item)
-	}
+	candidates := eligibleCandidates(input)
 	if len(candidates) == 0 {
 		return domain.CosmeticCatalogItem{}, ErrPoolComplete
 	}
@@ -113,6 +109,35 @@ func (s *Selector) Select(input SelectionInput) (domain.CosmeticCatalogItem, err
 	}
 	index := int(math.Floor(itemRoll * float64(len(items))))
 	return items[index], nil
+}
+
+func (s *Selector) Eligibility(input SelectionInput) Eligibility {
+	candidates := eligibleCandidates(input)
+	result := Eligibility{Odds: map[string]float64{}, Complete: len(candidates) == 0}
+	totalWeight := 0.0
+	for rarity, items := range candidates {
+		result.EligibleCount += len(items)
+		totalWeight += standardWeights[rarity]
+	}
+	for rarity := range candidates {
+		result.Odds[rarity] = standardWeights[rarity] / totalWeight
+	}
+	return result
+}
+
+func eligibleCandidates(input SelectionInput) map[string][]domain.CosmeticCatalogItem {
+	candidates := map[string][]domain.CosmeticCatalogItem{}
+	floor := rarityIndex(input.MinimumRarity)
+	if floor < 0 {
+		floor = 0
+	}
+	for _, item := range input.Catalog {
+		if item.Starter || input.OwnedIDs[item.ID] || rarityIndex(item.Rarity) < floor || rarityIndex(item.Rarity) < 0 || !inPool(item, input.Pool) || !compatible(item, input.Species) {
+			continue
+		}
+		candidates[item.Rarity] = append(candidates[item.Rarity], item)
+	}
+	return candidates
 }
 
 func draw(random RandomSource) (float64, error) {

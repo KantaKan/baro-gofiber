@@ -13,7 +13,7 @@ import (
 type AdminHandler struct {
 	userService       *user.Service
 	badgeService      *user.BadgeService
-	fertilizerService *user.FertilizerService
+	careEnergyService *user.CareEnergyService
 	reflectionService *reflection.Service
 	barometerService  *reflection.BarometerService
 }
@@ -21,14 +21,14 @@ type AdminHandler struct {
 func NewAdminHandler(
 	userService *user.Service,
 	badgeService *user.BadgeService,
-	fertilizerService *user.FertilizerService,
+	careEnergyService *user.CareEnergyService,
 	reflectionService *reflection.Service,
 	barometerService *reflection.BarometerService,
 ) *AdminHandler {
 	return &AdminHandler{
 		userService:       userService,
 		badgeService:      badgeService,
-		fertilizerService: fertilizerService,
+		careEnergyService: careEnergyService,
 		reflectionService: reflectionService,
 		barometerService:  barometerService,
 	}
@@ -180,7 +180,7 @@ func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
 	})
 }
 
-func (h *AdminHandler) GrantFertilizer(c *fiber.Ctx) error {
+func (h *AdminHandler) GrantCareEnergy(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
@@ -211,14 +211,14 @@ func (h *AdminHandler) GrantFertilizer(c *fiber.Ctx) error {
 		grantedBy = claims.UserID
 	}
 
-	if err := h.fertilizerService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error granting fertilizer")
+	if err := h.careEnergyService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error granting Care Energy")
 	}
 
-	return utils.SendResponse(c, fiber.StatusOK, "Fertilizer granted successfully", nil)
+	return utils.SendResponse(c, fiber.StatusOK, "Care Energy granted successfully", nil)
 }
 
-func (h *AdminHandler) BulkGrantFertilizer(c *fiber.Ctx) error {
+func (h *AdminHandler) BulkGrantCareEnergy(c *fiber.Ctx) error {
 	type RequestBody struct {
 		UserIDs []string `json:"userIds"`
 		Amount  int      `json:"amount"`
@@ -254,7 +254,7 @@ func (h *AdminHandler) BulkGrantFertilizer(c *fiber.Ctx) error {
 			continue
 		}
 
-		if err := h.fertilizerService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
+		if err := h.careEnergyService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
 			failCount++
 			continue
 		}
@@ -263,7 +263,7 @@ func (h *AdminHandler) BulkGrantFertilizer(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success":      true,
-		"message":      "Bulk fertilizer grant completed",
+		"message":      "Bulk Care Energy grant completed",
 		"data":         nil,
 		"successCount": successCount,
 		"failCount":    failCount,

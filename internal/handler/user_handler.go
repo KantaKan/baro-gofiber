@@ -22,7 +22,7 @@ import (
 
 type UserHandler struct {
 	userService       *user.Service
-	fertilizerService *user.FertilizerService
+	careEnergyService *user.CareEnergyService
 	milestones        milestoneReconciler
 	achievements      achievementReconciler
 	db                interface{}
@@ -64,8 +64,8 @@ var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide":
 var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
 var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
 
-func NewUserHandler(userService *user.Service, fertilizerService *user.FertilizerService, milestones *milestone.Service, achievements *achievement.Service) *UserHandler {
-	return &UserHandler{userService: userService, fertilizerService: fertilizerService, milestones: milestones, achievements: achievements}
+func NewUserHandler(userService *user.Service, careEnergyService *user.CareEnergyService, milestones *milestone.Service, achievements *achievement.Service) *UserHandler {
+	return &UserHandler{userService: userService, careEnergyService: careEnergyService, milestones: milestones, achievements: achievements}
 }
 
 func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
@@ -346,7 +346,7 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "User updated successfully", nil)
 }
 
-func (h *UserHandler) UseFertilizerProtect(c *fiber.Ctx) error {
+func (h *UserHandler) UseCareEnergyProtect(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
@@ -358,7 +358,7 @@ func (h *UserHandler) UseFertilizerProtect(c *fiber.Ctx) error {
 	}
 
 	if claims.UserID != id {
-		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own fertilizer")
+		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own Care Energy")
 	}
 
 	var body struct {
@@ -373,23 +373,23 @@ func (h *UserHandler) UseFertilizerProtect(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
 	}
 
-	if err := h.fertilizerService.ProtectDate(userID, body.Date); err != nil {
+	if err := h.careEnergyService.ProtectDate(userID, body.Date); err != nil {
 		switch {
 		case errors.Is(err, user.ErrInvalidProtectDate):
 			return utils.SendError(c, fiber.StatusBadRequest, "That date can't be protected")
 		case errors.Is(err, domain.ErrDateAlreadyProtected):
 			return utils.SendError(c, fiber.StatusConflict, "That date is already protected")
-		case errors.Is(err, domain.ErrInsufficientFertilizer):
-			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
 		default:
-			return utils.SendError(c, fiber.StatusInternalServerError, "Error using fertilizer")
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error using Care Energy")
 		}
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Streak protected", nil)
 }
 
-func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
+func (h *UserHandler) UseCareEnergyFeed(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
@@ -401,7 +401,7 @@ func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
 	}
 
 	if claims.UserID != id {
-		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own fertilizer")
+		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own Care Energy")
 	}
 
 	userID, err := primitive.ObjectIDFromHex(id)
@@ -417,18 +417,61 @@ func (h *UserHandler) UseFertilizerFeed(c *fiber.Ctx) error {
 		body.Quantity = 1
 	}
 
-	if err := h.fertilizerService.Feed(userID, body.Quantity); err != nil {
+	if err := h.careEnergyService.Feed(userID, body.Quantity); err != nil {
 		switch {
 		case errors.Is(err, user.ErrInvalidFeedQuantity):
 			return utils.SendError(c, fiber.StatusBadRequest, "Quantity must be at least 1")
-		case errors.Is(err, domain.ErrInsufficientFertilizer):
-			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
 		default:
-			return utils.SendError(c, fiber.StatusInternalServerError, "Error using fertilizer")
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error using Care Energy")
 		}
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Plant fed", nil)
+}
+
+func (h *UserHandler) GetCareEnergy(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.UserID != id && claims.Role != "admin" {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only view your own Care Energy")
+	}
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	state, err := h.careEnergyService.CareEnergyState(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Care Energy retrieved", state)
+}
+
+func (h *UserHandler) CareForCharacter(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only care for your own character")
+	}
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	result, err := h.careEnergyService.CareCharacter(userID)
+	if errors.Is(err, domain.ErrInsufficientCareEnergy) {
+		return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
+	}
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Could not care for character")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Your character enjoyed that", result)
 }
 
 // resolveGenmate validates the caller and the :id target, and enforces that a
@@ -470,7 +513,7 @@ func (h *UserHandler) resolveGenmate(c *fiber.Ctx) (primitive.ObjectID, primitiv
 	return giverOID, recipientOID, target, nil
 }
 
-func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
+func (h *UserHandler) GiftCareEnergy(c *fiber.Ctx) error {
 	giverOID, recipientOID, target, resp := h.resolveGenmate(c)
 	if target == nil {
 		return resp
@@ -486,24 +529,24 @@ func (h *UserHandler) GiftFertilizer(c *fiber.Ctx) error {
 
 	note := strings.TrimSpace("Fertilized " + target.FirstName + " " + target.LastName)
 
-	if err := h.fertilizerService.Gift(giverOID, recipientOID, body.Quantity, note); err != nil {
+	if err := h.careEnergyService.Gift(giverOID, recipientOID, body.Quantity, note); err != nil {
 		switch {
 		case errors.Is(err, user.ErrInvalidFeedQuantity):
 			return utils.SendError(c, fiber.StatusBadRequest, "Quantity must be at least 1")
 		case errors.Is(err, user.ErrCannotGiftSelf):
 			return utils.SendError(c, fiber.StatusBadRequest, "Use Feed to fertilize your own plant")
-		case errors.Is(err, domain.ErrInsufficientFertilizer):
-			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
 		default:
-			return utils.SendError(c, fiber.StatusInternalServerError, "Error sending fertilizer")
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error sending Care Energy")
 		}
 	}
 
-	h.recordSocialAchievement(c.UserContext(), giverOID, "fertilizer-gift")
-	return utils.SendResponse(c, fiber.StatusOK, "Fertilizer sent", nil)
+	h.recordSocialAchievement(c.UserContext(), giverOID, "care-energy-gift")
+	return utils.SendResponse(c, fiber.StatusOK, "Care Energy sent", nil)
 }
 
-func (h *UserHandler) RescueFertilizer(c *fiber.Ctx) error {
+func (h *UserHandler) RescueCareEnergy(c *fiber.Ctx) error {
 	giverOID, recipientOID, target, resp := h.resolveGenmate(c)
 	if target == nil {
 		return resp
@@ -518,7 +561,7 @@ func (h *UserHandler) RescueFertilizer(c *fiber.Ctx) error {
 
 	note := strings.TrimSpace("Rescued " + target.FirstName + " " + target.LastName)
 
-	if err := h.fertilizerService.Rescue(giverOID, recipientOID, body.Date, note); err != nil {
+	if err := h.careEnergyService.Rescue(giverOID, recipientOID, body.Date, note); err != nil {
 		switch {
 		case errors.Is(err, user.ErrInvalidProtectDate):
 			return utils.SendError(c, fiber.StatusBadRequest, "That date can't be protected")
@@ -526,8 +569,8 @@ func (h *UserHandler) RescueFertilizer(c *fiber.Ctx) error {
 			return utils.SendError(c, fiber.StatusBadRequest, "Use Protect to cover your own missed day")
 		case errors.Is(err, domain.ErrDateAlreadyProtected):
 			return utils.SendError(c, fiber.StatusConflict, "That day is already protected")
-		case errors.Is(err, domain.ErrInsufficientFertilizer):
-			return utils.SendError(c, fiber.StatusConflict, "Not enough fertilizer")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
 		default:
 			return utils.SendError(c, fiber.StatusInternalServerError, "Error rescuing that day")
 		}
@@ -702,28 +745,28 @@ func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
 		}
 
 		protectedDates := make([]string, 0)
-		for _, entry := range u.FertilizerLog {
+		for _, entry := range u.CareEnergyLog {
 			if entry.Kind == "protect" && entry.RelatedDate != "" {
 				protectedDates = append(protectedDates, entry.RelatedDate)
 			}
 		}
 
 		members = append(members, fiber.Map{
-			"_id":              u.ID.Hex(),
-			"first_name":       u.FirstName,
-			"last_name":        u.LastName,
-			"cohort_number":    u.CohortNumber,
-			"genmate_group":    u.GenmateGroup,
-			"reflection_dates": dates,
-			"growth_points":    u.GrowthPoints,
-			"protected_dates":  protectedDates,
-			"plant_reactions":  u.PlantReactions,
-			"selected_palette": u.SelectedPalette,
-			"selected_species": u.SelectedSpecies,
-			"selected_pot":     u.SelectedPot,
-			"selected_leaf":    u.SelectedLeaf,
-			"selected_flower":  u.SelectedFlower,
-			"selected_stem":    u.SelectedStem,
+			"_id":                u.ID.Hex(),
+			"first_name":         u.FirstName,
+			"last_name":          u.LastName,
+			"cohort_number":      u.CohortNumber,
+			"genmate_group":      u.GenmateGroup,
+			"reflection_dates":   dates,
+			"growth_points":      u.GrowthPoints,
+			"protected_dates":    protectedDates,
+			"plant_reactions":    u.PlantReactions,
+			"selected_palette":   u.SelectedPalette,
+			"selected_species":   u.SelectedSpecies,
+			"selected_pot":       u.SelectedPot,
+			"selected_leaf":      u.SelectedLeaf,
+			"selected_flower":    u.SelectedFlower,
+			"selected_stem":      u.SelectedStem,
 			"equipped_cosmetics": u.EquippedCosmetics,
 		})
 	}
@@ -804,28 +847,28 @@ func (h *UserHandler) GetCohortGarden(c *fiber.Ctx) error {
 		}
 
 		protectedDates := make([]string, 0)
-		for _, entry := range u.FertilizerLog {
+		for _, entry := range u.CareEnergyLog {
 			if entry.Kind == "protect" && entry.RelatedDate != "" {
 				protectedDates = append(protectedDates, entry.RelatedDate)
 			}
 		}
 
 		groupMembers[groupName] = append(groupMembers[groupName], fiber.Map{
-			"_id":              u.ID.Hex(),
-			"first_name":       u.FirstName,
-			"last_name":        u.LastName,
-			"cohort_number":    u.CohortNumber,
-			"genmate_group":    groupName,
-			"reflection_dates": dates,
-			"growth_points":    u.GrowthPoints,
-			"protected_dates":  protectedDates,
-			"plant_reactions":  u.PlantReactions,
-			"selected_palette": u.SelectedPalette,
-			"selected_species": u.SelectedSpecies,
-			"selected_pot":     u.SelectedPot,
-			"selected_leaf":    u.SelectedLeaf,
-			"selected_flower":  u.SelectedFlower,
-			"selected_stem":    u.SelectedStem,
+			"_id":                u.ID.Hex(),
+			"first_name":         u.FirstName,
+			"last_name":          u.LastName,
+			"cohort_number":      u.CohortNumber,
+			"genmate_group":      groupName,
+			"reflection_dates":   dates,
+			"growth_points":      u.GrowthPoints,
+			"protected_dates":    protectedDates,
+			"plant_reactions":    u.PlantReactions,
+			"selected_palette":   u.SelectedPalette,
+			"selected_species":   u.SelectedSpecies,
+			"selected_pot":       u.SelectedPot,
+			"selected_leaf":      u.SelectedLeaf,
+			"selected_flower":    u.SelectedFlower,
+			"selected_stem":      u.SelectedStem,
 			"equipped_cosmetics": u.EquippedCosmetics,
 		})
 	}

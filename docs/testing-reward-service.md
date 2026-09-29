@@ -23,7 +23,7 @@ The important invariants are:
 - owned, incompatible, starter, wrong-pool, and below-floor items are never candidates;
 - duplicate protection ends with an explicit pool-complete result, not a silent duplicate;
 - rarity weights are 55%, 30%, 12%, and 3%, then renormalized after a rarity floor is applied;
-- randomness never uses fertilizer, reflection text, or comfort-zone answers.
+- randomness never uses Care Energy, reflection text, or comfort-zone answers.
 
 The service tests prove how it uses an atomic repository contract. They do not prove a future Mongo implementation is atomic. That repository must commit the draw record, ownership update, and consumed entitlement together, with a unique index on the idempotency key. Its integration test should race two commits and verify one stored draw and one inventory change.
 

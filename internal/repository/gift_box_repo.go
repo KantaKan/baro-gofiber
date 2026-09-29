@@ -3,22 +3,127 @@ package repository
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/giftbox"
 	"gofiber-baro/internal/service/reward"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type GiftBoxRepository struct {
-	users *mongo.Collection
+	users  *mongo.Collection
+	client *mongo.Client
 }
 
 func NewGiftBoxRepository(db *mongo.Database) *GiftBoxRepository {
-	return &GiftBoxRepository{users: db.Collection("users")}
+	return &GiftBoxRepository{users: db.Collection("users"), client: db.Client()}
+}
+
+func giftBoxDisplayName(user domain.User) string {
+	name := strings.TrimSpace(user.FirstName + " " + user.LastName)
+	if name == "" {
+		name = strings.TrimSpace(user.ZoomName)
+	}
+	if name == "" {
+		name = user.ID.Hex()
+	}
+	return name
+}
+
+func (r *GiftBoxRepository) SearchRecipients(ctx context.Context, query string, exclude primitive.ObjectID) ([]giftbox.Recipient, error) {
+	pattern := primitive.Regex{Pattern: regexp.QuoteMeta(query), Options: "i"}
+	filter := bson.M{
+		"_id": bson.M{"$ne": exclude}, "deleted": bson.M{"$ne": true},
+		"$or": []bson.M{{"first_name": pattern}, {"last_name": pattern}, {"zoom_name": pattern}, {"email": pattern}},
+	}
+	projection := bson.M{"first_name": 1, "last_name": 1, "zoom_name": 1, "cohort_number": 1, "genmate_group": 1, "role": 1}
+	cursor, err := r.users.Find(ctx, filter, options.Find().SetProjection(projection).SetSort(bson.D{{Key: "first_name", Value: 1}}).SetLimit(20))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	items := []giftbox.Recipient{}
+	for cursor.Next(ctx) {
+		var user domain.User
+		if err := cursor.Decode(&user); err != nil {
+			return nil, err
+		}
+		items = append(items, giftbox.Recipient{ID: user.ID.Hex(), DisplayName: giftBoxDisplayName(user), CohortNumber: user.CohortNumber, Group: user.GenmateGroup, Role: user.Role})
+	}
+	return items, cursor.Err()
+}
+
+func (r *GiftBoxRepository) Transfer(ctx context.Context, boxID, fromID, toID primitive.ObjectID) (*domain.TeacherGiftBox, error) {
+	session, err := r.client.StartSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.EndSession(ctx)
+	result, err := session.WithTransaction(ctx, func(tx mongo.SessionContext) (interface{}, error) {
+		active := bson.M{"$elemMatch": bson.M{"_id": boxID, "status": "unopened"}}
+		nameProjection := bson.M{"first_name": 1, "last_name": 1, "zoom_name": 1}
+		senderProjection := bson.M{"first_name": 1, "last_name": 1, "zoom_name": 1, "gift_boxes": 1}
+		var sender domain.User
+		if err := r.users.FindOne(tx, bson.M{"_id": fromID, "deleted": bson.M{"$ne": true}, "gift_boxes": active}, options.FindOne().SetProjection(senderProjection)).Decode(&sender); err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				return nil, giftbox.ErrBoxNotFound
+			}
+			return nil, err
+		}
+		var recipient domain.User
+		if err := r.users.FindOne(tx, bson.M{"_id": toID, "deleted": bson.M{"$ne": true}}, options.FindOne().SetProjection(nameProjection)).Decode(&recipient); err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				return nil, giftbox.ErrRecipientNotFound
+			}
+			return nil, err
+		}
+		var box *domain.TeacherGiftBox
+		for index := range sender.GiftBoxes {
+			if sender.GiftBoxes[index].ID == boxID && sender.GiftBoxes[index].Status == "unopened" {
+				copy := sender.GiftBoxes[index]
+				box = &copy
+				break
+			}
+		}
+		if box == nil {
+			return nil, giftbox.ErrBoxNotFound
+		}
+		box.UserID = toID
+		box.TransferHistory = append(box.TransferHistory, domain.GiftBoxTransfer{
+			FromID: fromID, FromName: giftBoxDisplayName(sender), ToID: toID,
+			ToName: giftBoxDisplayName(recipient), TransferredAt: time.Now(),
+		})
+		removed, err := r.users.UpdateOne(tx, bson.M{"_id": fromID, "gift_boxes": active}, bson.M{"$pull": bson.M{"gift_boxes": bson.M{"_id": boxID}}})
+		if err != nil {
+			return nil, err
+		}
+		if removed.ModifiedCount != 1 {
+			return nil, giftbox.ErrBoxNotFound
+		}
+		added, err := r.users.UpdateOne(tx, bson.M{"_id": toID, "deleted": bson.M{"$ne": true}, "gift_boxes._id": bson.M{"$ne": boxID}}, bson.M{"$push": bson.M{"gift_boxes": box}})
+		if err != nil {
+			return nil, err
+		}
+		if added.ModifiedCount != 1 {
+			return nil, giftbox.ErrRecipientNotFound
+		}
+		return box, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	box, ok := result.(*domain.TeacherGiftBox)
+	if !ok {
+		return nil, errors.New("transfer did not return a gift box")
+	}
+	return box, nil
 }
 
 func (r *GiftBoxRepository) Create(ctx context.Context, box domain.TeacherGiftBox) error {
@@ -54,7 +159,15 @@ func (r *GiftBoxRepository) CreateOnce(ctx context.Context, box domain.TeacherGi
 }
 
 func (r *GiftBoxRepository) ListCohortLearners(ctx context.Context, cohort int) ([]primitive.ObjectID, error) {
-	cursor, err := r.users.Find(ctx, bson.M{"cohort_number": cohort, "role": "learner", "deleted": bson.M{"$ne": true}})
+	return r.listAudienceLearners(ctx, bson.M{"cohort_number": cohort, "role": "learner", "deleted": bson.M{"$ne": true}})
+}
+
+func (r *GiftBoxRepository) ListTeamLearners(ctx context.Context, cohort int, team string) ([]primitive.ObjectID, error) {
+	return r.listAudienceLearners(ctx, bson.M{"cohort_number": cohort, "genmate_group": team, "role": "learner", "deleted": bson.M{"$ne": true}})
+}
+
+func (r *GiftBoxRepository) listAudienceLearners(ctx context.Context, filter bson.M) ([]primitive.ObjectID, error) {
+	cursor, err := r.users.Find(ctx, filter, options.Find().SetProjection(bson.M{"_id": 1}))
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +274,7 @@ func (r *GiftBoxRepository) CommitDraw(ctx context.Context, result reward.DrawRe
 	if err != nil || existing != nil {
 		return existing, err
 	}
-	return nil, errors.New("reward inventory changed; draw can be retried")
+	return nil, reward.ErrInventoryChanged
 }
 
 func drawResult(userID primitive.ObjectID, box domain.TeacherGiftBox) *reward.DrawResult {
@@ -172,14 +285,17 @@ func drawResult(userID primitive.ObjectID, box domain.TeacherGiftBox) *reward.Dr
 	return &reward.DrawResult{
 		IdempotencyKey: box.ID.Hex(),
 		UserID:         userID.Hex(),
-		Pool:           giftBoxPool(box.Source),
+		Pool:           giftBoxPool(box.Source, box.RewardPool),
 		MinimumRarity:  box.MinimumRarity,
 		Item:           *box.Reward,
 		CreatedAt:      createdAt,
 	}
 }
 
-func giftBoxPool(source string) string {
+func giftBoxPool(source, rewardPool string) string {
+	if rewardPool == "character-box" {
+		return rewardPool
+	}
 	switch source {
 	case "achievement":
 		return "achievement"

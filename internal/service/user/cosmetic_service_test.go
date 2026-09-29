@@ -168,7 +168,7 @@ func TestEquipValidatesEverySlotOwnershipAndCompatibility(t *testing.T) {
 		equipped: equipped,
 	})
 	seen := map[string]bool{}
-	for _, item := range cosmeticCatalog {
+	for _, item := range service.Catalog() {
 		if seen[item.Slot] {
 			continue
 		}
@@ -208,6 +208,78 @@ func TestEquipRejectsUnownedAndIncompatibleCosmetics(t *testing.T) {
 	incompatible := domain.CosmeticCatalogItem{ID: "test:species", Slot: "accessory", CompatibleSpecies: []string{"Mango"}}
 	if cosmeticCompatible(incompatible, "Lotus") {
 		t.Fatal("compatibility check accepted the wrong species")
+	}
+}
+
+func TestCharacterCosmeticsStaySeparateAndPermanent(t *testing.T) {
+	userID := primitive.NewObjectID()
+	owned := map[string]bool{"palette:ocean": true}
+	equipped := map[string]string{"palette": "palette:ocean"}
+	learner := &domain.User{ID: userID, OwnedCosmeticIDs: []string{"palette:ocean"}, EquippedCosmetics: equipped}
+	service := NewCosmeticService(cosmeticUserReaderStub{user: learner, owned: owned, equipped: equipped})
+
+	granted, err := service.GrantCharacter(userID.Hex(), "character_prop:flower", "")
+	if err != nil || !granted {
+		t.Fatalf("character grant failed: granted=%v err=%v", granted, err)
+	}
+	learner.OwnedCosmeticIDs = append(learner.OwnedCosmeticIDs, "character_prop:flower")
+	if err := service.EquipCharacter(userID.Hex(), "character_prop", "character_prop:flower"); err != nil {
+		t.Fatalf("character equip failed: %v", err)
+	}
+	if equipped["palette"] != "palette:ocean" || equipped["character_prop"] != "character_prop:flower" || !owned["palette:ocean"] {
+		t.Fatalf("character item erased plant item: equipped=%v owned=%v", equipped, owned)
+	}
+	characterCollection, err := service.CharacterCollection(userID.Hex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range characterCollection.Items {
+		if !isCharacterSlot(item.Slot) {
+			t.Fatalf("plant item leaked into character collection: %s", item.ID)
+		}
+		if item.ID == "character_prop:flower" && (!item.Owned || !item.Equipped) {
+			t.Fatalf("character item state incorrect: %+v", item)
+		}
+	}
+	plantCollection, err := service.Collection(userID.Hex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range plantCollection.Items {
+		if isCharacterSlot(item.Slot) {
+			t.Fatalf("character item leaked into plant collection: %s", item.ID)
+		}
+	}
+}
+
+func TestCharacterCosmeticSlotAndOwnershipChecks(t *testing.T) {
+	userID := primitive.NewObjectID()
+	service := NewCosmeticService(cosmeticUserReaderStub{
+		user: &domain.User{ID: userID}, owned: map[string]bool{}, equipped: map[string]string{},
+	})
+	for _, test := range []struct{ slot, id string }{
+		{"character_prop", "character_prop:flower"},
+		{"card_background", "character_prop:flower"},
+		{"palette", "character_prop:flower"},
+	} {
+		if err := service.EquipCharacter(userID.Hex(), test.slot, test.id); err == nil {
+			t.Fatalf("unexpected equip: %s / %s", test.slot, test.id)
+		}
+	}
+	if err := service.Equip(userID.Hex(), "character_prop", "character_prop:flower"); err == nil {
+		t.Fatal("plant equip accepted a character slot")
+	}
+	if granted, err := service.Grant(userID.Hex(), "character_prop:flower", ""); err == nil || granted {
+		t.Fatal("plant grant accepted a character item")
+	}
+	if granted, err := service.GrantCharacter(userID.Hex(), "palette:ocean", ""); err == nil || granted {
+		t.Fatal("character grant accepted a plant item")
+	}
+	if revoked, err := service.Revoke(userID.Hex(), "character_prop:flower"); err == nil || revoked {
+		t.Fatal("plant revoke accepted a permanent character item")
+	}
+	if err := service.UnequipCharacter(userID.Hex(), "palette"); err == nil {
+		t.Fatal("character unequip accepted a plant slot")
 	}
 }
 
