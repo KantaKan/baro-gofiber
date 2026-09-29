@@ -177,7 +177,7 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 
 func showcaseProp(equippedID string) string {
 	switch equippedID {
-	case "character_prop:flower", "character_prop:cat-ears", "character_prop:egg", "character_prop:halo":
+	case "character_prop:flower", "character_prop:cat-ears", "character_prop:egg", "character_prop:halo", "character_prop:headphones", "character_prop:pixel-glasses", "character_prop:tiny-crown":
 		return strings.TrimPrefix(equippedID, "character_prop:")
 	default:
 		return ""

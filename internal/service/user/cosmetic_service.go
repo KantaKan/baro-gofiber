@@ -227,6 +227,9 @@ var cosmeticCatalog = []domain.CosmeticCatalogItem{
 	{ID: "character_prop:cat-ears", Name: "Cat Ear Headband", Slot: "character_prop", Rarity: "Rare", PreviewValue: "cat-ears", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
 	{ID: "character_prop:egg", Name: "Fried Egg Pin", Slot: "character_prop", Rarity: "Epic", PreviewValue: "egg", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
 	{ID: "character_prop:halo", Name: "Tiny Halo", Slot: "character_prop", Rarity: "Legendary", PreviewValue: "halo", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:headphones", Name: "Focus Headphones", Slot: "character_prop", Rarity: "Rare", PreviewValue: "headphones", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:pixel-glasses", Name: "Debug Glasses", Slot: "character_prop", Rarity: "Epic", PreviewValue: "pixel-glasses", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:tiny-crown", Name: "Tiny Crown", Slot: "character_prop", Rarity: "Legendary", PreviewValue: "tiny-crown", SourceHint: "Special achievements", RewardPools: []string{"character-box"}},
 }
 
 func (s *CosmeticService) Catalog() []domain.CosmeticCatalogItem {
