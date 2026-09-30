@@ -20,3 +20,15 @@ func TestShowcasePropAllowsOnlyKnownCharacterProps(t *testing.T) {
 		}
 	}
 }
+
+func TestShowcaseDisplayNamePrefersZoomThenFirstName(t *testing.T) {
+	for _, test := range []struct{ zoom, first, want string }{
+		{"Mew", "Kantapon", "Mew"},
+		{"  ", "Kantapon", "Kantapon"},
+		{"", "", "Baro friend"},
+	} {
+		if got := showcaseDisplayName(test.zoom, test.first); got != test.want {
+			t.Fatalf("showcaseDisplayName(%q, %q) = %q, want %q", test.zoom, test.first, got, test.want)
+		}
+	}
+}

@@ -97,7 +97,7 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 	if team != "" {
 		filter["genmate_group"] = team
 	}
-	projection := bson.M{"first_name": 1, "last_name": 1, "zoom_name": 1, "cohort_number": 1, "genmate_group": 1, "pinned_character_id": 1, "showcase_message": 1, "showcase_updated_at": 1, "showcase_hidden": 1, "showcase_reactions": 1, "equipped_cosmetics.character_prop": 1}
+	projection := bson.M{"first_name": 1, "zoom_name": 1, "cohort_number": 1, "genmate_group": 1, "pinned_character_id": 1, "showcase_message": 1, "showcase_updated_at": 1, "showcase_hidden": 1, "showcase_reactions": 1, "equipped_cosmetics.character_prop": 1}
 	cursor, err := r.users.Find(ctx, filter, options.Find().SetProjection(projection).SetSort(bson.D{{Key: "showcase_updated_at", Value: -1}, {Key: "_id", Value: 1}}))
 	if err != nil {
 		return nil, err
@@ -106,7 +106,6 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 	var users []struct {
 		ID        primitive.ObjectID `bson:"_id"`
 		FirstName string             `bson:"first_name"`
-		LastName  string             `bson:"last_name"`
 		ZoomName  string             `bson:"zoom_name"`
 		Cohort    int                `bson:"cohort_number"`
 		Team      string             `bson:"genmate_group"`
@@ -151,13 +150,6 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 		if !ok || character.OwnerID != user.ID {
 			continue
 		}
-		name := strings.TrimSpace(user.FirstName + " " + user.LastName)
-		if name == "" {
-			name = strings.TrimSpace(user.ZoomName)
-		}
-		if name == "" {
-			name = "Baro friend"
-		}
 		counts := map[string]int{}
 		reacted := map[string]bool{}
 		for _, reaction := range user.Reactions {
@@ -170,9 +162,18 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 		for _, emoji := range []string{"❤️", "✨", "😂", "🙌"} {
 			summaries = append(summaries, showcase.ReactionSummary{Emoji: emoji, Count: counts[emoji], Reacted: reacted[emoji]})
 		}
-		entries = append(entries, showcase.Entry{OwnerID: user.ID.Hex(), Name: name, Cohort: user.Cohort, Team: user.Team, Character: character, Prop: showcaseProp(user.Equipped["character_prop"]), Message: user.Message, UpdatedAt: user.UpdatedAt, Hidden: user.Hidden, Reactions: summaries})
+		entries = append(entries, showcase.Entry{OwnerID: user.ID.Hex(), Name: showcaseDisplayName(user.ZoomName, user.FirstName), Cohort: user.Cohort, Team: user.Team, Character: character, Prop: showcaseProp(user.Equipped["character_prop"]), Message: user.Message, UpdatedAt: user.UpdatedAt, Hidden: user.Hidden, Reactions: summaries})
 	}
 	return entries, nil
+}
+
+func showcaseDisplayName(zoomName, firstName string) string {
+	for _, name := range []string{zoomName, firstName} {
+		if name = strings.TrimSpace(name); name != "" {
+			return name
+		}
+	}
+	return "Baro friend"
 }
 
 func showcaseProp(equippedID string) string {
