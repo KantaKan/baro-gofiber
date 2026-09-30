@@ -86,7 +86,7 @@ func TestCharacterCosmeticRoutesAuthorizeAndSeparateInventory(t *testing.T) {
 	adminGroup.Post("/users/:id/character-cosmetics/:cosmeticId", h.GrantCharacterCosmetic)
 	learnerToken := characterToken(t, learner, "learner")
 	adminToken := characterToken(t, admin, "admin")
-	grantPath := "/admin/users/" + learner.Hex() + "/character-cosmetics/character_prop:flower"
+	grantPath := "/admin/users/" + learner.Hex() + "/character-cosmetics/character_prop%3Aflower"
 	if status, _ := characterRequest(t, app, http.MethodPost, grantPath, learnerToken, `{}`); status != http.StatusForbidden {
 		t.Fatalf("learner grant status = %d", status)
 	}

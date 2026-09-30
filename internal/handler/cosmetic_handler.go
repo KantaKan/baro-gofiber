@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"errors"
+	"net/url"
+	"strings"
+
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/user"
 	"gofiber-baro/pkg/middleware"
 	"gofiber-baro/pkg/utils"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -84,21 +87,32 @@ func (h *CosmeticHandler) GrantCharacterCosmetic(c *fiber.Ctx) error {
 	return h.grantCosmetic(c, true)
 }
 
+func cosmeticIDParam(c *fiber.Ctx) (string, error) {
+	cosmeticID, err := url.PathUnescape(c.Params("cosmeticId"))
+	if err != nil {
+		return "", errors.New("invalid cosmetic ID")
+	}
+	cosmeticID = strings.TrimSpace(cosmeticID)
+	if cosmeticID == "" {
+		return "", errors.New("cosmetic ID is required")
+	}
+	return cosmeticID, nil
+}
+
 func (h *CosmeticHandler) grantCosmetic(c *fiber.Ctx, character bool) error {
 	var body adminCosmeticGrantRequest
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	body.Message = strings.TrimSpace(body.Message)
-	cosmeticID := strings.TrimSpace(c.Params("cosmeticId"))
-	if cosmeticID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "Cosmetic ID is required")
+	cosmeticID, err := cosmeticIDParam(c)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
 	}
 	if len(body.Message) > 500 {
 		return utils.SendError(c, fiber.StatusBadRequest, "Message must be 500 characters or fewer")
 	}
 	var granted bool
-	var err error
 	if character {
 		granted, err = h.service.GrantCharacter(c.Params("id"), cosmeticID, body.Message)
 	} else {
@@ -111,7 +125,11 @@ func (h *CosmeticHandler) grantCosmetic(c *fiber.Ctx, character bool) error {
 }
 
 func (h *CosmeticHandler) RevokeCosmetic(c *fiber.Ctx) error {
-	revoked, err := h.service.Revoke(c.Params("id"), c.Params("cosmeticId"))
+	cosmeticID, err := cosmeticIDParam(c)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+	}
+	revoked, err := h.service.Revoke(c.Params("id"), cosmeticID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
 	}
