@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -134,6 +135,31 @@ type User struct {
 	GiftBoxes          []TeacherGiftBox     `bson:"gift_boxes,omitempty" json:"gift_boxes,omitempty"`
 	CharacterCareCount int                  `bson:"character_care_count,omitempty" json:"character_care_count,omitempty"`
 	LastCaredAt        *time.Time           `bson:"last_cared_at,omitempty" json:"last_cared_at,omitempty"`
+}
+
+func (u *User) UnmarshalBSON(data []byte) error {
+	type storedUser User
+	var decoded storedUser
+	if err := bson.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*u = User(decoded)
+	raw := bson.Raw(data)
+	if _, err := raw.LookupErr("care_energy_balance"); err != nil {
+		if legacy, legacyErr := raw.LookupErr("fertilizer_balance"); legacyErr == nil {
+			if decodeErr := legacy.Unmarshal(&u.CareEnergyBalance); decodeErr != nil {
+				return decodeErr
+			}
+		}
+	}
+	if _, err := raw.LookupErr("care_energy_log"); err != nil {
+		if legacy, legacyErr := raw.LookupErr("fertilizer_log"); legacyErr == nil {
+			if decodeErr := legacy.Unmarshal(&u.CareEnergyLog); decodeErr != nil {
+				return decodeErr
+			}
+		}
+	}
+	return nil
 }
 
 // UserSafe is a restricted version of User for non-admin users
