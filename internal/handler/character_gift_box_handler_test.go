@@ -16,11 +16,19 @@ import (
 )
 
 type giftBoxHTTPStore struct {
-	boxes          []domain.TeacherGiftBox
-	cohortLearners []primitive.ObjectID
-	teamLearners   []primitive.ObjectID
-	grantKeys      map[string]bool
-	recipientRoles map[primitive.ObjectID]string
+	boxes           []domain.TeacherGiftBox
+	cohortLearners  []primitive.ObjectID
+	teamLearners    []primitive.ObjectID
+	grantKeys       map[string]bool
+	recipientRoles  map[primitive.ObjectID]string
+	transferAllowed *bool
+}
+
+func (s *giftBoxHTTPStore) AllowTransferAttempt(context.Context, primitive.ObjectID) (bool, error) {
+	if s.transferAllowed == nil {
+		return true, nil
+	}
+	return *s.transferAllowed, nil
 }
 
 func (s *giftBoxHTTPStore) Create(_ context.Context, box domain.TeacherGiftBox) error {
@@ -72,6 +80,14 @@ type giftBoxHTTPDrawer struct {
 	request reward.DrawRequest
 }
 
+type giftBoxHTTPHatcher struct {
+	character *domain.BaroCharacter
+}
+
+func (h *giftBoxHTTPHatcher) Hatch(context.Context, string, string, string) (*domain.BaroCharacter, error) {
+	return h.character, nil
+}
+
 func (d *giftBoxHTTPDrawer) Odds(_ context.Context, request reward.DrawRequest) (reward.Eligibility, error) {
 	d.request = request
 	return reward.Eligibility{EligibleCount: 1, Odds: map[string]float64{"Rare": 1}}, nil
@@ -91,6 +107,7 @@ func TestCharacterGiftBoxRequiresAdminGrantAndOwnerOdds(t *testing.T) {
 	h := NewGiftBoxHandler(giftbox.NewService(store, drawer))
 	app := fiber.New()
 	self := app.Group("/gift-boxes", middleware.AuthMiddleware)
+	self.Get("", h.List)
 	self.Get("/:id/odds", h.Odds)
 	self.Post("/:id/open", h.Open)
 	self.Post("/:id/transfer", h.Transfer)
@@ -127,6 +144,91 @@ func TestCharacterGiftBoxRequiresAdminGrantAndOwnerOdds(t *testing.T) {
 	}
 	if store.boxes[0].UserID != learner || store.boxes[0].GrantedBy != admin {
 		t.Fatalf("transferred box = %+v", store.boxes[0])
+	}
+}
+
+func TestCharacterEggHTTPContractKeepsGrantOddsAndOpenDistinct(t *testing.T) {
+	t.Setenv("JWT_SECRET_KEY", "test-character-secret")
+	learner := primitive.NewObjectID()
+	admin := primitive.NewObjectID()
+	store := &giftBoxHTTPStore{recipientRoles: map[primitive.ObjectID]string{learner: "learner", admin: "admin"}}
+	drawer := &giftBoxHTTPDrawer{}
+	h := NewGiftBoxHandler(giftbox.NewService(store, drawer))
+	app := fiber.New()
+	self := app.Group("/gift-boxes", middleware.AuthMiddleware)
+	self.Get("", h.List)
+	self.Get("/:id/odds", h.Odds)
+	self.Post("/:id/open", h.Open)
+	adminGroup := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole)
+	adminGroup.Post("/users/:id/gift-boxes", h.Grant)
+
+	path := "/admin/users/" + learner.Hex() + "/gift-boxes"
+	payload := `{"minimum_rarity":"Common","message":"A new friend is waiting","reward_pool":"character-egg"}`
+	if status, _ := characterRequest(t, app, http.MethodPost, path, characterToken(t, learner, "learner"), payload); status != http.StatusForbidden {
+		t.Fatalf("learner grant status = %d", status)
+	}
+	if status, _ := characterRequest(t, app, http.MethodPost, path, characterToken(t, admin, "admin"), payload); status != http.StatusCreated {
+		t.Fatalf("admin grant status = %d", status)
+	}
+	if len(store.boxes) != 1 || store.boxes[0].RewardPool != giftbox.CharacterEggPool {
+		t.Fatalf("saved character eggs = %+v", store.boxes)
+	}
+	status, body := characterRequest(t, app, http.MethodGet, "/gift-boxes", characterToken(t, learner, "learner"))
+	if status != http.StatusOK {
+		t.Fatalf("egg list status = %d", status)
+	}
+	var boxes []domain.TeacherGiftBox
+	if err := json.Unmarshal(body["data"], &boxes); err != nil || len(boxes) != 1 || boxes[0].RewardPool != giftbox.CharacterEggPool {
+		t.Fatalf("listed character eggs = %+v, err=%v", boxes, err)
+	}
+
+	eggID := store.boxes[0].ID.Hex()
+	status, body = characterRequest(t, app, http.MethodGet, "/gift-boxes/"+eggID+"/odds", characterToken(t, learner, "learner"))
+	if status != http.StatusOK {
+		t.Fatalf("egg odds status = %d", status)
+	}
+	var odds reward.Eligibility
+	if err := json.Unmarshal(body["data"], &odds); err != nil || odds.Odds["Normal"] != 0.83 || odds.Odds["Meme Rare"] != 0.15 || odds.Odds["Legendary"] != 0.02 {
+		t.Fatalf("egg odds = %+v, err=%v", odds, err)
+	}
+	if status, _ := characterRequest(t, app, http.MethodPost, "/gift-boxes/"+eggID+"/open", characterToken(t, learner, "learner")); status != http.StatusBadRequest {
+		t.Fatalf("egg open status = %d", status)
+	}
+	if drawer.request.Pool != "" {
+		t.Fatalf("egg open reached cosmetic drawer: %+v", drawer.request)
+	}
+}
+
+func TestCharacterEggOpenReturnsDiscriminatedWholeCharacter(t *testing.T) {
+	t.Setenv("JWT_SECRET_KEY", "test-character-secret")
+	learner := primitive.NewObjectID()
+	other := primitive.NewObjectID()
+	eggID := primitive.NewObjectID()
+	characterID := primitive.NewObjectID()
+	store := &giftBoxHTTPStore{boxes: []domain.TeacherGiftBox{{
+		ID: eggID, UserID: learner, Status: "unopened", RewardPool: giftbox.CharacterEggPool, MinimumRarity: "Common",
+	}}}
+	hatcher := &giftBoxHTTPHatcher{character: &domain.BaroCharacter{
+		ID: characterID, OwnerID: learner, Serial: "B-" + characterID.Hex(), Source: "character_egg", OriginKey: "character-egg:" + eggID.Hex(),
+	}}
+	h := NewGiftBoxHandler(giftbox.NewService(store, &giftBoxHTTPDrawer{}, hatcher))
+	app := fiber.New()
+	app.Post("/gift-boxes/:id/open", middleware.AuthMiddleware, h.Open)
+	path := "/gift-boxes/" + eggID.Hex() + "/open"
+	if status, _ := characterRequest(t, app, http.MethodPost, path, characterToken(t, other, "learner")); status != http.StatusBadRequest {
+		t.Fatalf("non-owner egg open status = %d", status)
+	}
+	status, body := characterRequest(t, app, http.MethodPost, path, characterToken(t, learner, "learner"))
+	if status != http.StatusOK {
+		t.Fatalf("owner egg open status = %d", status)
+	}
+	var reveal struct {
+		Kind      string                `json:"kind"`
+		Character *domain.BaroCharacter `json:"character"`
+		Item      json.RawMessage       `json:"item"`
+	}
+	if err := json.Unmarshal(body["data"], &reveal); err != nil || reveal.Kind != "character" || reveal.Character == nil || reveal.Character.ID != characterID || len(reveal.Item) != 0 {
+		t.Fatalf("egg reveal = %+v, err=%v", reveal, err)
 	}
 }
 
@@ -190,5 +292,29 @@ func TestAudienceGrantRequiresAdminAndReachesOnlySelectedTeam(t *testing.T) {
 		if len(items) != want || (want == 1 && items[0].RewardPool != "character-box") {
 			t.Fatalf("recipient %s boxes = %+v", id.Hex(), items)
 		}
+	}
+}
+
+func TestTransferRateLimitReturnsWarmTooManyRequestsResponse(t *testing.T) {
+	t.Setenv("JWT_SECRET_KEY", "test-character-secret")
+	owner := primitive.NewObjectID()
+	recipient := primitive.NewObjectID()
+	eggID := primitive.NewObjectID()
+	allowed := false
+	store := &giftBoxHTTPStore{
+		boxes:           []domain.TeacherGiftBox{{ID: eggID, UserID: owner, Status: "unopened", RewardPool: giftbox.CharacterEggPool}},
+		recipientRoles:  map[primitive.ObjectID]string{owner: "learner", recipient: "learner"},
+		transferAllowed: &allowed,
+	}
+	h := NewGiftBoxHandler(giftbox.NewService(store, &giftBoxHTTPDrawer{}))
+	app := fiber.New()
+	app.Post("/gift-boxes/:id/transfer", middleware.AuthMiddleware, h.Transfer)
+	payload := `{"recipient_id":"` + recipient.Hex() + `"}`
+	status, _ := characterRequest(t, app, http.MethodPost, "/gift-boxes/"+eggID.Hex()+"/transfer", characterToken(t, owner, "learner"), payload)
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("rate limit response = %d", status)
+	}
+	if store.boxes[0].UserID != owner {
+		t.Fatalf("rate limited Egg moved to %s", store.boxes[0].UserID.Hex())
 	}
 }

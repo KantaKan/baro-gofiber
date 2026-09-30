@@ -18,12 +18,105 @@ import (
 )
 
 type GiftBoxRepository struct {
-	users  *mongo.Collection
-	client *mongo.Client
+	users          *mongo.Collection
+	notifications  *mongo.Collection
+	transferLimits *mongo.Collection
+	client         *mongo.Client
 }
 
 func NewGiftBoxRepository(db *mongo.Database) *GiftBoxRepository {
-	return &GiftBoxRepository{users: db.Collection("users"), client: db.Client()}
+	return &GiftBoxRepository{users: db.Collection("users"), notifications: db.Collection("notifications"), transferLimits: db.Collection("gift_box_transfer_limits"), client: db.Client()}
+}
+
+func (r *GiftBoxRepository) EnsureIndexes(ctx context.Context) error {
+	_, err := r.transferLimits.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "expires_at", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(0).SetName("expire_gift_box_transfer_limits"),
+	})
+	return err
+}
+
+func (r *GiftBoxRepository) AllowTransferAttempt(ctx context.Context, senderID primitive.ObjectID) (bool, error) {
+	now := time.Now().UTC()
+	cutoff := now.Add(-10 * time.Minute)
+	update := mongo.Pipeline{bson.D{{Key: "$set", Value: bson.M{
+		"attempts": bson.M{"$concatArrays": bson.A{
+			bson.M{"$filter": bson.M{"input": bson.M{"$ifNull": bson.A{"$attempts", bson.A{}}}, "as": "attempt", "cond": bson.M{"$gte": bson.A{"$$attempt", cutoff}}}},
+			bson.A{now},
+		}},
+		"expires_at": now.Add(10 * time.Minute),
+	}}}}
+	var state struct {
+		Attempts []time.Time `bson:"attempts"`
+	}
+	err := r.transferLimits.FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": senderID},
+		update,
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+	).Decode(&state)
+	if err != nil {
+		return false, err
+	}
+	return len(state.Attempts) <= 5, nil
+}
+
+func (r *GiftBoxRepository) CreateCharacterEgg(ctx context.Context, box domain.TeacherGiftBox) error {
+	return r.withCharacterEggTransaction(ctx, box, false)
+}
+
+func (r *GiftBoxRepository) CreateCharacterEggOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error) {
+	err := r.withCharacterEggTransaction(ctx, box, true)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, errCharacterEggAlreadyGranted) {
+		return false, nil
+	}
+	return false, err
+}
+
+var errCharacterEggAlreadyGranted = errors.New("character egg already granted")
+
+func (r *GiftBoxRepository) withCharacterEggTransaction(ctx context.Context, box domain.TeacherGiftBox, idempotent bool) error {
+	session, err := r.client.StartSession()
+	if err != nil {
+		return err
+	}
+	defer session.EndSession(ctx)
+	_, err = session.WithTransaction(ctx, func(tx mongo.SessionContext) (interface{}, error) {
+		filter := bson.M{"_id": box.UserID, "role": "learner", "deleted": bson.M{"$ne": true}}
+		if idempotent {
+			filter["gift_boxes.grant_key"] = bson.M{"$ne": box.GrantKey}
+		}
+		result, updateErr := r.users.UpdateOne(tx, filter, bson.M{"$push": bson.M{"gift_boxes": box}})
+		if updateErr != nil {
+			return nil, updateErr
+		}
+		if result.ModifiedCount != 1 {
+			if idempotent {
+				count, countErr := r.users.CountDocuments(tx, bson.M{"_id": box.UserID, "gift_boxes.grant_key": box.GrantKey})
+				if countErr != nil {
+					return nil, countErr
+				}
+				if count == 1 {
+					return nil, errCharacterEggAlreadyGranted
+				}
+			}
+			return nil, domain.ErrUserNotFound
+		}
+		now := time.Now()
+		notification := domain.Notification{
+			ID: primitive.NewObjectID(), Title: "A Character Egg arrived", Message: "A mystery friend is waiting for you to hatch it.",
+			Link: "/learner", LinkText: "Open Character Eggs", IsActive: true, Priority: "normal",
+			StartDate: now, EndDate: now.AddDate(1, 0, 0), CreatedAt: now, ReadByUsers: []primitive.ObjectID{}, RecipientIDs: []primitive.ObjectID{box.UserID},
+		}
+		if _, insertErr := r.notifications.InsertOne(tx, notification); insertErr != nil {
+			return nil, insertErr
+		}
+		return nil, nil
+	})
+	return err
 }
 
 func giftBoxDisplayName(user domain.User) string {

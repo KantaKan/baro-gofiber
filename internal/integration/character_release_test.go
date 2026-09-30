@@ -58,9 +58,13 @@ func TestCharacterReleaseAgainstMongoDB(t *testing.T) {
 	documents := make([]interface{}, 45)
 	for index := range ownerIDs {
 		ownerIDs[index] = primitive.NewObjectID()
+		team := "Beta"
+		if index < 5 {
+			team = "Alpha"
+		}
 		documents[index] = bson.M{
 			"_id": ownerIDs[index], "email": fmt.Sprintf("release-%02d@example.test", index),
-			"role": "learner", "cohort_number": 99, "deleted": false,
+			"role": "learner", "cohort_number": 99, "genmate_group": team, "deleted": false,
 			migration.LegacyBalanceField: index % 6,
 			migration.LegacyLogField:     bson.A{bson.M{"kind": "grant", "amount": index % 6}},
 		}
@@ -192,6 +196,94 @@ func TestCharacterReleaseAgainstMongoDB(t *testing.T) {
 		}
 	}
 	giftRepository := repository.NewGiftBoxRepository(database)
+	if err := giftRepository.EnsureIndexes(ctx); err != nil {
+		t.Fatal(err)
+	}
+	grantService := giftbox.NewService(giftRepository, nil)
+	grantAdmin := primitive.NewObjectID()
+	standardEgg, err := grantService.GrantWithPool(ctx, ownerIDs[10].Hex(), grantAdmin.Hex(), "Common", "A mystery friend is waiting", giftbox.CharacterEggPool)
+	if err != nil || standardEgg.RewardPool != giftbox.CharacterEggPool || standardEgg.MinimumRarity != "Common" {
+		t.Fatalf("individual Standard Egg grant = %+v, err=%v", standardEgg, err)
+	}
+	transferredEgg, err := grantService.Transfer(ctx, ownerIDs[10].Hex(), standardEgg.ID.Hex(), ownerIDs[11].Hex())
+	if err != nil || transferredEgg.UserID != ownerIDs[11] || transferredEgg.RewardPool != giftbox.CharacterEggPool || len(transferredEgg.TransferHistory) != 1 {
+		t.Fatalf("learner Character Egg transfer = %+v, err=%v", transferredEgg, err)
+	}
+	rareTeam, err := grantService.GrantAudience(ctx, 99, "Alpha", grantAdmin.Hex(), "Rare", "A mystery friend is waiting", "release-team-rare", giftbox.CharacterEggPool)
+	if err != nil || rareTeam.Total != 5 || rareTeam.Created != 5 || rareTeam.Existing != 0 || len(rareTeam.Failures) != 0 {
+		t.Fatalf("Rare team Egg grant = %+v, err=%v", rareTeam, err)
+	}
+	rareTeamRetry, err := grantService.GrantAudience(ctx, 99, "Alpha", grantAdmin.Hex(), "Rare", "A mystery friend is waiting", "release-team-rare", giftbox.CharacterEggPool)
+	if err != nil || rareTeamRetry.Total != 5 || rareTeamRetry.Created != 0 || rareTeamRetry.Existing != 5 || len(rareTeamRetry.Failures) != 0 {
+		t.Fatalf("Rare team Egg retry = %+v, err=%v", rareTeamRetry, err)
+	}
+	legendaryCohort, err := grantService.GrantAudience(ctx, 99, "", grantAdmin.Hex(), "Legendary", "A mystery friend is waiting", "release-cohort-legendary", giftbox.CharacterEggPool)
+	if err != nil || legendaryCohort.Total != len(ownerIDs) || legendaryCohort.Created != len(ownerIDs) || legendaryCohort.Existing != 0 || len(legendaryCohort.Failures) != 0 {
+		t.Fatalf("Legendary cohort Egg grant = %+v, err=%v", legendaryCohort, err)
+	}
+	legendaryRetry, err := grantService.GrantAudience(ctx, 99, "", grantAdmin.Hex(), "Legendary", "A mystery friend is waiting", "release-cohort-legendary", giftbox.CharacterEggPool)
+	if err != nil || legendaryRetry.Created != 0 || legendaryRetry.Existing != len(ownerIDs) || len(legendaryRetry.Failures) != 0 {
+		t.Fatalf("Legendary cohort Egg retry = %+v, err=%v", legendaryRetry, err)
+	}
+	for tier, expected := range map[string]map[string]float64{
+		"Common":    {"Normal": .83, "Meme Rare": .15, "Legendary": .02},
+		"Rare":      {"Meme Rare": 15.0 / 17.0, "Legendary": 2.0 / 17.0},
+		"Legendary": {"Legendary": 1},
+	} {
+		odds, oddsErr := character.EggOdds(tier)
+		if oddsErr != nil || fmt.Sprint(odds) != fmt.Sprint(expected) {
+			t.Fatalf("%s Egg odds = %+v, err=%v", tier, odds, oddsErr)
+		}
+	}
+	recipients, err := grantService.SearchRecipients(ctx, ownerIDs[0].Hex(), "release-01")
+	if err != nil || len(recipients) != 1 || recipients[0].ID != ownerIDs[1].Hex() || recipients[0].Role != "learner" {
+		t.Fatalf("learner recipient search = %+v, err=%v", recipients, err)
+	}
+	milestoneOwner := ownerIDs[43]
+	notificationFilter := bson.M{"recipient_ids": milestoneOwner, "message": bson.M{"$not": primitive.Regex{Pattern: "(?i)(normal|rare|legendary|dna)"}}}
+	notificationsBefore, err := database.Collection("notifications").CountDocuments(ctx, notificationFilter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	milestoneCreates := make(chan bool, 8)
+	var milestoneGroup sync.WaitGroup
+	for range 8 {
+		milestoneGroup.Add(1)
+		go func() {
+			defer milestoneGroup.Done()
+			created, createErr := giftRepository.CreateCharacterEggOnce(ctx, domain.TeacherGiftBox{
+				ID: primitive.NewObjectID(), UserID: milestoneOwner, MinimumRarity: "Common",
+				Message: "Your 30-workday reflection milestone brought a mystery friend to meet.", Status: "unopened",
+				CreatedAt: time.Now().UTC(), GrantKey: "character-egg-milestone:30:" + milestoneOwner.Hex(),
+				Source: "reflection-milestone", RewardPool: giftbox.CharacterEggPool,
+			})
+			if createErr != nil {
+				t.Errorf("milestone Egg create: %v", createErr)
+			}
+			milestoneCreates <- created
+		}()
+	}
+	milestoneGroup.Wait()
+	close(milestoneCreates)
+	createdMilestoneEggs := 0
+	for created := range milestoneCreates {
+		if created {
+			createdMilestoneEggs++
+		}
+	}
+	grantKey := "character-egg-milestone:30:" + milestoneOwner.Hex()
+	if count, countErr := users.CountDocuments(ctx, bson.M{"_id": milestoneOwner, "gift_boxes.grant_key": grantKey}); countErr != nil || count != 1 || createdMilestoneEggs != 1 {
+		t.Fatalf("milestone Egg idempotency: created=%d persisted=%d err=%v", createdMilestoneEggs, count, countErr)
+	}
+	if count, countErr := database.Collection("notifications").CountDocuments(ctx, notificationFilter); countErr != nil || count != notificationsBefore+1 {
+		t.Fatalf("milestone Egg notification: count=%d err=%v", count, countErr)
+	}
+	for attempt := 1; attempt <= 6; attempt++ {
+		allowed, limitErr := giftRepository.AllowTransferAttempt(ctx, ownerIDs[44])
+		if limitErr != nil || allowed != (attempt <= 5) {
+			t.Fatalf("persistent transfer limit attempt %d: allowed=%v err=%v", attempt, allowed, limitErr)
+		}
+	}
 	transferErrors := make(chan error, 2)
 	var transferGroup sync.WaitGroup
 	for _, recipientID := range ownerIDs[2:4] {
@@ -233,6 +325,132 @@ func TestCharacterReleaseAgainstMongoDB(t *testing.T) {
 	}
 	if persistedBox == nil || persistedBox.UserID != currentOwner.ID || len(persistedBox.TransferHistory) != 1 {
 		t.Fatalf("gift transfer history or owner is invalid: owner=%s box=%+v", currentOwner.ID.Hex(), persistedBox)
+	}
+
+	eggOwner := ownerIDs[5]
+	eggID := primitive.NewObjectID()
+	egg := domain.TeacherGiftBox{
+		ID: eggID, UserID: eggOwner, MinimumRarity: "Common", Message: "meet your new friend",
+		GrantedBy: ownerIDs[4], Status: "unopened", CreatedAt: time.Now().UTC(), RewardPool: giftbox.CharacterEggPool,
+	}
+	starterID := seenByOwner[eggOwner]
+	if _, err := users.UpdateOne(ctx, bson.M{"_id": eggOwner}, bson.M{
+		"$set":  bson.M{"equipped_character_id": starterID, "pinned_character_id": starterID},
+		"$push": bson.M{"gift_boxes": egg},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	eggService := character.NewEggService(characterRepository, character.SecurePicker{})
+	eggGiftService := giftbox.NewService(giftRepository, nil, eggService)
+	type hatchResult struct {
+		characterID primitive.ObjectID
+		err         error
+	}
+	hatches := make(chan hatchResult, 8)
+	var hatchGroup sync.WaitGroup
+	for range 8 {
+		hatchGroup.Add(1)
+		go func() {
+			defer hatchGroup.Done()
+			result, hatchErr := eggGiftService.Open(ctx, eggOwner.Hex(), eggID.Hex())
+			if hatchErr != nil || result == nil || result.Character == nil {
+				hatches <- hatchResult{err: hatchErr}
+				return
+			}
+			hatches <- hatchResult{characterID: result.Character.ID}
+		}()
+	}
+	hatchGroup.Wait()
+	close(hatches)
+	var revealedID primitive.ObjectID
+	for result := range hatches {
+		if result.err != nil || result.characterID.IsZero() {
+			t.Fatalf("concurrent Egg open failed: %+v", result)
+		}
+		if revealedID.IsZero() {
+			revealedID = result.characterID
+		} else if revealedID != result.characterID {
+			t.Fatalf("Egg rerolled under concurrency: first=%s next=%s", revealedID.Hex(), result.characterID.Hex())
+		}
+	}
+	retry, err := eggGiftService.Open(ctx, eggOwner.Hex(), eggID.Hex())
+	if err != nil || retry.Character == nil || retry.Character.ID != revealedID {
+		t.Fatalf("Egg retry result = %+v, err=%v", retry, err)
+	}
+	origin := "character-egg:" + eggID.Hex()
+	if count, err := database.Collection("baro_characters").CountDocuments(ctx, bson.M{"origin_key": origin}); err != nil || count != 1 {
+		t.Fatalf("Egg origin count = %d, err=%v", count, err)
+	}
+	collection, err := characterService.Collection(ctx, eggOwner.Hex())
+	if err != nil || len(collection) != 2 {
+		t.Fatalf("Egg character collection = %+v, err=%v", collection, err)
+	}
+	ownership := character.NewOwnershipService(characterRepository, character.SecurePicker{})
+	selection, err := ownership.Selection(ctx, eggOwner.Hex())
+	if err != nil || selection.EquippedID != starterID.Hex() || selection.PinnedID != starterID.Hex() {
+		t.Fatalf("Egg changed selection without consent: %+v, err=%v", selection, err)
+	}
+	selection, err = ownership.Equip(ctx, eggOwner.Hex(), revealedID.Hex())
+	if err != nil || selection.EquippedID != revealedID.Hex() || selection.PinnedID != starterID.Hex() {
+		t.Fatalf("explicit Egg equip = %+v, err=%v", selection, err)
+	}
+	if _, err := giftRepository.Transfer(ctx, eggID, eggOwner, ownerIDs[6]); !errors.Is(err, giftbox.ErrBoxNotFound) {
+		t.Fatalf("opened Egg transferred: %v", err)
+	}
+
+	raceOwner := ownerIDs[7]
+	raceRecipient := ownerIDs[8]
+	raceEggID := primitive.NewObjectID()
+	raceEgg := domain.TeacherGiftBox{
+		ID: raceEggID, UserID: raceOwner, MinimumRarity: "Common", Message: "race check",
+		GrantedBy: grantAdmin, Status: "unopened", CreatedAt: time.Now().UTC(), RewardPool: giftbox.CharacterEggPool,
+	}
+	if err := giftRepository.CreateCharacterEgg(ctx, raceEgg); err != nil {
+		t.Fatal(err)
+	}
+	type raceResult struct {
+		kind string
+		err  error
+	}
+	races := make(chan raceResult, 2)
+	go func() {
+		_, openErr := eggGiftService.Open(ctx, raceOwner.Hex(), raceEggID.Hex())
+		races <- raceResult{kind: "open", err: openErr}
+	}()
+	go func() {
+		_, transferErr := giftRepository.Transfer(ctx, raceEggID, raceOwner, raceRecipient)
+		races <- raceResult{kind: "transfer", err: transferErr}
+	}()
+	firstRace := <-races
+	secondRace := <-races
+	succeeded := 0
+	for _, result := range []raceResult{firstRace, secondRace} {
+		if result.err == nil {
+			succeeded++
+		} else if !errors.Is(result.err, giftbox.ErrBoxNotFound) {
+			t.Fatalf("unexpected %s race error: %v", result.kind, result.err)
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("open-versus-transfer winners = %d, results=%+v %+v", succeeded, firstRace, secondRace)
+	}
+	raceOrigins, err := database.Collection("baro_characters").CountDocuments(ctx, bson.M{"origin_key": "character-egg:" + raceEggID.Hex()})
+	if err != nil || raceOrigins > 1 {
+		t.Fatalf("open-versus-transfer origin count = %d, err=%v", raceOrigins, err)
+	}
+	var terminalOwner domain.User
+	if err := users.FindOne(ctx, bson.M{"gift_boxes._id": raceEggID}).Decode(&terminalOwner); err != nil {
+		t.Fatal(err)
+	}
+	var terminalEgg *domain.TeacherGiftBox
+	for index := range terminalOwner.GiftBoxes {
+		if terminalOwner.GiftBoxes[index].ID == raceEggID {
+			terminalEgg = &terminalOwner.GiftBoxes[index]
+			break
+		}
+	}
+	if terminalEgg == nil || (terminalEgg.Status == "opened") != (raceOrigins == 1) || (terminalEgg.Status == "unopened" && terminalOwner.ID != raceRecipient) {
+		t.Fatalf("invalid open-versus-transfer terminal state: owner=%s egg=%+v origins=%d", terminalOwner.ID.Hex(), terminalEgg, raceOrigins)
 	}
 }
 

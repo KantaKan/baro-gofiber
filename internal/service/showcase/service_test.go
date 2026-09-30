@@ -97,6 +97,19 @@ func (s *memoryStore) ToggleReaction(_ context.Context, ownerID, actorID primiti
 	return s.reactions[key], nil
 }
 
+func (s *memoryStore) SetMood(_ context.Context, ownerID primitive.ObjectID, mood string, until time.Time) error {
+	entry, ok := s.entries[ownerID]
+	if !ok {
+		return ErrEntryNotFound
+	}
+	entry.Mood, entry.MoodUntil = mood, &until
+	if mood == "" {
+		entry.MoodUntil = nil
+	}
+	s.entries[ownerID] = entry
+	return nil
+}
+
 func (s *memoryStore) Moderate(_ context.Context, ownerID, adminID primitive.ObjectID, hidden bool, reason string, at time.Time) error {
 	entry, ok := s.entries[ownerID]
 	if !ok {
@@ -252,5 +265,51 @@ func TestReactionToggleAndModerationKeepOwnerMessageButHidePublicEntry(t *testin
 	items, _ = service.List(context.Background(), peer.Hex(), false, 0, "", false)
 	if len(items) != 1 || items[0].Message != "Edited by owner" || len(store.moderation) != 2 {
 		t.Fatalf("restored entry = %+v, audit=%+v", items, store.moderation)
+	}
+}
+
+func TestMoodLastsTwentyFourHoursAndLeavesCharacterStateAlone(t *testing.T) {
+	owner := primitive.NewObjectID()
+	characterID := primitive.NewObjectID()
+	character := domain.BaroCharacter{ID: characterID, OwnerID: owner, Fingerprint: "dna"}
+	store := &memoryStore{
+		viewers: map[primitive.ObjectID]Viewer{owner: {Cohort: 16, Role: "learner"}},
+		owned:   map[primitive.ObjectID]domain.BaroCharacter{characterID: character},
+		entries: map[primitive.ObjectID]Entry{}, reactions: map[string]bool{},
+	}
+	clock := time.Date(2026, 9, 30, 3, 0, 0, 0, time.UTC)
+	service := NewService(store)
+	service.now = func() time.Time { return clock }
+	if _, err := service.SetMood(context.Background(), owner.Hex(), "quiet"); !errors.Is(err, ErrEntryNotFound) {
+		t.Fatalf("mood without a pin err = %v", err)
+	}
+	if err := service.Save(context.Background(), owner.Hex(), characterID.Hex(), "hello"); err != nil {
+		t.Fatal(err)
+	}
+	for _, mood := range []string{"greeting", "relaxing", "meal", "playful", "quiet", "surprise"} {
+		state, err := service.SetMood(context.Background(), owner.Hex(), mood)
+		if err != nil || state.Mood != mood || !state.Until.Equal(clock.Add(24*time.Hour)) {
+			t.Fatalf("SetMood(%q) = %+v, %v", mood, state, err)
+		}
+	}
+	for _, invalid := range []string{"angry", "fight:someone", "quiet "+owner.Hex()} {
+		if _, err := service.SetMood(context.Background(), owner.Hex(), invalid); !errors.Is(err, ErrInvalidMood) {
+			t.Fatalf("SetMood(%q) err = %v", invalid, err)
+		}
+	}
+	entry, err := service.Mine(context.Background(), owner.Hex())
+	if err != nil || entry.Mood != "surprise" || entry.Message != "hello" || entry.Character.Fingerprint != "dna" {
+		t.Fatalf("active mood entry = %+v, %v", entry, err)
+	}
+	clock = clock.Add(24 * time.Hour)
+	entry, err = service.Mine(context.Background(), owner.Hex())
+	if err != nil || entry.Mood != "" || entry.MoodUntil != nil {
+		t.Fatalf("expired mood entry = %+v, %v", entry, err)
+	}
+	if state, err := service.SetMood(context.Background(), owner.Hex(), ""); err != nil || state.Mood != "" {
+		t.Fatalf("clear mood = %+v, %v", state, err)
+	}
+	if store.entries[owner].Mood != "" || store.entries[owner].Character.ID != characterID {
+		t.Fatalf("cleared entry = %+v", store.entries[owner])
 	}
 }

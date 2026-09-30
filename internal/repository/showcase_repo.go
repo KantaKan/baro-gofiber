@@ -57,7 +57,7 @@ func (r *ShowcaseRepository) FindOwned(ctx context.Context, ownerID, characterID
 }
 
 func (r *ShowcaseRepository) Save(ctx context.Context, ownerID primitive.ObjectID, characterID *primitive.ObjectID, message string, at time.Time) error {
-	update := bson.M{"$unset": bson.M{"pinned_character_id": "", "showcase_message": "", "showcase_updated_at": "", "showcase_reactions": ""}}
+	update := bson.M{"$unset": bson.M{"pinned_character_id": "", "showcase_message": "", "showcase_updated_at": "", "showcase_reactions": "", "showcase_mood": "", "showcase_mood_until": ""}}
 	if characterID != nil {
 		update = bson.M{"$set": bson.M{"pinned_character_id": *characterID, "showcase_message": message, "showcase_updated_at": at}}
 	}
@@ -97,7 +97,7 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 	if team != "" {
 		filter["genmate_group"] = team
 	}
-	projection := bson.M{"first_name": 1, "last_name": 1, "zoom_name": 1, "cohort_number": 1, "genmate_group": 1, "pinned_character_id": 1, "showcase_message": 1, "showcase_updated_at": 1, "showcase_hidden": 1, "showcase_reactions": 1, "equipped_cosmetics.character_prop": 1}
+	projection := bson.M{"first_name": 1, "zoom_name": 1, "cohort_number": 1, "genmate_group": 1, "pinned_character_id": 1, "showcase_message": 1, "showcase_updated_at": 1, "showcase_hidden": 1, "showcase_reactions": 1, "showcase_mood": 1, "showcase_mood_until": 1, "equipped_cosmetics.character_prop": 1}
 	cursor, err := r.users.Find(ctx, filter, options.Find().SetProjection(projection).SetSort(bson.D{{Key: "showcase_updated_at", Value: -1}, {Key: "_id", Value: 1}}))
 	if err != nil {
 		return nil, err
@@ -106,7 +106,6 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 	var users []struct {
 		ID        primitive.ObjectID `bson:"_id"`
 		FirstName string             `bson:"first_name"`
-		LastName  string             `bson:"last_name"`
 		ZoomName  string             `bson:"zoom_name"`
 		Cohort    int                `bson:"cohort_number"`
 		Team      string             `bson:"genmate_group"`
@@ -116,6 +115,8 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 		Hidden    bool               `bson:"showcase_hidden"`
 		Reactions []showcaseReaction `bson:"showcase_reactions"`
 		Equipped  map[string]string  `bson:"equipped_cosmetics"`
+		Mood      string             `bson:"showcase_mood"`
+		MoodUntil *time.Time         `bson:"showcase_mood_until"`
 	}
 	if err := cursor.All(ctx, &users); err != nil {
 		return nil, err
@@ -151,13 +152,6 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 		if !ok || character.OwnerID != user.ID {
 			continue
 		}
-		name := strings.TrimSpace(user.FirstName + " " + user.LastName)
-		if name == "" {
-			name = strings.TrimSpace(user.ZoomName)
-		}
-		if name == "" {
-			name = "Baro friend"
-		}
 		counts := map[string]int{}
 		reacted := map[string]bool{}
 		for _, reaction := range user.Reactions {
@@ -170,9 +164,18 @@ func (r *ShowcaseRepository) list(ctx context.Context, cohort int, team string, 
 		for _, emoji := range []string{"❤️", "✨", "😂", "🙌"} {
 			summaries = append(summaries, showcase.ReactionSummary{Emoji: emoji, Count: counts[emoji], Reacted: reacted[emoji]})
 		}
-		entries = append(entries, showcase.Entry{OwnerID: user.ID.Hex(), Name: name, Cohort: user.Cohort, Team: user.Team, Character: character, Prop: showcaseProp(user.Equipped["character_prop"]), Message: user.Message, UpdatedAt: user.UpdatedAt, Hidden: user.Hidden, Reactions: summaries})
+		entries = append(entries, showcase.Entry{OwnerID: user.ID.Hex(), Name: showcaseDisplayName(user.ZoomName, user.FirstName), Cohort: user.Cohort, Team: user.Team, Character: character, Prop: showcaseProp(user.Equipped["character_prop"]), Message: user.Message, UpdatedAt: user.UpdatedAt, Hidden: user.Hidden, Reactions: summaries, Mood: user.Mood, MoodUntil: user.MoodUntil})
 	}
 	return entries, nil
+}
+
+func showcaseDisplayName(zoomName, firstName string) string {
+	for _, name := range []string{zoomName, firstName} {
+		if name = strings.TrimSpace(name); name != "" {
+			return name
+		}
+	}
+	return "Baro friend"
 }
 
 func showcaseProp(equippedID string) string {
@@ -182,6 +185,21 @@ func showcaseProp(equippedID string) string {
 	default:
 		return ""
 	}
+}
+
+func (r *ShowcaseRepository) SetMood(ctx context.Context, ownerID primitive.ObjectID, mood string, until time.Time) error {
+	update := bson.M{"$unset": bson.M{"showcase_mood": "", "showcase_mood_until": ""}}
+	if mood != "" {
+		update = bson.M{"$set": bson.M{"showcase_mood": mood, "showcase_mood_until": until}}
+	}
+	result, err := r.users.UpdateOne(ctx, bson.M{"_id": ownerID, "deleted": bson.M{"$ne": true}, "pinned_character_id": bson.M{"$exists": true, "$ne": nil}}, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return showcase.ErrEntryNotFound
+	}
+	return nil
 }
 
 func (r *ShowcaseRepository) ReactionTarget(ctx context.Context, ownerID primitive.ObjectID) (*showcase.Target, error) {

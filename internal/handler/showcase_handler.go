@@ -123,6 +123,29 @@ func (h *ShowcaseHandler) Save(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Showcase pin saved", fiber.Map{"saved": true})
 }
 
+type showcaseMoodRequest struct {
+	Mood string `json:"mood"`
+}
+
+func (h *ShowcaseHandler) SetMood(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body showcaseMoodRequest
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	state, err := h.service.SetMood(c.UserContext(), claims.UserID, body.Mood)
+	if errors.Is(err, showcase.ErrEntryNotFound) {
+		return utils.SendError(c, fiber.StatusNotFound, "Pin a character on the lawn before choosing a mood")
+	}
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Lawn mood saved", state)
+}
+
 func (h *ShowcaseHandler) Remove(c *fiber.Ctx) error {
 	claims, ok := c.Locals("user").(*middleware.Claims)
 	if !ok {

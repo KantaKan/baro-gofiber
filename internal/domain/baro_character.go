@@ -50,6 +50,7 @@ type BaroCharacter struct {
 	DNA         CharacterDNA       `bson:"dna" json:"dna"`
 	Fingerprint string             `bson:"fingerprint" json:"fingerprint"`
 	Source      string             `bson:"source" json:"source"`
+	OriginKey   string             `bson:"origin_key,omitempty" json:"origin_key,omitempty"`
 	IsStarter   bool               `bson:"is_starter" json:"is_starter"`
 	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
 }

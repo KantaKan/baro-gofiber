@@ -57,6 +57,46 @@ func TestGenerateDNAUsesRarePatternPool(t *testing.T) {
 	}
 }
 
+func TestGenerateEggDNAHonorsEveryEggTier(t *testing.T) {
+	tests := []struct {
+		name   string
+		tier   string
+		rolls  []int
+		rarity domain.CharacterRarity
+	}{
+		{name: "standard normal", tier: "Common", rolls: []int{0, 0, 0, 0, 0, 0, 0, 0}, rarity: domain.CharacterNormal},
+		{name: "rare meme", tier: "Rare", rolls: []int{0, 0, 0, 0, 0, 0, 0, 0}, rarity: domain.CharacterMemeRare},
+		{name: "rare legendary", tier: "Rare", rolls: []int{1699, 0, 0, 0, 0, 0, 0, 0}, rarity: domain.CharacterLegendary},
+		{name: "legendary", tier: "Legendary", rolls: []int{0, 0, 0, 0, 0, 0, 0}, rarity: domain.CharacterLegendary},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dna, err := GenerateEggDNA(&fakePicker{values: test.rolls}, test.tier)
+			if err != nil || dna.Rarity != test.rarity {
+				t.Fatalf("GenerateEggDNA() = %+v, %v", dna, err)
+			}
+		})
+	}
+	if _, err := GenerateEggDNA(&fakePicker{values: []int{0}}, "Epic"); err == nil {
+		t.Fatal("unsupported egg tier should fail")
+	}
+}
+
+func TestEggOddsMatchGenerationPolicy(t *testing.T) {
+	standard, _ := EggOdds("Common")
+	rare, _ := EggOdds("Rare")
+	legendary, _ := EggOdds("Legendary")
+	if standard["Normal"] != .83 || standard["Meme Rare"] != .15 || standard["Legendary"] != .02 {
+		t.Fatalf("standard odds = %+v", standard)
+	}
+	if rare["Normal"] != 0 || rare["Meme Rare"] != 15.0/17.0 || rare["Legendary"] != 2.0/17.0 {
+		t.Fatalf("rare odds = %+v", rare)
+	}
+	if legendary["Legendary"] != 1 || len(legendary) != 1 {
+		t.Fatalf("legendary odds = %+v", legendary)
+	}
+}
+
 func TestGenerateDNARejectsBadPicker(t *testing.T) {
 	if _, err := GenerateDNA(nil); err == nil {
 		t.Fatal("nil picker should fail")

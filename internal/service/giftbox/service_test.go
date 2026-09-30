@@ -16,13 +16,25 @@ import (
 )
 
 type fakeStore struct {
-	mu         sync.Mutex
-	boxes      map[primitive.ObjectID]domain.TeacherGiftBox
-	cohorts    map[int][]primitive.ObjectID
-	teams      map[string][]primitive.ObjectID
-	grantKeys  map[string]bool
-	failUser   primitive.ObjectID
-	recipients map[primitive.ObjectID]Recipient
+	mu               sync.Mutex
+	boxes            map[primitive.ObjectID]domain.TeacherGiftBox
+	cohorts          map[int][]primitive.ObjectID
+	teams            map[string][]primitive.ObjectID
+	grantKeys        map[string]bool
+	failUser         primitive.ObjectID
+	recipients       map[primitive.ObjectID]Recipient
+	notifications    []domain.Notification
+	transferAttempts map[primitive.ObjectID]int
+}
+
+func (s *fakeStore) AllowTransferAttempt(_ context.Context, senderID primitive.ObjectID) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.transferAttempts == nil {
+		s.transferAttempts = map[primitive.ObjectID]int{}
+	}
+	s.transferAttempts[senderID]++
+	return s.transferAttempts[senderID] <= 5, nil
 }
 
 func (s *fakeStore) SearchRecipients(_ context.Context, query string, exclude primitive.ObjectID) ([]Recipient, error) {
@@ -84,6 +96,22 @@ func (s *fakeStore) Create(_ context.Context, box domain.TeacherGiftBox) error {
 	defer s.mu.Unlock()
 	s.boxes[box.ID] = box
 	return nil
+}
+
+func (s *fakeStore) CreateCharacterEgg(ctx context.Context, box domain.TeacherGiftBox) error {
+	if err := s.Create(ctx, box); err != nil {
+		return err
+	}
+	s.notifications = append(s.notifications, domain.Notification{Title: "A Character Egg arrived", Message: "A mystery friend is waiting for you to hatch it.", RecipientIDs: []primitive.ObjectID{box.UserID}})
+	return nil
+}
+
+func (s *fakeStore) CreateCharacterEggOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error) {
+	created, err := s.CreateOnce(ctx, box)
+	if err == nil && created {
+		s.notifications = append(s.notifications, domain.Notification{Title: "A Character Egg arrived", Message: "A mystery friend is waiting for you to hatch it.", RecipientIDs: []primitive.ObjectID{box.UserID}})
+	}
+	return created, err
 }
 
 func TestCohortGrantReportsPartialFailuresAndRetriesWithoutDuplicates(t *testing.T) {
@@ -167,6 +195,16 @@ type fakeDrawer struct {
 	requests []reward.DrawRequest
 }
 
+type fakeEggHatcher struct {
+	character *domain.BaroCharacter
+	calls     int
+}
+
+func (h *fakeEggHatcher) Hatch(_ context.Context, ownerID, eggID, tier string) (*domain.BaroCharacter, error) {
+	h.calls++
+	return h.character, nil
+}
+
 func (d *fakeDrawer) Open(_ context.Context, request reward.DrawRequest) (*reward.DrawResult, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -209,6 +247,133 @@ func TestCharacterBoxUsesSeparatePoolAndKeepsLegacyBox(t *testing.T) {
 	}
 	if len(drawer.requests) != 2 || drawer.requests[0].Pool != "character-box" || drawer.requests[1].Pool != "teacher-box" {
 		t.Fatalf("draw pools = %+v", drawer.requests)
+	}
+}
+
+func TestCharacterEggHasFixedOddsAndCannotOpenBeforeHatchingShips(t *testing.T) {
+	learner := primitive.NewObjectID()
+	admin := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes: map[primitive.ObjectID]domain.TeacherGiftBox{},
+		recipients: map[primitive.ObjectID]Recipient{
+			learner: {ID: learner.Hex(), Role: "learner"},
+			admin:   {ID: admin.Hex(), Role: "admin"},
+		},
+	}
+	drawer := &fakeDrawer{results: map[string]*reward.DrawResult{}}
+	service := NewService(store, drawer)
+
+	egg, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), "Common", "A new friend is waiting", "character-egg")
+	if err != nil || egg.RewardPool != "character-egg" {
+		t.Fatalf("character egg = %+v, err=%v", egg, err)
+	}
+	odds, err := service.Odds(context.Background(), learner.Hex(), egg.ID.Hex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if odds.EligibleCount != 1 || odds.Complete || odds.Odds["Normal"] != 0.83 || odds.Odds["Meme Rare"] != 0.15 || odds.Odds["Legendary"] != 0.02 {
+		t.Fatalf("character egg odds = %+v", odds)
+	}
+	if _, err := service.Open(context.Background(), learner.Hex(), egg.ID.Hex()); !errors.Is(err, ErrCharacterEggNotReady) {
+		t.Fatalf("open character egg error = %v", err)
+	}
+	if len(drawer.requests) != 0 {
+		t.Fatalf("character egg called cosmetic drawer: %+v", drawer.requests)
+	}
+}
+
+func TestCharacterEggOpensAsAWholeCharacterReveal(t *testing.T) {
+	learner := primitive.NewObjectID()
+	admin := primitive.NewObjectID()
+	eggID := primitive.NewObjectID()
+	characterID := primitive.NewObjectID()
+	store := &fakeStore{boxes: map[primitive.ObjectID]domain.TeacherGiftBox{
+		eggID: {ID: eggID, UserID: learner, GrantedBy: admin, Status: "unopened", RewardPool: CharacterEggPool, MinimumRarity: "Common"},
+	}}
+	hatcher := &fakeEggHatcher{character: &domain.BaroCharacter{
+		ID: characterID, OwnerID: learner, Serial: "B-" + characterID.Hex(), Source: "character_egg", OriginKey: "character-egg:" + eggID.Hex(),
+	}}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}}, hatcher)
+
+	result, err := service.Open(context.Background(), learner.Hex(), eggID.Hex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Kind != "character" || result.Character == nil || result.Character.ID != characterID || result.DrawResult != nil {
+		t.Fatalf("character egg reveal = %+v", result)
+	}
+	if hatcher.calls != 1 {
+		t.Fatalf("hatcher calls = %d", hatcher.calls)
+	}
+}
+
+func TestCharacterEggCanOnlyBeGrantedToLearners(t *testing.T) {
+	admin := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes: map[primitive.ObjectID]domain.TeacherGiftBox{},
+		recipients: map[primitive.ObjectID]Recipient{
+			admin: {ID: admin.Hex(), Role: "admin"},
+		},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+
+	learner := primitive.NewObjectID()
+	store.recipients[learner] = Recipient{ID: learner.Hex(), Role: "learner"}
+	for _, tier := range []string{"Common", "Rare", "Legendary"} {
+		if _, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), tier, "A mystery friend", "character-egg"); err != nil {
+			t.Fatalf("%s character egg grant error = %v", tier, err)
+		}
+	}
+	if _, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), "Epic", "Unsupported Egg", "character-egg"); !errors.Is(err, ErrInvalidCharacterEggTier) {
+		t.Fatalf("unsupported character egg grant error = %v", err)
+	}
+	if _, err := service.GrantWithPool(context.Background(), admin.Hex(), admin.Hex(), "Common", "Not for admins", "character-egg"); !errors.Is(err, ErrRecipientNotFound) {
+		t.Fatalf("admin character egg grant error = %v", err)
+	}
+	if len(store.boxes) != 3 {
+		t.Fatalf("admin received character egg: %+v", store.boxes)
+	}
+}
+
+func TestTieredEggAudienceGrantIsIdempotentAndUsesSelectedScope(t *testing.T) {
+	first := primitive.NewObjectID()
+	second := primitive.NewObjectID()
+	outside := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes:     map[primitive.ObjectID]domain.TeacherGiftBox{},
+		cohorts:   map[int][]primitive.ObjectID{16: {first, second, outside}},
+		teams:     map[string][]primitive.ObjectID{"16:Garden Alpha": {first, second}},
+		grantKeys: map[string]bool{},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+	admin := primitive.NewObjectID().Hex()
+	for _, tier := range []string{"Common", "Rare", "Legendary"} {
+		key := "egg-team-" + tier
+		firstResult, err := service.GrantAudience(context.Background(), 16, "Garden Alpha", admin, tier, "A mystery friend is waiting", key, CharacterEggPool)
+		if err != nil || firstResult.Created != 2 || firstResult.Total != 2 {
+			t.Fatalf("first %s grant = %+v, err=%v", tier, firstResult, err)
+		}
+		retry, err := service.GrantAudience(context.Background(), 16, "Garden Alpha", admin, tier, "A mystery friend is waiting", key, CharacterEggPool)
+		if err != nil || retry.Existing != 2 || retry.Created != 0 {
+			t.Fatalf("retry %s grant = %+v, err=%v", tier, retry, err)
+		}
+	}
+	if len(store.boxes) != 6 {
+		t.Fatalf("tiered grants created %d boxes, want 6", len(store.boxes))
+	}
+	if len(store.notifications) != 6 {
+		t.Fatalf("notifications = %d, want one per created Egg", len(store.notifications))
+	}
+	for _, notification := range store.notifications {
+		copy := strings.ToLower(notification.Title + " " + notification.Message)
+		if strings.Contains(copy, "normal") || strings.Contains(copy, "rare") || strings.Contains(copy, "legendary") || strings.Contains(copy, "dna") {
+			t.Fatalf("spoiling notification = %+v", notification)
+		}
+	}
+	for _, box := range store.boxes {
+		if box.UserID == outside || box.RewardPool != CharacterEggPool || strings.Contains(strings.ToLower(box.Message), "rarity") {
+			t.Fatalf("unsafe or out-of-scope grant = %+v", box)
+		}
 	}
 }
 
@@ -258,7 +423,7 @@ func TestOpeningTheSameBoxConcurrentlyReturnsOneReward(t *testing.T) {
 	service := NewService(store, drawer)
 
 	const attempts = 12
-	results := make(chan *reward.DrawResult, attempts)
+	results := make(chan *OpenResult, attempts)
 	var group sync.WaitGroup
 	for range attempts {
 		group.Add(1)
@@ -367,5 +532,54 @@ func TestTransferAndOpenCannotBothSucceed(t *testing.T) {
 		if (box.Status == "opened") == (box.UserID == to) {
 			t.Fatalf("attempt %d: conflicting box state = %+v", attempt, box)
 		}
+	}
+}
+
+func TestConcurrentCharacterEggTransfersHaveOneWinner(t *testing.T) {
+	from := primitive.NewObjectID()
+	first := primitive.NewObjectID()
+	second := primitive.NewObjectID()
+	boxID := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes:      map[primitive.ObjectID]domain.TeacherGiftBox{boxID: {ID: boxID, UserID: from, Status: "unopened", RewardPool: CharacterEggPool}},
+		recipients: map[primitive.ObjectID]Recipient{first: {ID: first.Hex(), Role: "learner"}, second: {ID: second.Hex(), Role: "learner"}},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+	start := make(chan struct{})
+	errors := make(chan error, 2)
+	for _, recipient := range []primitive.ObjectID{first, second} {
+		go func(id primitive.ObjectID) {
+			<-start
+			_, err := service.Transfer(context.Background(), from.Hex(), boxID.Hex(), id.Hex())
+			errors <- err
+		}(recipient)
+	}
+	close(start)
+	firstErr, secondErr := <-errors, <-errors
+	if (firstErr == nil) == (secondErr == nil) {
+		t.Fatalf("transfer errors = %v, %v", firstErr, secondErr)
+	}
+	box := store.boxes[boxID]
+	if box.UserID == from || len(box.TransferHistory) != 1 {
+		t.Fatalf("terminal transfer state = %+v", box)
+	}
+}
+
+func TestTransferAttemptsAreRateLimitedWithoutChargingTheEgg(t *testing.T) {
+	from := primitive.NewObjectID()
+	to := primitive.NewObjectID()
+	boxID := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes:            map[primitive.ObjectID]domain.TeacherGiftBox{boxID: {ID: boxID, UserID: from, Status: "unopened", RewardPool: CharacterEggPool}},
+		recipients:       map[primitive.ObjectID]Recipient{to: {ID: to.Hex(), Role: "learner"}},
+		transferAttempts: map[primitive.ObjectID]int{from: 5},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+	if _, err := service.Transfer(context.Background(), from.Hex(), boxID.Hex(), to.Hex()); !errors.Is(err, ErrTransferRateLimited) {
+		t.Fatalf("rate limit error = %v", err)
+	}
+	box := store.boxes[boxID]
+	if box.UserID != from || box.Status != "unopened" || len(box.TransferHistory) != 0 {
+		t.Fatalf("rate limited Egg changed = %+v", box)
 	}
 }

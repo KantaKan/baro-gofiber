@@ -18,7 +18,13 @@ var ErrCohortForbidden = errors.New("this cohort is not available to your accoun
 var ErrEntryNotFound = errors.New("showcase entry not found")
 var ErrAdminRequired = errors.New("admin access required")
 
+var ErrInvalidMood = errors.New("choose one of the lawn moods")
+
 var reactionEmojis = map[string]bool{"❤️": true, "✨": true, "😂": true, "🙌": true}
+
+var lawnMoods = map[string]bool{"greeting": true, "relaxing": true, "meal": true, "playful": true, "quiet": true, "surprise": true}
+
+const MoodDuration = 24 * time.Hour
 
 type Viewer struct {
 	Cohort int
@@ -36,6 +42,13 @@ type Entry struct {
 	UpdatedAt time.Time            `json:"updated_at"`
 	Hidden    bool                 `json:"hidden,omitempty"`
 	Reactions []ReactionSummary    `json:"reactions"`
+	Mood      string               `json:"mood,omitempty"`
+	MoodUntil *time.Time           `json:"mood_until,omitempty"`
+}
+
+type MoodState struct {
+	Mood  string     `json:"mood"`
+	Until *time.Time `json:"until,omitempty"`
 }
 
 type ReactionSummary struct {
@@ -58,11 +71,45 @@ type Store interface {
 	ReactionTarget(ctx context.Context, ownerID primitive.ObjectID) (*Target, error)
 	ToggleReaction(ctx context.Context, ownerID, actorID primitive.ObjectID, emoji string) (bool, error)
 	Moderate(ctx context.Context, ownerID, adminID primitive.ObjectID, hidden bool, reason string, at time.Time) error
+	SetMood(ctx context.Context, ownerID primitive.ObjectID, mood string, until time.Time) error
 }
 
-type Service struct{ store Store }
+type Service struct {
+	store Store
+	now   func() time.Time
+}
 
-func NewService(store Store) *Service { return &Service{store: store} }
+func NewService(store Store) *Service { return &Service{store: store, now: time.Now} }
+
+func (s *Service) withActiveMoods(entries []Entry) []Entry {
+	now := s.now()
+	for index := range entries {
+		if entries[index].MoodUntil == nil || !entries[index].MoodUntil.After(now) {
+			entries[index].Mood = ""
+			entries[index].MoodUntil = nil
+		}
+	}
+	return entries
+}
+
+func (s *Service) SetMood(ctx context.Context, ownerHex, mood string) (*MoodState, error) {
+	ownerID, err := primitive.ObjectIDFromHex(ownerHex)
+	if err != nil {
+		return nil, ErrAccountNotFound
+	}
+	mood = strings.TrimSpace(mood)
+	if mood != "" && !lawnMoods[mood] {
+		return nil, ErrInvalidMood
+	}
+	until := s.now().UTC().Add(MoodDuration)
+	if err := s.store.SetMood(ctx, ownerID, mood, until); err != nil {
+		return nil, err
+	}
+	if mood == "" {
+		return &MoodState{}, nil
+	}
+	return &MoodState{Mood: mood, Until: &until}, nil
+}
 
 func (s *Service) Save(ctx context.Context, ownerHex, characterHex, message string) error {
 	ownerID, err := primitive.ObjectIDFromHex(ownerHex)
@@ -117,7 +164,11 @@ func (s *Service) Mine(ctx context.Context, ownerHex string) (*Entry, error) {
 	if viewer == nil {
 		return nil, ErrAccountNotFound
 	}
-	return s.store.Own(ctx, ownerID)
+	entry, err := s.store.Own(ctx, ownerID)
+	if err != nil || entry == nil {
+		return entry, err
+	}
+	return &s.withActiveMoods([]Entry{*entry})[0], nil
 }
 
 func (s *Service) List(ctx context.Context, viewerHex string, isAdmin bool, cohort int, team string, includeHidden bool) ([]Entry, error) {
@@ -145,7 +196,11 @@ func (s *Service) List(ctx context.Context, viewerHex string, isAdmin bool, coho
 	if cohort < 0 || utf8.RuneCountInString(team) > 100 {
 		return nil, errors.New("invalid cohort or team filter")
 	}
-	return s.store.List(ctx, cohort, team, includeHidden, viewerID)
+	entries, err := s.store.List(ctx, cohort, team, includeHidden, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	return s.withActiveMoods(entries), nil
 }
 
 func (s *Service) React(ctx context.Context, actorHex, ownerHex, emoji string) (bool, error) {

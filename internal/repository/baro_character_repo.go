@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"gofiber-baro/internal/domain"
 
@@ -15,18 +16,96 @@ import (
 type BaroCharacterRepository struct {
 	characters *mongo.Collection
 	users      *mongo.Collection
+	client     *mongo.Client
 }
 
 func NewBaroCharacterRepository(db *mongo.Database) *BaroCharacterRepository {
-	return &BaroCharacterRepository{characters: db.Collection("baro_characters"), users: db.Collection("users")}
+	return &BaroCharacterRepository{characters: db.Collection("baro_characters"), users: db.Collection("users"), client: db.Client()}
 }
 
 func (r *BaroCharacterRepository) EnsureIndexes(ctx context.Context) error {
 	_, err := r.characters.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "fingerprint", Value: 1}}, Options: options.Index().SetUnique(true).SetName("unique_character_fingerprint")},
 		{Keys: bson.D{{Key: "owner_id", Value: 1}}, Options: options.Index().SetUnique(true).SetName("unique_starter_per_owner").SetPartialFilterExpression(bson.M{"is_starter": true})},
+		{Keys: bson.D{{Key: "origin_key", Value: 1}}, Options: options.Index().SetUnique(true).SetName("unique_character_origin").SetPartialFilterExpression(bson.M{"origin_key": bson.M{"$type": "string"}})},
 	})
 	return err
+}
+
+func (r *BaroCharacterRepository) FindCharacterEgg(ctx context.Context, ownerID, eggID primitive.ObjectID) (*domain.BaroCharacter, error) {
+	var character domain.BaroCharacter
+	err := r.characters.FindOne(ctx, bson.M{"owner_id": ownerID, "origin_key": "character-egg:" + eggID.Hex()}).Decode(&character)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &character, nil
+}
+
+func (r *BaroCharacterRepository) CommitCharacterEgg(ctx context.Context, ownerID, eggID primitive.ObjectID, candidate domain.BaroCharacter) (*domain.BaroCharacter, error) {
+	session, err := r.client.StartSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.EndSession(ctx)
+	result, err := session.WithTransaction(ctx, func(tx mongo.SessionContext) (interface{}, error) {
+		var record struct {
+			GiftBoxes []domain.TeacherGiftBox `bson:"gift_boxes"`
+		}
+		filter := bson.M{"_id": ownerID, "role": "learner", "deleted": bson.M{"$ne": true}, "gift_boxes._id": eggID}
+		if err := r.users.FindOne(tx, filter, options.FindOne().SetProjection(bson.M{"gift_boxes": 1})).Decode(&record); err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				return nil, domain.ErrGiftBoxNotFound
+			}
+			return nil, err
+		}
+		var egg *domain.TeacherGiftBox
+		for index := range record.GiftBoxes {
+			if record.GiftBoxes[index].ID == eggID {
+				egg = &record.GiftBoxes[index]
+				break
+			}
+		}
+		if egg == nil || egg.UserID != ownerID || egg.RewardPool != domain.CharacterEggPool {
+			return nil, domain.ErrGiftBoxNotFound
+		}
+		if egg.Status == "opened" && egg.Character != nil {
+			return egg.Character, nil
+		}
+		if egg.Status != "unopened" {
+			return nil, domain.ErrGiftBoxNotFound
+		}
+		if _, err := r.characters.InsertOne(tx, candidate); err != nil {
+			if mongo.IsDuplicateKeyError(err) {
+				return nil, domain.ErrCharacterConflict
+			}
+			return nil, err
+		}
+		openedAt := time.Now().UTC()
+		updated, err := r.users.UpdateOne(tx, bson.M{
+			"_id":        ownerID,
+			"gift_boxes": bson.M{"$elemMatch": bson.M{"_id": eggID, "status": "unopened", "reward_pool": domain.CharacterEggPool}},
+		}, bson.M{"$set": bson.M{
+			"gift_boxes.$.status": "opened", "gift_boxes.$.character": candidate, "gift_boxes.$.opened_at": openedAt,
+		}})
+		if err != nil {
+			return nil, err
+		}
+		if updated.ModifiedCount != 1 {
+			return nil, domain.ErrGiftBoxNotFound
+		}
+		return &candidate, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	character, ok := result.(*domain.BaroCharacter)
+	if !ok {
+		return nil, errors.New("character egg did not return a character")
+	}
+	return character, nil
 }
 
 func (r *BaroCharacterRepository) AccountExists(ctx context.Context, ownerID primitive.ObjectID) (bool, error) {

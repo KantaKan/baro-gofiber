@@ -62,7 +62,7 @@ func (h *GiftBoxHandler) Grant(c *fiber.Ctx) error {
 	body.MinimumRarity = strings.TrimSpace(body.MinimumRarity)
 	body.Message = strings.TrimSpace(body.Message)
 	body.RewardPool = strings.TrimSpace(body.RewardPool)
-	if !validMinimumRarity(body.MinimumRarity) || body.Message == "" || len(body.Message) > 500 || (body.RewardPool != "" && body.RewardPool != "character-box") {
+	if !validMinimumRarity(body.MinimumRarity) || body.Message == "" || len(body.Message) > 500 || (body.RewardPool != "" && body.RewardPool != "character-box" && body.RewardPool != giftbox.CharacterEggPool) {
 		return utils.SendError(c, fiber.StatusBadRequest, "A valid rarity and message of 500 characters or fewer are required")
 	}
 	box, err := h.service.GrantWithPool(context.Background(), c.Params("id"), claims.UserID, body.MinimumRarity, body.Message, body.RewardPool)
@@ -159,6 +159,9 @@ func (h *GiftBoxHandler) Transfer(c *fiber.Ctx) error {
 	}
 	box, err := h.service.Transfer(context.Background(), claims.UserID, c.Params("id"), strings.TrimSpace(body.RecipientID))
 	if err != nil {
+		if errors.Is(err, giftbox.ErrTransferRateLimited) {
+			return utils.SendError(c, fiber.StatusTooManyRequests, err.Error())
+		}
 		if errors.Is(err, giftbox.ErrBoxNotFound) || errors.Is(err, giftbox.ErrRecipientNotFound) {
 			return utils.SendError(c, fiber.StatusNotFound, err.Error())
 		}

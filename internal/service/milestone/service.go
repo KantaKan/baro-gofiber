@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/character"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -16,6 +17,7 @@ type UserStore interface {
 
 type RewardStore interface {
 	CreateOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error)
+	CreateCharacterEggOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error)
 }
 
 type HolidayCalendar interface {
@@ -44,6 +46,8 @@ var rewardMilestones = []rewardMilestone{
 	{Days: 75, MinimumRarity: "Legendary"},
 	{Days: 100, MinimumRarity: "Legendary"},
 }
+
+var characterEggMilestones = []int{30, 60, 100}
 
 func NewService(users UserStore, rewards RewardStore, holidays HolidayCalendar) *Service {
 	return &Service{users: users, rewards: rewards, holidays: holidays}
@@ -93,6 +97,28 @@ func (s *Service) Reconcile(ctx context.Context, userID primitive.ObjectID, now 
 			Source: "reflection-milestone",
 		}
 		created, createErr := s.rewards.CreateOnce(ctx, box)
+		if createErr != nil {
+			return granted, createErr
+		}
+		if created {
+			granted = append(granted, box)
+		}
+	}
+	if user.Role != "learner" || user.Deleted {
+		return granted, nil
+	}
+	best := character.CalculateGrowthSnapshot(now, reflectionDates, protectedDates, holidays).BestStreak
+	for _, days := range characterEggMilestones {
+		if best < days {
+			continue
+		}
+		box := domain.TeacherGiftBox{
+			ID: primitive.NewObjectID(), UserID: userID, MinimumRarity: "Common",
+			Message: fmt.Sprintf("Your %d-workday reflection milestone brought a mystery friend to meet.", days),
+			Status:  "unopened", CreatedAt: now, GrantKey: fmt.Sprintf("character-egg-milestone:%d:%s", days, userID.Hex()),
+			Source: "reflection-milestone", RewardPool: "character-egg",
+		}
+		created, createErr := s.rewards.CreateCharacterEggOnce(ctx, box)
 		if createErr != nil {
 			return granted, createErr
 		}

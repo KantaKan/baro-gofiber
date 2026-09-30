@@ -91,6 +91,15 @@ func (s *showcaseHTTPStore) ToggleReaction(_ context.Context, ownerID, actorID p
 	s.reactions[key] = !s.reactions[key]
 	return s.reactions[key], nil
 }
+func (s *showcaseHTTPStore) SetMood(_ context.Context, ownerID primitive.ObjectID, mood string, until time.Time) error {
+	entry, ok := s.entries[ownerID]
+	if !ok {
+		return showcase.ErrEntryNotFound
+	}
+	entry.Mood, entry.MoodUntil = mood, &until
+	s.entries[ownerID] = entry
+	return nil
+}
 func (s *showcaseHTTPStore) Moderate(_ context.Context, ownerID, adminID primitive.ObjectID, hidden bool, reason string, at time.Time) error {
 	entry, ok := s.entries[ownerID]
 	if !ok {
@@ -216,5 +225,41 @@ func TestShowcaseAuthenticatedPinAndCohortVisibility(t *testing.T) {
 	}
 	if status, _ := characterRequest(t, app, http.MethodDelete, "/showcase-lawn/me", ownerToken); status != http.StatusOK || len(store.entries) != 0 {
 		t.Fatalf("remove status = %d, entries = %+v", status, store.entries)
+	}
+}
+
+func TestShowcaseMoodIsSelfOnlyAndIgnoresTargets(t *testing.T) {
+	t.Setenv("JWT_SECRET_KEY", "test-character-secret")
+	owner := primitive.NewObjectID()
+	peer := primitive.NewObjectID()
+	characterID := primitive.NewObjectID()
+	store := &showcaseHTTPStore{
+		viewers: map[primitive.ObjectID]showcase.Viewer{owner: {Cohort: 16, Role: "learner"}, peer: {Cohort: 16, Role: "learner"}},
+		owned:   map[primitive.ObjectID]domain.BaroCharacter{characterID: {ID: characterID, OwnerID: owner}},
+		entries: map[primitive.ObjectID]showcase.Entry{owner: {OwnerID: owner.Hex(), Cohort: 16, Character: domain.BaroCharacter{ID: characterID, OwnerID: owner}}, peer: {OwnerID: peer.Hex(), Cohort: 16}},
+	}
+	h := NewShowcaseHandler(showcase.NewService(store))
+	app := fiber.New()
+	app.Put("/showcase-lawn/me/mood", middleware.AuthMiddleware, h.SetMood)
+	if status, _ := characterRequest(t, app, http.MethodPut, "/showcase-lawn/me/mood", "", `{"mood":"playful"}`); status != http.StatusUnauthorized {
+		t.Fatalf("anonymous mood status = %d", status)
+	}
+	if status, _ := characterRequest(t, app, http.MethodPut, "/showcase-lawn/me/mood", characterToken(t, owner, "learner"), `{"mood":"duel"}`); status != http.StatusBadRequest {
+		t.Fatalf("invalid mood status = %d", status)
+	}
+	status, body := characterRequest(t, app, http.MethodPut, "/showcase-lawn/me/mood", characterToken(t, owner, "learner"), `{"mood":"playful","target_id":"`+peer.Hex()+`","owner_id":"`+peer.Hex()+`"}`)
+	if status != http.StatusOK {
+		t.Fatalf("mood status = %d", status)
+	}
+	var state showcase.MoodState
+	if err := json.Unmarshal(body["data"], &state); err != nil || state.Mood != "playful" || state.Until == nil {
+		t.Fatalf("mood state = %+v, %v", state, err)
+	}
+	if store.entries[owner].Mood != "playful" || store.entries[peer].Mood != "" {
+		t.Fatalf("mood leaked to target: owner=%q peer=%q", store.entries[owner].Mood, store.entries[peer].Mood)
+	}
+	delete(store.entries, owner)
+	if status, _ := characterRequest(t, app, http.MethodPut, "/showcase-lawn/me/mood", characterToken(t, owner, "learner"), `{"mood":"quiet"}`); status != http.StatusNotFound {
+		t.Fatalf("unpinned mood status = %d", status)
 	}
 }

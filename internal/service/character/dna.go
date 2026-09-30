@@ -65,6 +65,57 @@ func GenerateDNA(picker Picker) (domain.CharacterDNA, error) {
 	if err != nil {
 		return domain.CharacterDNA{}, err
 	}
+	return generateDNAForRarity(picker, rarity)
+}
+
+func EggOdds(tier string) (map[string]float64, error) {
+	switch tier {
+	case "Common":
+		return map[string]float64{"Normal": .83, "Meme Rare": .15, "Legendary": .02}, nil
+	case "Rare":
+		return map[string]float64{"Meme Rare": 15.0 / 17.0, "Legendary": 2.0 / 17.0}, nil
+	case "Legendary":
+		return map[string]float64{"Legendary": 1}, nil
+	default:
+		return nil, errors.New("unsupported character egg tier")
+	}
+}
+
+func GenerateEggDNA(picker Picker, tier string) (domain.CharacterDNA, error) {
+	if picker == nil {
+		return domain.CharacterDNA{}, errors.New("random picker is required")
+	}
+	var rarity domain.CharacterRarity
+	switch tier {
+	case "Common":
+		roll, err := picker.Intn(10000)
+		if err != nil {
+			return domain.CharacterDNA{}, err
+		}
+		var rarityErr error
+		rarity, rarityErr = RarityForRoll(roll)
+		if rarityErr != nil {
+			return domain.CharacterDNA{}, rarityErr
+		}
+	case "Rare":
+		roll, err := picker.Intn(1700)
+		if err != nil {
+			return domain.CharacterDNA{}, err
+		}
+		var rarityErr error
+		rarity, rarityErr = RarityForRoll(8300 + roll)
+		if rarityErr != nil {
+			return domain.CharacterDNA{}, rarityErr
+		}
+	case "Legendary":
+		rarity = domain.CharacterLegendary
+	default:
+		return domain.CharacterDNA{}, errors.New("unsupported character egg tier")
+	}
+	return generateDNAForRarity(picker, rarity)
+}
+
+func generateDNAForRarity(picker Picker, rarity domain.CharacterRarity) (domain.CharacterDNA, error) {
 	patternPool := commonPatterns
 	if rarity != domain.CharacterNormal {
 		patternPool = rarePatterns
