@@ -37,7 +37,9 @@ func startupError(c *fiber.Ctx, err error) error {
 		status = fiber.StatusTooEarly
 	case errors.Is(err, domain.ErrStartupNoActiveRun):
 		status = fiber.StatusNotFound
-	case errors.Is(err, domain.ErrStartupWrongStage), errors.Is(err, domain.ErrStartupInvalidChoice):
+	case errors.Is(err, domain.ErrStartupNoAttempts):
+		status = fiber.StatusForbidden
+	case errors.Is(err, domain.ErrStartupWrongStage), errors.Is(err, domain.ErrStartupInvalidChoice), errors.Is(err, domain.ErrStartupTeamFull), errors.Is(err, domain.ErrStartupNoFunds):
 		status = fiber.StatusBadRequest
 	default:
 		log.Printf("startup story: %v", err)
@@ -56,6 +58,36 @@ func (h *StartupStoryHandler) Overview(c *fiber.Ctx) error {
 		return startupError(c, err)
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Startup Story retrieved", overview)
+}
+
+func (h *StartupStoryHandler) Leaderboard(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	entries, err := h.service.Leaderboard(c.UserContext(), player, c.Query("tab"))
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Leaderboard retrieved", entries)
+}
+
+func (h *StartupStoryHandler) OptOut(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		OptOut bool `json:"opt_out"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	out, err := h.service.OptOut(c.UserContext(), player, body.OptOut)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Preference saved", fiber.Map{"opt_out": out})
 }
 
 func (h *StartupStoryHandler) StartRun(c *fiber.Ctx) error {
@@ -124,4 +156,64 @@ func (h *StartupStoryHandler) Ship(c *fiber.Ctx) error {
 		return startupError(c, err)
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Shipped", run)
+}
+
+func (h *StartupStoryHandler) Hire(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		CandidateID string `json:"candidate_id"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.Hire(c.UserContext(), player, body.CandidateID)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Hired", run)
+}
+
+func (h *StartupStoryHandler) PickItem(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		Index int `json:"index"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.PickItem(c.UserContext(), player, body.Index)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Item drafted", run)
+}
+
+func (h *StartupStoryHandler) Abandon(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	run, err := h.service.Abandon(c.UserContext(), player)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Startup pivoted", run)
+}
+
+func (h *StartupStoryHandler) Dismiss(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	run, err := h.service.Dismiss(c.UserContext(), player, c.Params("id"))
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Dismissed", run)
 }

@@ -19,6 +19,7 @@ var t0 = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 func playProject(t *testing.T, seed uint64, typeName, theme string) *domain.StartupRun {
 	t.Helper()
 	run := NewRun(primitive.NewObjectID(), 12, "learner", domain.StartupModeFree, seed, t0)
+	run.Market = domain.StartupMarket{}
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +63,14 @@ func TestRunEndsAfterLastProject(t *testing.T) {
 		if err := Ship(run, run.Project.EndsAt); err != nil {
 			t.Fatal(err)
 		}
+		if run.Stage == domain.StartupStageItem {
+			if err := PickItem(run, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	if run.Status != domain.StartupStatusEnded || run.Score != run.Money/10+run.Fans {
+	wantScore := run.Money/10 + run.Fans + BossPassBonus*run.BossesPassed + BossWinBonus
+	if run.Status != domain.StartupStatusEnded || run.Outcome != domain.StartupOutcomeIPO || run.BossesPassed != 3 || run.Score != wantScore {
 		t.Fatalf("run not ended correctly: %+v", run)
 	}
 	if err := StartProject(run, "Web App", "Education", nil, t0); !errors.Is(err, domain.ErrStartupWrongStage) {
@@ -92,6 +99,15 @@ func TestStartProjectRejectsBadChoices(t *testing.T) {
 type fakeStore struct {
 	studio *domain.StartupStudio
 	run    *domain.StartupRun
+	all    []*domain.StartupRun
+
+	boardRuns    []*domain.StartupRun
+	boardStudios []*domain.StartupStudio
+	boardNames   map[string]string
+	boardRoles   map[string]string
+
+	pool    []domain.StartupGenmate
+	optOuts map[string]bool
 }
 
 func (f *fakeStore) FindStudio(context.Context, primitive.ObjectID) (*domain.StartupStudio, error) {
@@ -114,7 +130,37 @@ func (f *fakeStore) InsertRun(_ context.Context, run *domain.StartupRun) error {
 	}
 	cp := *run
 	f.run = &cp
+	f.all = append(f.all, &cp)
 	return nil
+}
+func (f *fakeStore) CountRankedRuns(_ context.Context, _ primitive.ObjectID, weekKey string) (int, error) {
+	n := 0
+	for _, r := range f.all {
+		if r.Mode == domain.StartupModeRanked && r.WeekKey == weekKey {
+			n++
+		}
+	}
+	return n, nil
+}
+func (f *fakeStore) ListGenmates(_ context.Context, _ int, excludeID primitive.ObjectID) ([]domain.StartupGenmate, error) {
+	out := []domain.StartupGenmate{}
+	for _, g := range f.pool {
+		if g.UserID == excludeID || f.optOuts[g.UserID.Hex()] {
+			continue
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+func (f *fakeStore) SetStartupOptOut(_ context.Context, userID primitive.ObjectID, optOut bool) error {
+	if f.optOuts == nil {
+		f.optOuts = map[string]bool{}
+	}
+	f.optOuts[userID.Hex()] = optOut
+	return nil
+}
+func (f *fakeStore) FindStartupOptOut(_ context.Context, userID primitive.ObjectID) (bool, error) {
+	return f.optOuts[userID.Hex()], nil
 }
 func (f *fakeStore) SaveRun(_ context.Context, run *domain.StartupRun, expected int) error {
 	if f.run.Version != expected {
@@ -122,6 +168,59 @@ func (f *fakeStore) SaveRun(_ context.Context, run *domain.StartupRun, expected 
 	}
 	cp := *run
 	f.run = &cp
+	return nil
+}
+func (f *fakeStore) AddDiscoveredCombo(_ context.Context, _ primitive.ObjectID, key string) error {
+	if f.studio == nil {
+		f.studio = &domain.StartupStudio{}
+	}
+	for _, k := range f.studio.DiscoveredCombos {
+		if k == key {
+			return nil
+		}
+	}
+	f.studio.DiscoveredCombos = append(f.studio.DiscoveredCombos, key)
+	return nil
+}
+func (f *fakeStore) SettleRun(_ context.Context, ownerID primitive.ObjectID, entry domain.StartupHallEntry, fameGain int, founders, items []string, skin string) error {
+	if f.studio == nil {
+		f.studio = &domain.StartupStudio{OwnerID: ownerID}
+	}
+	for _, h := range f.studio.HallOfFame {
+		if h.RunID == entry.RunID {
+			return nil
+		}
+	}
+	f.studio.Fame += fameGain
+	f.studio.HallOfFame = append(f.studio.HallOfFame, entry)
+	if len(f.studio.HallOfFame) > 20 {
+		f.studio.HallOfFame = f.studio.HallOfFame[len(f.studio.HallOfFame)-20:]
+	}
+	for _, title := range founders {
+		found := false
+		for _, t := range f.studio.UnlockedFounders {
+			if t == title {
+				found = true
+			}
+		}
+		if !found {
+			f.studio.UnlockedFounders = append(f.studio.UnlockedFounders, title)
+		}
+	}
+	for _, id := range items {
+		found := false
+		for _, t := range f.studio.UnlockedItems {
+			if t == id {
+				found = true
+			}
+		}
+		if !found {
+			f.studio.UnlockedItems = append(f.studio.UnlockedItems, id)
+		}
+	}
+	if skin != "" {
+		f.studio.OfficeSkin = skin
+	}
 	return nil
 }
 
@@ -160,8 +259,18 @@ func TestServiceGuardsShipAndConflicts(t *testing.T) {
 	if err := store.SaveRun(ctx, stale, stale.Version); !errors.Is(err, domain.ErrStartupRunConflict) {
 		t.Fatalf("expected double ship to conflict, got %v", err)
 	}
-	if shipped.LastResult == nil || shipped.Stage != domain.StartupStageHub {
+	if shipped.LastResult == nil || shipped.Stage != domain.StartupStageItem {
 		t.Fatalf("unexpected state after ship: %+v", shipped)
+	}
+	if len(shipped.ItemOffer) != CandidateOffers {
+		t.Fatalf("expected %d item offers, got %+v", CandidateOffers, shipped.ItemOffer)
+	}
+	drafted, err := svc.PickItem(ctx, player, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(drafted.Items) != 1 || drafted.Stage != domain.StartupStageHub {
+		t.Fatalf("unexpected state after draft: %+v", drafted)
 	}
 }
 

@@ -106,6 +106,7 @@ type User struct {
 	Reflections        []Reflection         `bson:"reflections" json:"reflections"`
 	Password           string               `bson:"password,omitempty" json:"password,omitempty"`
 	Role               string               `bson:"role" json:"role"`
+	StartupStoryOptOut bool                 `bson:"startup_story_opt_out,omitempty" json:"startup_story_opt_out,omitempty"`
 	ProjectGroup       string               `bson:"project_group" json:"project_group"`
 	GenmateGroup       string               `bson:"genmate_group" json:"genmate_group"`
 	ZoomName           string               `bson:"zoom_name" json:"zoom_name"`
