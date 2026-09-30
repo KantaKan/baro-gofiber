@@ -8,6 +8,7 @@ import (
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/showcase"
+	usercosmetic "gofiber-baro/internal/service/user"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -179,12 +180,7 @@ func showcaseDisplayName(zoomName, firstName string) string {
 }
 
 func showcaseProp(equippedID string) string {
-	switch equippedID {
-	case "character_prop:flower", "character_prop:cat-ears", "character_prop:egg", "character_prop:halo", "character_prop:headphones", "character_prop:pixel-glasses", "character_prop:tiny-crown":
-		return strings.TrimPrefix(equippedID, "character_prop:")
-	default:
-		return ""
-	}
+	return usercosmetic.CharacterPropValue(equippedID)
 }
 
 func (r *ShowcaseRepository) SetMood(ctx context.Context, ownerID primitive.ObjectID, mood string, until time.Time) error {

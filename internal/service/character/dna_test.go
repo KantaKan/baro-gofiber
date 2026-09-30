@@ -43,17 +43,27 @@ func TestRarityForRollBoundaries(t *testing.T) {
 	}
 }
 
-func TestGenerateDNAUsesRarePatternPool(t *testing.T) {
-	picker := &fakePicker{values: []int{9800, 0, 5, 0, 0, 0, 2, 12345}}
-	dna, err := GenerateDNA(picker)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dna.Rarity != domain.CharacterLegendary || dna.Ears != "cat" || dna.Pattern != "ramen" || dna.PatternSeed != 12345 {
-		t.Fatalf("unexpected DNA: %+v", dna)
-	}
-	if dna.Fingerprint() == "" {
-		t.Fatal("fingerprint is required")
+func TestGenerateDNAUsesPatternPoolForRarity(t *testing.T) {
+	for _, test := range []struct {
+		roll, patternIndex int
+		rarity             domain.CharacterRarity
+		pattern            string
+	}{
+		{0, 13, domain.CharacterNormal, "petals"},
+		{8300, 5, domain.CharacterMemeRare, "this-is-fine"},
+		{9800, 0, domain.CharacterLegendary, "galaxy"},
+	} {
+		picker := &fakePicker{values: []int{test.roll, 0, 5, 0, 0, 0, test.patternIndex, 12345}}
+		dna, err := GenerateDNA(picker)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if dna.Rarity != test.rarity || dna.Ears != "cat" || dna.Pattern != test.pattern || dna.PatternSeed != 12345 {
+			t.Fatalf("unexpected DNA: %+v", dna)
+		}
+		if dna.Fingerprint() == "" {
+			t.Fatal("fingerprint is required")
+		}
 	}
 }
 
