@@ -25,7 +25,7 @@ func NewEggService(store EggStore, picker Picker) *EggService {
 	return &EggService{store: store, picker: picker}
 }
 
-func (s *EggService) Hatch(ctx context.Context, ownerHex, eggHex string) (*domain.BaroCharacter, error) {
+func (s *EggService) Hatch(ctx context.Context, ownerHex, eggHex, tier string) (*domain.BaroCharacter, error) {
 	ownerID, err := primitive.ObjectIDFromHex(ownerHex)
 	if err != nil {
 		return nil, errors.New("invalid account ID")
@@ -39,7 +39,7 @@ func (s *EggService) Hatch(ctx context.Context, ownerHex, eggHex string) (*domai
 		return existing, err
 	}
 	for attempt := 0; attempt < 16; attempt++ {
-		dna, err := GenerateDNA(s.picker)
+		dna, err := GenerateEggDNA(s.picker, tier)
 		if err != nil {
 			return nil, err
 		}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/character"
 	"gofiber-baro/internal/service/reward"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -16,7 +17,7 @@ var ErrBoxNotFound = errors.New("gift box not found")
 var ErrSameRecipient = errors.New("cannot send a gift box to yourself")
 var ErrRecipientNotFound = errors.New("recipient not found")
 var ErrCharacterEggNotReady = errors.New("character egg hatching is not available yet")
-var ErrInvalidCharacterEggTier = errors.New("character eggs must use the Standard tier")
+var ErrInvalidCharacterEggTier = errors.New("character eggs must use the Standard, Rare, or Legendary tier")
 
 const CharacterEggPool = "character-egg"
 
@@ -37,6 +38,11 @@ type Store interface {
 	SearchRecipients(ctx context.Context, query string, exclude primitive.ObjectID) ([]Recipient, error)
 	IsLearner(ctx context.Context, userID primitive.ObjectID) (bool, error)
 	Transfer(ctx context.Context, boxID, fromID, toID primitive.ObjectID) (*domain.TeacherGiftBox, error)
+}
+
+type CharacterEggGrantStore interface {
+	CreateCharacterEgg(ctx context.Context, box domain.TeacherGiftBox) error
+	CreateCharacterEggOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error)
 }
 
 type CohortGrantFailure struct {
@@ -63,7 +69,7 @@ type Drawer interface {
 }
 
 type EggHatcher interface {
-	Hatch(ctx context.Context, ownerID, eggID string) (*domain.BaroCharacter, error)
+	Hatch(ctx context.Context, ownerID, eggID, tier string) (*domain.BaroCharacter, error)
 }
 
 type OpenResult struct {
@@ -94,8 +100,10 @@ func (s *Service) GrantWithPool(ctx context.Context, userID, adminID, minimumRar
 	if rewardPool != "" && rewardPool != "character-box" && rewardPool != CharacterEggPool {
 		return nil, errors.New("invalid reward pool")
 	}
-	if rewardPool == CharacterEggPool && minimumRarity != "Common" {
-		return nil, ErrInvalidCharacterEggTier
+	if rewardPool == CharacterEggPool {
+		if _, err := character.EggOdds(minimumRarity); err != nil {
+			return nil, ErrInvalidCharacterEggTier
+		}
 	}
 	learner, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
@@ -124,8 +132,18 @@ func (s *Service) GrantWithPool(ctx context.Context, userID, adminID, minimumRar
 		CreatedAt:     time.Now(),
 		RewardPool:    rewardPool,
 	}
-	if err := s.store.Create(ctx, box); err != nil {
-		return nil, err
+	var createErr error
+	if rewardPool == CharacterEggPool {
+		if eggStore, ok := s.store.(CharacterEggGrantStore); ok {
+			createErr = eggStore.CreateCharacterEgg(ctx, box)
+		} else {
+			createErr = s.store.Create(ctx, box)
+		}
+	} else {
+		createErr = s.store.Create(ctx, box)
+	}
+	if createErr != nil {
+		return nil, createErr
 	}
 	return &box, nil
 }
@@ -160,8 +178,13 @@ func (s *Service) GrantAudience(ctx context.Context, cohort int, team, adminID, 
 	}
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	team = strings.TrimSpace(team)
-	if idempotencyKey == "" || len(idempotencyKey) > 128 || (rewardPool != "" && rewardPool != "character-box") {
+	if idempotencyKey == "" || len(idempotencyKey) > 128 || (rewardPool != "" && rewardPool != "character-box" && rewardPool != CharacterEggPool) {
 		return nil, errors.New("valid idempotency key and reward pool are required")
+	}
+	if rewardPool == CharacterEggPool {
+		if _, err := character.EggOdds(minimumRarity); err != nil {
+			return nil, ErrInvalidCharacterEggTier
+		}
 	}
 	learners, err := s.audienceLearners(ctx, cohort, team)
 	if err != nil {
@@ -174,7 +197,17 @@ func (s *Service) GrantAudience(ctx context.Context, cohort int, team, adminID, 
 			Message: strings.TrimSpace(message), GrantedBy: admin, Status: "unopened",
 			CreatedAt: time.Now(), GrantKey: idempotencyKey + ":" + learner.Hex(), RewardPool: rewardPool,
 		}
-		created, createErr := s.store.CreateOnce(ctx, box)
+		var created bool
+		var createErr error
+		if rewardPool == CharacterEggPool {
+			if eggStore, ok := s.store.(CharacterEggGrantStore); ok {
+				created, createErr = eggStore.CreateCharacterEggOnce(ctx, box)
+			} else {
+				created, createErr = s.store.CreateOnce(ctx, box)
+			}
+		} else {
+			created, createErr = s.store.CreateOnce(ctx, box)
+		}
 		if createErr != nil {
 			result.Failures = append(result.Failures, CohortGrantFailure{UserID: learner.Hex(), Error: createErr.Error()})
 		} else if created {
@@ -251,7 +284,7 @@ func (s *Service) Open(ctx context.Context, userID, boxID string) (*OpenResult, 
 		if s.hatcher == nil {
 			return nil, ErrCharacterEggNotReady
 		}
-		character, err := s.hatcher.Hatch(ctx, userID, boxID)
+		character, err := s.hatcher.Hatch(ctx, userID, boxID, box.MinimumRarity)
 		if err != nil {
 			return nil, err
 		}
@@ -276,13 +309,13 @@ func (s *Service) Odds(ctx context.Context, userID, boxID string) (reward.Eligib
 		return reward.Eligibility{}, err
 	}
 	if box.RewardPool == CharacterEggPool {
+		odds, err := character.EggOdds(box.MinimumRarity)
+		if err != nil {
+			return reward.Eligibility{}, ErrInvalidCharacterEggTier
+		}
 		return reward.Eligibility{
 			EligibleCount: 1,
-			Odds: map[string]float64{
-				"Normal":    0.83,
-				"Meme Rare": 0.15,
-				"Legendary": 0.02,
-			},
+			Odds:          odds,
 		}, nil
 	}
 	return s.drawer.Odds(ctx, reward.DrawRequest{

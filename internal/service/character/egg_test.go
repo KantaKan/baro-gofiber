@@ -41,14 +41,14 @@ func TestEggHatchCreatesOnePermanentCharacterAndRetriesReturnIt(t *testing.T) {
 	ownerID := primitive.NewObjectID()
 	eggID := primitive.NewObjectID()
 	store := &fakeEggStore{}
-	picker := &fakePicker{values: []int{9800, 0, 5, 0, 0, 0, 2, 12345}}
+	picker := &fakePicker{values: []int{0, 5, 0, 0, 0, 2, 12345}}
 	service := NewEggService(store, picker)
 
-	first, err := service.Hatch(context.Background(), ownerID.Hex(), eggID.Hex())
+	first, err := service.Hatch(context.Background(), ownerID.Hex(), eggID.Hex(), "Legendary")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := service.Hatch(context.Background(), ownerID.Hex(), eggID.Hex())
+	second, err := service.Hatch(context.Background(), ownerID.Hex(), eggID.Hex(), "Legendary")
 	if err != nil {
 		t.Fatal(err)
 	}

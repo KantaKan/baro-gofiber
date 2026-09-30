@@ -16,13 +16,14 @@ import (
 )
 
 type fakeStore struct {
-	mu         sync.Mutex
-	boxes      map[primitive.ObjectID]domain.TeacherGiftBox
-	cohorts    map[int][]primitive.ObjectID
-	teams      map[string][]primitive.ObjectID
-	grantKeys  map[string]bool
-	failUser   primitive.ObjectID
-	recipients map[primitive.ObjectID]Recipient
+	mu            sync.Mutex
+	boxes         map[primitive.ObjectID]domain.TeacherGiftBox
+	cohorts       map[int][]primitive.ObjectID
+	teams         map[string][]primitive.ObjectID
+	grantKeys     map[string]bool
+	failUser      primitive.ObjectID
+	recipients    map[primitive.ObjectID]Recipient
+	notifications []domain.Notification
 }
 
 func (s *fakeStore) SearchRecipients(_ context.Context, query string, exclude primitive.ObjectID) ([]Recipient, error) {
@@ -84,6 +85,22 @@ func (s *fakeStore) Create(_ context.Context, box domain.TeacherGiftBox) error {
 	defer s.mu.Unlock()
 	s.boxes[box.ID] = box
 	return nil
+}
+
+func (s *fakeStore) CreateCharacterEgg(ctx context.Context, box domain.TeacherGiftBox) error {
+	if err := s.Create(ctx, box); err != nil {
+		return err
+	}
+	s.notifications = append(s.notifications, domain.Notification{Title: "A Character Egg arrived", Message: "A mystery friend is waiting for you to hatch it.", RecipientIDs: []primitive.ObjectID{box.UserID}})
+	return nil
+}
+
+func (s *fakeStore) CreateCharacterEggOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error) {
+	created, err := s.CreateOnce(ctx, box)
+	if err == nil && created {
+		s.notifications = append(s.notifications, domain.Notification{Title: "A Character Egg arrived", Message: "A mystery friend is waiting for you to hatch it.", RecipientIDs: []primitive.ObjectID{box.UserID}})
+	}
+	return created, err
 }
 
 func TestCohortGrantReportsPartialFailuresAndRetriesWithoutDuplicates(t *testing.T) {
@@ -172,7 +189,7 @@ type fakeEggHatcher struct {
 	calls     int
 }
 
-func (h *fakeEggHatcher) Hatch(_ context.Context, ownerID, eggID string) (*domain.BaroCharacter, error) {
+func (h *fakeEggHatcher) Hatch(_ context.Context, ownerID, eggID, tier string) (*domain.BaroCharacter, error) {
 	h.calls++
 	return h.character, nil
 }
@@ -291,14 +308,61 @@ func TestCharacterEggCanOnlyBeGrantedToLearners(t *testing.T) {
 
 	learner := primitive.NewObjectID()
 	store.recipients[learner] = Recipient{ID: learner.Hex(), Role: "learner"}
-	if _, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), "Rare", "Not a Standard Egg", "character-egg"); !errors.Is(err, ErrInvalidCharacterEggTier) {
-		t.Fatalf("non-standard character egg grant error = %v", err)
+	for _, tier := range []string{"Common", "Rare", "Legendary"} {
+		if _, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), tier, "A mystery friend", "character-egg"); err != nil {
+			t.Fatalf("%s character egg grant error = %v", tier, err)
+		}
+	}
+	if _, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), "Epic", "Unsupported Egg", "character-egg"); !errors.Is(err, ErrInvalidCharacterEggTier) {
+		t.Fatalf("unsupported character egg grant error = %v", err)
 	}
 	if _, err := service.GrantWithPool(context.Background(), admin.Hex(), admin.Hex(), "Common", "Not for admins", "character-egg"); !errors.Is(err, ErrRecipientNotFound) {
 		t.Fatalf("admin character egg grant error = %v", err)
 	}
-	if len(store.boxes) != 0 {
+	if len(store.boxes) != 3 {
 		t.Fatalf("admin received character egg: %+v", store.boxes)
+	}
+}
+
+func TestTieredEggAudienceGrantIsIdempotentAndUsesSelectedScope(t *testing.T) {
+	first := primitive.NewObjectID()
+	second := primitive.NewObjectID()
+	outside := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes:     map[primitive.ObjectID]domain.TeacherGiftBox{},
+		cohorts:   map[int][]primitive.ObjectID{16: {first, second, outside}},
+		teams:     map[string][]primitive.ObjectID{"16:Garden Alpha": {first, second}},
+		grantKeys: map[string]bool{},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+	admin := primitive.NewObjectID().Hex()
+	for _, tier := range []string{"Common", "Rare", "Legendary"} {
+		key := "egg-team-" + tier
+		firstResult, err := service.GrantAudience(context.Background(), 16, "Garden Alpha", admin, tier, "A mystery friend is waiting", key, CharacterEggPool)
+		if err != nil || firstResult.Created != 2 || firstResult.Total != 2 {
+			t.Fatalf("first %s grant = %+v, err=%v", tier, firstResult, err)
+		}
+		retry, err := service.GrantAudience(context.Background(), 16, "Garden Alpha", admin, tier, "A mystery friend is waiting", key, CharacterEggPool)
+		if err != nil || retry.Existing != 2 || retry.Created != 0 {
+			t.Fatalf("retry %s grant = %+v, err=%v", tier, retry, err)
+		}
+	}
+	if len(store.boxes) != 6 {
+		t.Fatalf("tiered grants created %d boxes, want 6", len(store.boxes))
+	}
+	if len(store.notifications) != 6 {
+		t.Fatalf("notifications = %d, want one per created Egg", len(store.notifications))
+	}
+	for _, notification := range store.notifications {
+		copy := strings.ToLower(notification.Title + " " + notification.Message)
+		if strings.Contains(copy, "normal") || strings.Contains(copy, "rare") || strings.Contains(copy, "legendary") || strings.Contains(copy, "dna") {
+			t.Fatalf("spoiling notification = %+v", notification)
+		}
+	}
+	for _, box := range store.boxes {
+		if box.UserID == outside || box.RewardPool != CharacterEggPool || strings.Contains(strings.ToLower(box.Message), "rarity") {
+			t.Fatalf("unsafe or out-of-scope grant = %+v", box)
+		}
 	}
 }
 

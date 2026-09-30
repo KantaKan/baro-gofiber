@@ -76,7 +76,7 @@ type giftBoxHTTPHatcher struct {
 	character *domain.BaroCharacter
 }
 
-func (h *giftBoxHTTPHatcher) Hatch(context.Context, string, string) (*domain.BaroCharacter, error) {
+func (h *giftBoxHTTPHatcher) Hatch(context.Context, string, string, string) (*domain.BaroCharacter, error) {
 	return h.character, nil
 }
 
