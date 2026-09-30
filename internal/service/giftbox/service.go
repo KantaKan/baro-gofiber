@@ -31,6 +31,7 @@ type Store interface {
 	ListCohortLearners(ctx context.Context, cohort int) ([]primitive.ObjectID, error)
 	ListTeamLearners(ctx context.Context, cohort int, team string) ([]primitive.ObjectID, error)
 	SearchRecipients(ctx context.Context, query string, exclude primitive.ObjectID) ([]Recipient, error)
+	IsLearner(ctx context.Context, userID primitive.ObjectID) (bool, error)
 	Transfer(ctx context.Context, boxID, fromID, toID primitive.ObjectID) (*domain.TeacherGiftBox, error)
 }
 
@@ -171,7 +172,17 @@ func (s *Service) SearchRecipients(ctx context.Context, senderID, query string) 
 	if len([]rune(query)) < 2 || len([]rune(query)) > 80 {
 		return nil, errors.New("search must be 2 to 80 characters")
 	}
-	return s.store.SearchRecipients(ctx, query, id)
+	recipients, err := s.store.SearchRecipients(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	learners := make([]Recipient, 0, len(recipients))
+	for _, recipient := range recipients {
+		if recipient.Role == "learner" {
+			learners = append(learners, recipient)
+		}
+	}
+	return learners, nil
 }
 
 func (s *Service) Transfer(ctx context.Context, senderID, boxID, recipientID string) (*domain.TeacherGiftBox, error) {
@@ -189,6 +200,13 @@ func (s *Service) Transfer(ctx context.Context, senderID, boxID, recipientID str
 	}
 	if from == to {
 		return nil, ErrSameRecipient
+	}
+	eligible, err := s.store.IsLearner(ctx, to)
+	if err != nil {
+		return nil, err
+	}
+	if !eligible {
+		return nil, ErrRecipientNotFound
 	}
 	return s.store.Transfer(ctx, box, from, to)
 }

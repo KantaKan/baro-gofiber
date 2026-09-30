@@ -20,6 +20,7 @@ type giftBoxHTTPStore struct {
 	cohortLearners []primitive.ObjectID
 	teamLearners   []primitive.ObjectID
 	grantKeys      map[string]bool
+	recipientRoles map[primitive.ObjectID]string
 }
 
 func (s *giftBoxHTTPStore) Create(_ context.Context, box domain.TeacherGiftBox) error {
@@ -54,6 +55,9 @@ func (s *giftBoxHTTPStore) ListTeamLearners(context.Context, int, string) ([]pri
 func (s *giftBoxHTTPStore) SearchRecipients(context.Context, string, primitive.ObjectID) ([]giftbox.Recipient, error) {
 	return []giftbox.Recipient{}, nil
 }
+func (s *giftBoxHTTPStore) IsLearner(_ context.Context, userID primitive.ObjectID) (bool, error) {
+	return s.recipientRoles[userID] == "learner", nil
+}
 func (s *giftBoxHTTPStore) Transfer(_ context.Context, boxID, fromID, toID primitive.ObjectID) (*domain.TeacherGiftBox, error) {
 	for index := range s.boxes {
 		if s.boxes[index].ID == boxID && s.boxes[index].UserID == fromID && s.boxes[index].Status == "unopened" {
@@ -82,7 +86,7 @@ func TestCharacterGiftBoxRequiresAdminGrantAndOwnerOdds(t *testing.T) {
 	learner := primitive.NewObjectID()
 	other := primitive.NewObjectID()
 	admin := primitive.NewObjectID()
-	store := &giftBoxHTTPStore{}
+	store := &giftBoxHTTPStore{recipientRoles: map[primitive.ObjectID]string{learner: "learner", other: "learner", admin: "admin"}}
 	drawer := &giftBoxHTTPDrawer{}
 	h := NewGiftBoxHandler(giftbox.NewService(store, drawer))
 	app := fiber.New()
@@ -118,10 +122,10 @@ func TestCharacterGiftBoxRequiresAdminGrantAndOwnerOdds(t *testing.T) {
 	if status, _ := characterRequest(t, app, http.MethodPost, transferPath, characterToken(t, other, "learner"), transferBody); status != http.StatusNotFound {
 		t.Fatalf("nonowner transfer status = %d", status)
 	}
-	if status, _ := characterRequest(t, app, http.MethodPost, transferPath, characterToken(t, learner, "learner"), transferBody); status != http.StatusOK {
+	if status, _ := characterRequest(t, app, http.MethodPost, transferPath, characterToken(t, learner, "learner"), transferBody); status != http.StatusNotFound {
 		t.Fatalf("owner transfer status = %d", status)
 	}
-	if store.boxes[0].UserID != admin || store.boxes[0].GrantedBy != admin {
+	if store.boxes[0].UserID != learner || store.boxes[0].GrantedBy != admin {
 		t.Fatalf("transferred box = %+v", store.boxes[0])
 	}
 }

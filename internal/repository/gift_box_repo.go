@@ -40,7 +40,7 @@ func giftBoxDisplayName(user domain.User) string {
 func (r *GiftBoxRepository) SearchRecipients(ctx context.Context, query string, exclude primitive.ObjectID) ([]giftbox.Recipient, error) {
 	pattern := primitive.Regex{Pattern: regexp.QuoteMeta(query), Options: "i"}
 	filter := bson.M{
-		"_id": bson.M{"$ne": exclude}, "deleted": bson.M{"$ne": true},
+		"_id": bson.M{"$ne": exclude}, "role": "learner", "deleted": bson.M{"$ne": true},
 		"$or": []bson.M{{"first_name": pattern}, {"last_name": pattern}, {"zoom_name": pattern}, {"email": pattern}},
 	}
 	projection := bson.M{"first_name": 1, "last_name": 1, "zoom_name": 1, "cohort_number": 1, "genmate_group": 1, "role": 1}
@@ -58,6 +58,14 @@ func (r *GiftBoxRepository) SearchRecipients(ctx context.Context, query string, 
 		items = append(items, giftbox.Recipient{ID: user.ID.Hex(), DisplayName: giftBoxDisplayName(user), CohortNumber: user.CohortNumber, Group: user.GenmateGroup, Role: user.Role})
 	}
 	return items, cursor.Err()
+}
+
+func (r *GiftBoxRepository) IsLearner(ctx context.Context, userID primitive.ObjectID) (bool, error) {
+	err := r.users.FindOne(ctx, bson.M{"_id": userID, "role": "learner", "deleted": bson.M{"$ne": true}}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (r *GiftBoxRepository) Transfer(ctx context.Context, boxID, fromID, toID primitive.ObjectID) (*domain.TeacherGiftBox, error) {
@@ -78,7 +86,7 @@ func (r *GiftBoxRepository) Transfer(ctx context.Context, boxID, fromID, toID pr
 			return nil, err
 		}
 		var recipient domain.User
-		if err := r.users.FindOne(tx, bson.M{"_id": toID, "deleted": bson.M{"$ne": true}}, options.FindOne().SetProjection(nameProjection)).Decode(&recipient); err != nil {
+		if err := r.users.FindOne(tx, bson.M{"_id": toID, "role": "learner", "deleted": bson.M{"$ne": true}}, options.FindOne().SetProjection(nameProjection)).Decode(&recipient); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
 				return nil, giftbox.ErrRecipientNotFound
 			}
@@ -107,7 +115,7 @@ func (r *GiftBoxRepository) Transfer(ctx context.Context, boxID, fromID, toID pr
 		if removed.ModifiedCount != 1 {
 			return nil, giftbox.ErrBoxNotFound
 		}
-		added, err := r.users.UpdateOne(tx, bson.M{"_id": toID, "deleted": bson.M{"$ne": true}, "gift_boxes._id": bson.M{"$ne": boxID}}, bson.M{"$push": bson.M{"gift_boxes": box}})
+		added, err := r.users.UpdateOne(tx, bson.M{"_id": toID, "role": "learner", "deleted": bson.M{"$ne": true}, "gift_boxes._id": bson.M{"$ne": boxID}}, bson.M{"$push": bson.M{"gift_boxes": box}})
 		if err != nil {
 			return nil, err
 		}
