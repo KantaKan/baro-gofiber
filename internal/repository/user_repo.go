@@ -197,8 +197,34 @@ func (r *userRepository) UnequipCosmetic(ctx interface{}, userID primitive.Objec
 	return nil
 }
 
+func (r *userRepository) ensureCanonicalCareEnergy(ctx context.Context, userID primitive.ObjectID) error {
+	fields := [][2]string{
+		{"care_energy_balance", "fertilizer_balance"},
+		{"care_energy_log", "fertilizer_log"},
+	}
+	for _, fieldsPair := range fields {
+		canonical := fieldsPair[0]
+		legacy := fieldsPair[1]
+		_, err := r.collection.UpdateOne(
+			ctx,
+			bson.M{"_id": userID, canonical: bson.M{"$exists": false}, legacy: bson.M{"$exists": true}},
+			mongo.Pipeline{
+				bson.D{{Key: "$set", Value: bson.M{canonical: "$" + legacy}}},
+				bson.D{{Key: "$unset", Value: legacy}},
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *userRepository) GrantCareEnergy(ctx interface{}, userID primitive.ObjectID, amount int, note, grantedBy string) error {
 	c := ctx.(context.Context)
+	if err := r.ensureCanonicalCareEnergy(c, userID); err != nil {
+		return err
+	}
 	entry := domain.CareEnergyLogEntry{
 		ID:        primitive.NewObjectID(),
 		Kind:      "grant",
@@ -224,6 +250,9 @@ func (r *userRepository) GrantCareEnergy(ctx interface{}, userID primitive.Objec
 
 func (r *userRepository) UseCareEnergyProtect(ctx interface{}, userID primitive.ObjectID, dateStr string) error {
 	c := ctx.(context.Context)
+	if err := r.ensureCanonicalCareEnergy(c, userID); err != nil {
+		return err
+	}
 	filter := bson.M{
 		"_id":                 userID,
 		"care_energy_balance": bson.M{"$gte": 1},
@@ -258,6 +287,9 @@ func (r *userRepository) UseCareEnergyProtect(ctx interface{}, userID primitive.
 
 func (r *userRepository) UseCareEnergyFeed(ctx interface{}, userID primitive.ObjectID, quantity, points int) error {
 	c := ctx.(context.Context)
+	if err := r.ensureCanonicalCareEnergy(c, userID); err != nil {
+		return err
+	}
 	filter := bson.M{
 		"_id":                 userID,
 		"care_energy_balance": bson.M{"$gte": quantity},
@@ -284,6 +316,9 @@ func (r *userRepository) UseCareEnergyFeed(ctx interface{}, userID primitive.Obj
 
 func (r *userRepository) UseCareEnergyCharacter(ctx interface{}, userID primitive.ObjectID, effect string) error {
 	c := ctx.(context.Context)
+	if err := r.ensureCanonicalCareEnergy(c, userID); err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	entry := domain.CareEnergyLogEntry{ID: primitive.NewObjectID(), Kind: "character-care", Amount: 1, Note: effect, CreatedAt: now}
 	result, err := r.collection.UpdateOne(c, bson.M{"_id": userID, "deleted": bson.M{"$ne": true}, "care_energy_balance": bson.M{"$gte": 1}}, bson.M{
@@ -303,6 +338,12 @@ func (r *userRepository) UseCareEnergyCharacter(ctx interface{}, userID primitiv
 // ponytail: no txn - compensating refund on credit failure; use a mongo session if gifts ever batch
 func (r *userRepository) GiftCareEnergy(ctx interface{}, giverID, recipientID primitive.ObjectID, quantity, points int, note string) error {
 	c := ctx.(context.Context)
+	if err := r.ensureCanonicalCareEnergy(c, giverID); err != nil {
+		return err
+	}
+	if err := r.ensureCanonicalCareEnergy(c, recipientID); err != nil {
+		return err
+	}
 
 	giftEntry := domain.CareEnergyLogEntry{
 		ID:        primitive.NewObjectID(),
@@ -354,6 +395,12 @@ func (r *userRepository) GiftCareEnergy(ctx interface{}, giverID, recipientID pr
 // ponytail: no txn - compensating refund on credit failure; use a mongo session if rescues ever batch
 func (r *userRepository) RescueCareEnergy(ctx interface{}, giverID, recipientID primitive.ObjectID, dateStr, note string) error {
 	c := ctx.(context.Context)
+	if err := r.ensureCanonicalCareEnergy(c, giverID); err != nil {
+		return err
+	}
+	if err := r.ensureCanonicalCareEnergy(c, recipientID); err != nil {
+		return err
+	}
 
 	spendEntry := domain.CareEnergyLogEntry{
 		ID:          primitive.NewObjectID(),
