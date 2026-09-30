@@ -131,7 +131,7 @@ func TestGenmateDrawsAndStatBounds(t *testing.T) {
 			}
 		}
 		for _, s := range [4]int{c.Frontend, c.Backend, c.Design, c.Debug} {
-			if s < 1 || s > statMax(run.Act) {
+			if s < 1 || s > statMax(run.Act)+2 {
 				t.Fatalf("genmate stats rolled like everyone else: %+v", c)
 			}
 		}

@@ -86,6 +86,7 @@ type StartupDev struct {
 	ID        string `bson:"id" json:"id"`
 	Name      string `bson:"name" json:"name"`
 	Title     string `bson:"title" json:"title"`
+	Role      string `bson:"role,omitempty" json:"role,omitempty"`
 	GenmateID string `bson:"genmate_id,omitempty" json:"genmate_id,omitempty"`
 	Sprite    string `bson:"sprite" json:"sprite"`
 	Perk     string `bson:"perk,omitempty" json:"perk,omitempty"`

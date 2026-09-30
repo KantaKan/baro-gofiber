@@ -60,6 +60,7 @@ func shipWithMarket(t *testing.T, seed uint64, market domain.StartupMarket, them
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
 	}
+	run.Staff[0].Frontend, run.Staff[0].Backend, run.Staff[0].Design, run.Staff[0].Debug = 8, 8, 8, 8
 	if err := StartProject(run, "Game", theme, nil, t0); err != nil {
 		t.Fatal(err)
 	}

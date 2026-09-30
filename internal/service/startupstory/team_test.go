@@ -51,7 +51,7 @@ func TestStatBoundsScaleByAct(t *testing.T) {
 		for i := 0; i < 20; i++ {
 			for _, c := range rollCandidates(run, CandidateOffers) {
 				for _, s := range [4]int{c.Frontend, c.Backend, c.Design, c.Debug} {
-					if s < 1 || s > statMax(act) {
+					if s < 1 || s > statMax(act)+2 {
 						t.Fatalf("act %d stat out of bounds: %+v", act, c)
 					}
 				}

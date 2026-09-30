@@ -44,6 +44,7 @@ type Overview struct {
 	Themes     []string              `json:"themes"`
 	Items      []StartupItem         `json:"items"`
 	Unlocks    []UnlockInfo          `json:"unlocks"`
+	Roles              []RoleInfo            `json:"roles"`
 	OptOut     bool                  `json:"opt_out"`
 }
 
@@ -113,7 +114,7 @@ func (s *Service) Overview(ctx context.Context, player Player) (*Overview, error
 		typeNames[i] = t.Name
 	}
 	items := append(append([]StartupItem{}, itemCatalog...), unlockableItems...)
-	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, OptOut: optOut}, nil
+	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, OptOut: optOut}, nil
 }
 
 func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*domain.StartupRun, error) {

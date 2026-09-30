@@ -23,6 +23,7 @@ func playProject(t *testing.T, seed uint64, typeName, theme string) *domain.Star
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
 	}
+	run.Staff[0].Frontend, run.Staff[0].Backend, run.Staff[0].Design, run.Staff[0].Debug = 8, 8, 8, 8
 	if err := StartProject(run, typeName, theme, nil, t0); err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +57,7 @@ func TestGreatComboBeatsMeh(t *testing.T) {
 func TestRunEndsAfterLastProject(t *testing.T) {
 	run := NewRun(primitive.NewObjectID(), 12, "learner", domain.StartupModeFree, 7, t0)
 	_ = PickFounder(run, 1)
+	run.Staff[0].Frontend, run.Staff[0].Backend, run.Staff[0].Design, run.Staff[0].Debug = 25, 25, 25, 25
 	for i := 0; i < ProjectsPerRun; i++ {
 		if err := StartProject(run, "Web App", "Education", nil, t0); err != nil {
 			t.Fatal(err)

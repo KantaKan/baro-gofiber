@@ -96,10 +96,10 @@ func rollCandidates(run *domain.StartupRun, count int) []domain.StartupDev {
 		} else {
 			name = founderNames[r.IntN(len(founderNames))]
 		}
-		fe := r.IntN(max) + 1
-		be := r.IntN(max) + 1
-		design := r.IntN(max) + 1
-		debug := r.IntN(max) + 1
+		role := roles[r.IntN(len(roles))]
+		st := [4]int{r.IntN(max) + 1, r.IntN(max) + 1, r.IntN(max) + 1, r.IntN(max) + 1}
+		applyRoleFocus(&st, role.ID, max)
+		fe, be, design, debug := st[0], st[1], st[2], st[3]
 		trait := ""
 		if r.IntN(2) == 1 {
 			trait = traits[r.IntN(len(traits))]
@@ -107,7 +107,8 @@ func rollCandidates(run *domain.StartupRun, count int) []domain.StartupDev {
 		out = append(out, domain.StartupDev{
 			ID:        fmt.Sprintf("cand-%d-%d", seq, i),
 			Name:      name,
-			Title:     candidateTitles[r.IntN(len(candidateTitles))],
+			Title:     role.Title,
+			Role:      role.ID,
 			GenmateID: genmateID,
 			Sprite:    "dev",
 			Trait:     trait,
@@ -216,6 +217,7 @@ func projectDurationSecs(run *domain.StartupRun, team []domain.StartupDev, boss 
 		}
 	}
 	mult *= effectsOf(run.Items).durMult
+	mult *= jobsFor(team).durMult
 	secs := int(math.Round(float64(base) * mult))
 	if secs < MinDurationSecs {
 		secs = MinDurationSecs
@@ -459,12 +461,23 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	}
 	combo := comboFor(t, p.Theme)
 
+	weights := t.Weights
+	if p.Boss == BossOutage {
+		weights = outageWeights
+	}
+	jobs := jobsFor(team)
 	var sums [4]int
+	var power float64
 	debug, salaries, traitBugs, investorBonus := 0, 0, 0, 0
 	for _, d := range team {
 		s := stats(d)
+		share := 1.0
+		if !isBuilder(d) {
+			share = SupportBuildShare
+		}
 		for i := range s {
 			sums[i] += s[i]
+			power += share * float64(s[i]) * weights[i]
 		}
 		debug += s[3]
 		salaries += d.Salary
@@ -480,23 +493,20 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	fx := effectsOf(run.Items)
 	for i := range sums {
 		sums[i] += fx.sums[i]
+		power += float64(fx.sums[i]) * weights[i]
 	}
 	debug += fx.sums[3]
-	var power float64
-	weights := t.Weights
+	power *= coordinationMult(len(team), jobs.hasPM)
 	if p.Boss == BossOutage {
-		weights = outageWeights
-	}
-	for i := range sums {
-		power += float64(sums[i]) * weights[i]
+		power *= 1 + jobs.outageBoost
 	}
 	power *= comboMultipliers[combo]
 	power *= marketMult(run.Market, p.Theme)
 	power *= fx.powerMult
-	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs)
+	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd-int(math.Round(jobs.bugCut)))
 
 	r := rngFor(run)
-	quality := (power - 0.3*float64(bugs)) * (0.9 + 0.2*r.Float64())
+	quality := (power - BugPenalty*float64(bugs)) / actScale(run.Act) * (0.9 + 0.2*r.Float64())
 
 	result := &domain.StartupResult{Type: p.Type, Theme: p.Theme, Combo: combo, Bugs: bugs}
 	for _, rv := range reviewers {
@@ -519,6 +529,7 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 		if rv.Name == "Dev Community" {
 			bias += float64(fx.devCommunity)
 		}
+		bias += jobs.reviewer[rv.Name]
 		score := int(math.Round(quality*ReviewScale + bias + (2*r.Float64() - 1)))
 		score = min(10, max(1, score))
 		tier := 2

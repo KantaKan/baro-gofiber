@@ -13,7 +13,7 @@ const (
 	BossDuration    = 90
 	FounderOffers   = 3
 	CandidateOffers = 3
-	ReviewScale     = 1.6
+	ReviewScale     = 0.6
 	MoneyPerPoint   = 15
 	FansPerPoint    = 2
 	SalaryRate      = 150
@@ -22,7 +22,19 @@ const (
 	BossBonusFans   = 200
 	BossWinBonus    = 2000
 	BossPassBonus   = 500
+	BugPenalty      = 0.3
 )
+
+func actScale(act int) float64 {
+	switch act {
+	case 2:
+		return 2.1
+	case 3:
+		return 3.4
+	default:
+		return 1
+	}
+}
 
 const (
 	BossDemoDay      = "demo-day"
@@ -40,9 +52,9 @@ func bossThreshold(act int) int {
 	case 2:
 		return 26
 	case 3:
-		return 32
+		return 36
 	default:
-		return 20
+		return 18
 	}
 }
 
@@ -71,8 +83,6 @@ const (
 )
 
 var traits = []string{TraitNightOwl, TraitTabs, TraitTenX, TraitMeeting, TraitSOSurfer, TraitPixelPerf}
-
-var candidateTitles = []string{"Frontend Dev", "Backend Dev", "Designer", "Debugger", "Fullstack Dev", "Intern"}
 
 func TeamCap(act int) int {
 	switch act {
@@ -120,17 +130,17 @@ func salaryFor(fe, be, design, debug int, trait string) int {
 }
 
 var founders = []domain.StartupDev{
-	{Title: "Fullstack Hustler", Sprite: "hustler", Perk: "Does a bit of everything", Frontend: 3, Backend: 3, Design: 3, Debug: 3},
-	{Title: "Design Nerd", Sprite: "designer", Perk: "Pixels over everything", Frontend: 3, Backend: 1, Design: 6, Debug: 2},
-	{Title: "Backend Wizard", Sprite: "wizard", Perk: "Speaks fluent SQL", Frontend: 1, Backend: 6, Design: 1, Debug: 4},
-	{Title: "Bootcamp Grad", Sprite: "grad", Perk: "Fresh from Generation, hungry to learn", Frontend: 4, Backend: 3, Design: 2, Debug: 2},
+	{Title: "Fullstack Hustler", Role: RolePM, Sprite: "hustler", Perk: "Does a bit of everything", Frontend: 3, Backend: 3, Design: 3, Debug: 3},
+	{Title: "Design Nerd", Role: RoleDesigner, Sprite: "designer", Perk: "Pixels over everything", Frontend: 3, Backend: 1, Design: 6, Debug: 2},
+	{Title: "Backend Wizard", Role: RoleBE, Sprite: "wizard", Perk: "Speaks fluent SQL", Frontend: 1, Backend: 6, Design: 1, Debug: 4},
+	{Title: "Bootcamp Grad", Role: RoleFE, Sprite: "grad", Perk: "Fresh from Generation, hungry to learn", Frontend: 4, Backend: 3, Design: 2, Debug: 2},
 }
 
 var founderNames = []string{"Ploy", "Nat", "Kan", "Mint", "Tee", "Bank", "Fah", "Aom", "Alex", "Sam", "Maya", "Leo", "Noah", "Yui", "Arjun", "Sofia"}
 
 var unlockableFounders = []domain.StartupDev{
-	{Title: "Ex-FAANG Refugee", Sprite: "faang", Perk: "Knows where the bodies are buried", Frontend: 4, Backend: 5, Design: 3, Debug: 4},
-	{Title: "Genmate Legend", Sprite: "legend", Perk: "Your batch's finest", Frontend: 5, Backend: 4, Design: 4, Debug: 4},
+	{Title: "Ex-FAANG Refugee", Role: RoleSA, Sprite: "faang", Perk: "Knows where the bodies are buried", Frontend: 4, Backend: 5, Design: 3, Debug: 4},
+	{Title: "Genmate Legend", Role: RolePO, Sprite: "legend", Perk: "Your batch's finest", Frontend: 5, Backend: 4, Design: 4, Debug: 4},
 }
 
 var unlockableItems = []StartupItem{
