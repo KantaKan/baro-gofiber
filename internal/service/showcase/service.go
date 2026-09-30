@@ -19,12 +19,18 @@ var ErrEntryNotFound = errors.New("showcase entry not found")
 var ErrAdminRequired = errors.New("admin access required")
 
 var ErrInvalidMood = errors.New("choose one of the lawn moods")
+var ErrInvalidEmote = errors.New("choose one of the lawn emotes")
+var ErrInvalidEmoteTarget = errors.New("choose a visible friend from your cohort to visit")
 
 var reactionEmojis = map[string]bool{"❤️": true, "✨": true, "😂": true, "🙌": true}
 
 var lawnMoods = map[string]bool{"greeting": true, "relaxing": true, "meal": true, "playful": true, "quiet": true, "surprise": true}
 
 const MoodDuration = 24 * time.Hour
+
+var lawnEmotes = map[string]bool{"wave": true, "dance": true, "jump": true, "heart": true, "nap": true, "visit": true}
+
+const EmoteDuration = 30 * time.Minute
 
 type Viewer struct {
 	Cohort int
@@ -42,8 +48,17 @@ type Entry struct {
 	UpdatedAt time.Time            `json:"updated_at"`
 	Hidden    bool                 `json:"hidden,omitempty"`
 	Reactions []ReactionSummary    `json:"reactions"`
-	Mood      string               `json:"mood,omitempty"`
-	MoodUntil *time.Time           `json:"mood_until,omitempty"`
+	Mood        string               `json:"mood,omitempty"`
+	MoodUntil   *time.Time           `json:"mood_until,omitempty"`
+	Emote       string               `json:"emote,omitempty"`
+	EmoteTarget string               `json:"emote_target,omitempty"`
+	EmoteUntil  *time.Time           `json:"emote_until,omitempty"`
+}
+
+type EmoteState struct {
+	Emote  string     `json:"emote"`
+	Target string     `json:"target,omitempty"`
+	Until  *time.Time `json:"until,omitempty"`
 }
 
 type MoodState struct {
@@ -72,6 +87,7 @@ type Store interface {
 	ToggleReaction(ctx context.Context, ownerID, actorID primitive.ObjectID, emoji string) (bool, error)
 	Moderate(ctx context.Context, ownerID, adminID primitive.ObjectID, hidden bool, reason string, at time.Time) error
 	SetMood(ctx context.Context, ownerID primitive.ObjectID, mood string, until time.Time) error
+	SetEmote(ctx context.Context, ownerID primitive.ObjectID, emote, target string, until time.Time) error
 }
 
 type Service struct {
@@ -88,8 +104,52 @@ func (s *Service) withActiveMoods(entries []Entry) []Entry {
 			entries[index].Mood = ""
 			entries[index].MoodUntil = nil
 		}
+		if entries[index].EmoteUntil == nil || !entries[index].EmoteUntil.After(now) {
+			entries[index].Emote = ""
+			entries[index].EmoteTarget = ""
+			entries[index].EmoteUntil = nil
+		}
 	}
 	return entries
+}
+
+func (s *Service) SetEmote(ctx context.Context, ownerHex, emote, targetHex string) (*EmoteState, error) {
+	ownerID, err := primitive.ObjectIDFromHex(ownerHex)
+	if err != nil {
+		return nil, ErrAccountNotFound
+	}
+	emote = strings.TrimSpace(emote)
+	if emote != "" && !lawnEmotes[emote] {
+		return nil, ErrInvalidEmote
+	}
+	if emote != "visit" {
+		targetHex = ""
+	}
+	if emote == "visit" {
+		targetID, err := primitive.ObjectIDFromHex(targetHex)
+		if err != nil || targetID == ownerID {
+			return nil, ErrInvalidEmoteTarget
+		}
+		viewer, err := s.store.Viewer(ctx, ownerID)
+		if err != nil {
+			return nil, err
+		}
+		target, err := s.store.ReactionTarget(ctx, targetID)
+		if errors.Is(err, ErrEntryNotFound) || (err == nil && (target == nil || viewer == nil || target.Hidden || target.Cohort != viewer.Cohort)) {
+			return nil, ErrInvalidEmoteTarget
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	until := s.now().UTC().Add(EmoteDuration)
+	if err := s.store.SetEmote(ctx, ownerID, emote, targetHex, until); err != nil {
+		return nil, err
+	}
+	if emote == "" {
+		return &EmoteState{}, nil
+	}
+	return &EmoteState{Emote: emote, Target: targetHex, Until: &until}, nil
 }
 
 func (s *Service) SetMood(ctx context.Context, ownerHex, mood string) (*MoodState, error) {
