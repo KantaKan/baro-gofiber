@@ -185,9 +185,42 @@ func TestMilestoneEggsSkipIneligibleAccounts(t *testing.T) {
 	} {
 		rewards := &milestoneRewardStore{keys: map[string]bool{}}
 		service := NewService(milestoneUserStore{user: user}, rewards, milestoneHolidayCalendar{})
-		boxes, err := service.Reconcile(context.Background(), user.ID, now)
-		if err != nil || len(boxes) != 0 || len(rewards.boxes) != 0 {
-			t.Fatalf("ineligible account rewards = %+v persisted=%+v err=%v", boxes, rewards.boxes, err)
+		if _, err := service.Reconcile(context.Background(), user.ID, now); err != nil {
+			t.Fatal(err)
 		}
+		cosmetic := 0
+		for _, box := range rewards.boxes {
+			if box.RewardPool == "character-egg" {
+				t.Fatalf("ineligible account received a milestone Egg: %+v", box)
+			}
+			cosmetic++
+		}
+		if user.Role == "admin" && cosmetic != len(rewardMilestones) {
+			t.Fatalf("admin cosmetic milestone boxes = %d, want the unchanged %d", cosmetic, len(rewardMilestones))
+		}
+	}
+}
+
+func TestMilestoneEggsReconcileAPastStreakAfterItBreaks(t *testing.T) {
+	now := bangkokTime(t, "2026-09-30T12:00:00+07:00")
+	past := reflectionWorkdays(bangkokTime(t, "2026-08-14T12:00:00+07:00"), 32)
+	recent := reflectionWorkdays(now, 2)
+	userID := primitive.NewObjectID()
+	rewards := &milestoneRewardStore{keys: map[string]bool{}}
+	user := &domain.User{ID: userID, Role: "learner", Reflections: append(recent, past...)}
+	service := NewService(milestoneUserStore{user: user}, rewards, milestoneHolidayCalendar{})
+	for range 3 {
+		if _, err := service.Reconcile(context.Background(), userID, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	eggs := 0
+	for _, box := range rewards.boxes {
+		if box.RewardPool == "character-egg" {
+			eggs++
+		}
+	}
+	if eggs != 1 {
+		t.Fatalf("a past 32-workday streak granted %d Eggs, want 1", eggs)
 	}
 }

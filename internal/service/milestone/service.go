@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/character"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -57,9 +58,6 @@ func (s *Service) Reconcile(ctx context.Context, userID primitive.ObjectID, now 
 	if err != nil {
 		return nil, err
 	}
-	if user.Role != "learner" || user.Deleted {
-		return []domain.TeacherGiftBox{}, nil
-	}
 	reflectionDates := make([]string, 0, len(user.Reflections))
 	earliest := thailandDate(now).AddDate(-1, 0, 0)
 	for _, reflection := range user.Reflections {
@@ -106,8 +104,12 @@ func (s *Service) Reconcile(ctx context.Context, userID primitive.ObjectID, now 
 			granted = append(granted, box)
 		}
 	}
+	if user.Role != "learner" || user.Deleted {
+		return granted, nil
+	}
+	best := character.CalculateGrowthSnapshot(now, reflectionDates, protectedDates, holidays).BestStreak
 	for _, days := range characterEggMilestones {
-		if streak < days {
+		if best < days {
 			continue
 		}
 		box := domain.TeacherGiftBox{
