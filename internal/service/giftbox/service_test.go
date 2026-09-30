@@ -16,14 +16,25 @@ import (
 )
 
 type fakeStore struct {
-	mu            sync.Mutex
-	boxes         map[primitive.ObjectID]domain.TeacherGiftBox
-	cohorts       map[int][]primitive.ObjectID
-	teams         map[string][]primitive.ObjectID
-	grantKeys     map[string]bool
-	failUser      primitive.ObjectID
-	recipients    map[primitive.ObjectID]Recipient
-	notifications []domain.Notification
+	mu               sync.Mutex
+	boxes            map[primitive.ObjectID]domain.TeacherGiftBox
+	cohorts          map[int][]primitive.ObjectID
+	teams            map[string][]primitive.ObjectID
+	grantKeys        map[string]bool
+	failUser         primitive.ObjectID
+	recipients       map[primitive.ObjectID]Recipient
+	notifications    []domain.Notification
+	transferAttempts map[primitive.ObjectID]int
+}
+
+func (s *fakeStore) AllowTransferAttempt(_ context.Context, senderID primitive.ObjectID) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.transferAttempts == nil {
+		s.transferAttempts = map[primitive.ObjectID]int{}
+	}
+	s.transferAttempts[senderID]++
+	return s.transferAttempts[senderID] <= 5, nil
 }
 
 func (s *fakeStore) SearchRecipients(_ context.Context, query string, exclude primitive.ObjectID) ([]Recipient, error) {
@@ -521,5 +532,54 @@ func TestTransferAndOpenCannotBothSucceed(t *testing.T) {
 		if (box.Status == "opened") == (box.UserID == to) {
 			t.Fatalf("attempt %d: conflicting box state = %+v", attempt, box)
 		}
+	}
+}
+
+func TestConcurrentCharacterEggTransfersHaveOneWinner(t *testing.T) {
+	from := primitive.NewObjectID()
+	first := primitive.NewObjectID()
+	second := primitive.NewObjectID()
+	boxID := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes:      map[primitive.ObjectID]domain.TeacherGiftBox{boxID: {ID: boxID, UserID: from, Status: "unopened", RewardPool: CharacterEggPool}},
+		recipients: map[primitive.ObjectID]Recipient{first: {ID: first.Hex(), Role: "learner"}, second: {ID: second.Hex(), Role: "learner"}},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+	start := make(chan struct{})
+	errors := make(chan error, 2)
+	for _, recipient := range []primitive.ObjectID{first, second} {
+		go func(id primitive.ObjectID) {
+			<-start
+			_, err := service.Transfer(context.Background(), from.Hex(), boxID.Hex(), id.Hex())
+			errors <- err
+		}(recipient)
+	}
+	close(start)
+	firstErr, secondErr := <-errors, <-errors
+	if (firstErr == nil) == (secondErr == nil) {
+		t.Fatalf("transfer errors = %v, %v", firstErr, secondErr)
+	}
+	box := store.boxes[boxID]
+	if box.UserID == from || len(box.TransferHistory) != 1 {
+		t.Fatalf("terminal transfer state = %+v", box)
+	}
+}
+
+func TestTransferAttemptsAreRateLimitedWithoutChargingTheEgg(t *testing.T) {
+	from := primitive.NewObjectID()
+	to := primitive.NewObjectID()
+	boxID := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes:            map[primitive.ObjectID]domain.TeacherGiftBox{boxID: {ID: boxID, UserID: from, Status: "unopened", RewardPool: CharacterEggPool}},
+		recipients:       map[primitive.ObjectID]Recipient{to: {ID: to.Hex(), Role: "learner"}},
+		transferAttempts: map[primitive.ObjectID]int{from: 5},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+	if _, err := service.Transfer(context.Background(), from.Hex(), boxID.Hex(), to.Hex()); !errors.Is(err, ErrTransferRateLimited) {
+		t.Fatalf("rate limit error = %v", err)
+	}
+	box := store.boxes[boxID]
+	if box.UserID != from || box.Status != "unopened" || len(box.TransferHistory) != 0 {
+		t.Fatalf("rate limited Egg changed = %+v", box)
 	}
 }

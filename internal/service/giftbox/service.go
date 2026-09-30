@@ -18,6 +18,7 @@ var ErrSameRecipient = errors.New("cannot send a gift box to yourself")
 var ErrRecipientNotFound = errors.New("recipient not found")
 var ErrCharacterEggNotReady = errors.New("character egg hatching is not available yet")
 var ErrInvalidCharacterEggTier = errors.New("character eggs must use the Standard, Rare, or Legendary tier")
+var ErrTransferRateLimited = errors.New("please give your gift a little rest before sending again")
 
 const CharacterEggPool = "character-egg"
 
@@ -43,6 +44,10 @@ type Store interface {
 type CharacterEggGrantStore interface {
 	CreateCharacterEgg(ctx context.Context, box domain.TeacherGiftBox) error
 	CreateCharacterEggOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error)
+}
+
+type TransferAttemptLimiter interface {
+	AllowTransferAttempt(ctx context.Context, senderID primitive.ObjectID) (bool, error)
 }
 
 type CohortGrantFailure struct {
@@ -264,6 +269,15 @@ func (s *Service) Transfer(ctx context.Context, senderID, boxID, recipientID str
 	}
 	if from == to {
 		return nil, ErrSameRecipient
+	}
+	if limiter, ok := s.store.(TransferAttemptLimiter); ok {
+		allowed, err := limiter.AllowTransferAttempt(ctx, from)
+		if err != nil {
+			return nil, err
+		}
+		if !allowed {
+			return nil, ErrTransferRateLimited
+		}
 	}
 	eligible, err := s.store.IsLearner(ctx, to)
 	if err != nil {

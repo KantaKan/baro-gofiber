@@ -192,6 +192,12 @@ func TestCharacterReleaseAgainstMongoDB(t *testing.T) {
 		}
 	}
 	giftRepository := repository.NewGiftBoxRepository(database)
+	for attempt := 1; attempt <= 6; attempt++ {
+		allowed, limitErr := giftRepository.AllowTransferAttempt(ctx, ownerIDs[44])
+		if limitErr != nil || allowed != (attempt <= 5) {
+			t.Fatalf("persistent transfer limit attempt %d: allowed=%v err=%v", attempt, allowed, limitErr)
+		}
+	}
 	transferErrors := make(chan error, 2)
 	var transferGroup sync.WaitGroup
 	for _, recipientID := range ownerIDs[2:4] {

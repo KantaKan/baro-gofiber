@@ -16,11 +16,19 @@ import (
 )
 
 type giftBoxHTTPStore struct {
-	boxes          []domain.TeacherGiftBox
-	cohortLearners []primitive.ObjectID
-	teamLearners   []primitive.ObjectID
-	grantKeys      map[string]bool
-	recipientRoles map[primitive.ObjectID]string
+	boxes           []domain.TeacherGiftBox
+	cohortLearners  []primitive.ObjectID
+	teamLearners    []primitive.ObjectID
+	grantKeys       map[string]bool
+	recipientRoles  map[primitive.ObjectID]string
+	transferAllowed *bool
+}
+
+func (s *giftBoxHTTPStore) AllowTransferAttempt(context.Context, primitive.ObjectID) (bool, error) {
+	if s.transferAllowed == nil {
+		return true, nil
+	}
+	return *s.transferAllowed, nil
 }
 
 func (s *giftBoxHTTPStore) Create(_ context.Context, box domain.TeacherGiftBox) error {
@@ -284,5 +292,29 @@ func TestAudienceGrantRequiresAdminAndReachesOnlySelectedTeam(t *testing.T) {
 		if len(items) != want || (want == 1 && items[0].RewardPool != "character-box") {
 			t.Fatalf("recipient %s boxes = %+v", id.Hex(), items)
 		}
+	}
+}
+
+func TestTransferRateLimitReturnsWarmTooManyRequestsResponse(t *testing.T) {
+	t.Setenv("JWT_SECRET_KEY", "test-character-secret")
+	owner := primitive.NewObjectID()
+	recipient := primitive.NewObjectID()
+	eggID := primitive.NewObjectID()
+	allowed := false
+	store := &giftBoxHTTPStore{
+		boxes:           []domain.TeacherGiftBox{{ID: eggID, UserID: owner, Status: "unopened", RewardPool: giftbox.CharacterEggPool}},
+		recipientRoles:  map[primitive.ObjectID]string{owner: "learner", recipient: "learner"},
+		transferAllowed: &allowed,
+	}
+	h := NewGiftBoxHandler(giftbox.NewService(store, &giftBoxHTTPDrawer{}))
+	app := fiber.New()
+	app.Post("/gift-boxes/:id/transfer", middleware.AuthMiddleware, h.Transfer)
+	payload := `{"recipient_id":"` + recipient.Hex() + `"}`
+	status, _ := characterRequest(t, app, http.MethodPost, "/gift-boxes/"+eggID.Hex()+"/transfer", characterToken(t, owner, "learner"), payload)
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("rate limit response = %d", status)
+	}
+	if store.boxes[0].UserID != owner {
+		t.Fatalf("rate limited Egg moved to %s", store.boxes[0].UserID.Hex())
 	}
 }

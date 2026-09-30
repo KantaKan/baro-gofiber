@@ -18,13 +18,39 @@ import (
 )
 
 type GiftBoxRepository struct {
-	users         *mongo.Collection
-	notifications *mongo.Collection
-	client        *mongo.Client
+	users          *mongo.Collection
+	notifications  *mongo.Collection
+	transferLimits *mongo.Collection
+	client         *mongo.Client
 }
 
 func NewGiftBoxRepository(db *mongo.Database) *GiftBoxRepository {
-	return &GiftBoxRepository{users: db.Collection("users"), notifications: db.Collection("notifications"), client: db.Client()}
+	return &GiftBoxRepository{users: db.Collection("users"), notifications: db.Collection("notifications"), transferLimits: db.Collection("gift_box_transfer_limits"), client: db.Client()}
+}
+
+func (r *GiftBoxRepository) AllowTransferAttempt(ctx context.Context, senderID primitive.ObjectID) (bool, error) {
+	now := time.Now().UTC()
+	cutoff := now.Add(-10 * time.Minute)
+	update := mongo.Pipeline{bson.D{{Key: "$set", Value: bson.M{
+		"attempts": bson.M{"$concatArrays": bson.A{
+			bson.M{"$filter": bson.M{"input": bson.M{"$ifNull": bson.A{"$attempts", bson.A{}}}, "as": "attempt", "cond": bson.M{"$gte": bson.A{"$$attempt", cutoff}}}},
+			bson.A{now},
+		}},
+		"expires_at": now.Add(10 * time.Minute),
+	}}}}
+	var state struct {
+		Attempts []time.Time `bson:"attempts"`
+	}
+	err := r.transferLimits.FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": senderID},
+		update,
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+	).Decode(&state)
+	if err != nil {
+		return false, err
+	}
+	return len(state.Attempts) <= 5, nil
 }
 
 func (r *GiftBoxRepository) CreateCharacterEgg(ctx context.Context, box domain.TeacherGiftBox) error {

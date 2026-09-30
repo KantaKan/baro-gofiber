@@ -159,6 +159,9 @@ func (h *GiftBoxHandler) Transfer(c *fiber.Ctx) error {
 	}
 	box, err := h.service.Transfer(context.Background(), claims.UserID, c.Params("id"), strings.TrimSpace(body.RecipientID))
 	if err != nil {
+		if errors.Is(err, giftbox.ErrTransferRateLimited) {
+			return utils.SendError(c, fiber.StatusTooManyRequests, err.Error())
+		}
 		if errors.Is(err, giftbox.ErrBoxNotFound) || errors.Is(err, giftbox.ErrRecipientNotFound) {
 			return utils.SendError(c, fiber.StatusNotFound, err.Error())
 		}
