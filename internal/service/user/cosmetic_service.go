@@ -151,6 +151,14 @@ func validCosmeticSlot(slot string) bool {
 	return false
 }
 
+func CharacterPropValue(cosmeticID string) string {
+	item, ok := findCosmetic(cosmeticID)
+	if !ok || item.Slot != "character_prop" {
+		return ""
+	}
+	return item.PreviewValue
+}
+
 func isCharacterSlot(slot string) bool {
 	return slot == "card_background" || slot == "character_prop"
 }
@@ -230,6 +238,31 @@ var cosmeticCatalog = []domain.CosmeticCatalogItem{
 	{ID: "character_prop:headphones", Name: "Focus Headphones", Slot: "character_prop", Rarity: "Rare", PreviewValue: "headphones", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
 	{ID: "character_prop:pixel-glasses", Name: "Debug Glasses", Slot: "character_prop", Rarity: "Epic", PreviewValue: "pixel-glasses", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
 	{ID: "character_prop:tiny-crown", Name: "Tiny Crown", Slot: "character_prop", Rarity: "Legendary", PreviewValue: "tiny-crown", SourceHint: "Special achievements", RewardPools: []string{"character-box"}},
+	{ID: "card_background:this-is-fine", Name: "This Is Fine", Slot: "card_background", Rarity: "Epic", PreviewValue: "this-is-fine", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "card_background:coffee-shop", Name: "Coffee Shop", Slot: "card_background", Rarity: "Common", PreviewValue: "coffee-shop", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "card_background:terminal-green", Name: "Terminal Green", Slot: "card_background", Rarity: "Rare", PreviewValue: "terminal-green", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "card_background:bangkok-rain", Name: "Bangkok Rain", Slot: "card_background", Rarity: "Rare", PreviewValue: "bangkok-rain", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "card_background:galaxy", Name: "Galaxy Dream", Slot: "card_background", Rarity: "Legendary", PreviewValue: "galaxy", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:coffee-cup", Name: "Coffee Cup", Slot: "character_prop", Rarity: "Common", PreviewValue: "coffee-cup", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:sticky-note", Name: "Sticky Note", Slot: "character_prop", Rarity: "Common", PreviewValue: "sticky-note", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:bow", Name: "Big Bow", Slot: "character_prop", Rarity: "Common", PreviewValue: "bow", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:beanie", Name: "Cozy Beanie", Slot: "character_prop", Rarity: "Common", PreviewValue: "beanie", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:leaf-sprout", Name: "Leaf Sprout", Slot: "character_prop", Rarity: "Common", PreviewValue: "leaf-sprout", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:scarf", Name: "Warm Scarf", Slot: "character_prop", Rarity: "Common", PreviewValue: "scarf", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:iced-thai-tea", Name: "Iced Thai Tea", Slot: "character_prop", Rarity: "Rare", PreviewValue: "iced-thai-tea", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:boba", Name: "Boba Cup", Slot: "character_prop", Rarity: "Rare", PreviewValue: "boba", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:rubber-duck", Name: "Rubber Duck", Slot: "character_prop", Rarity: "Rare", PreviewValue: "rubber-duck", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:party-hat", Name: "Party Hat", Slot: "character_prop", Rarity: "Rare", PreviewValue: "party-hat", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:leaf-umbrella", Name: "Leaf Umbrella", Slot: "character_prop", Rarity: "Rare", PreviewValue: "leaf-umbrella", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:pencil-ear", Name: "Pencil Behind Ear", Slot: "character_prop", Rarity: "Rare", PreviewValue: "pencil-ear", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:laptop", Name: "Tiny Laptop", Slot: "character_prop", Rarity: "Epic", PreviewValue: "laptop", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:tiny-cat", Name: "Tiny Cat Pal", Slot: "character_prop", Rarity: "Epic", PreviewValue: "tiny-cat", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:wizard-hat", Name: "Wizard Hat", Slot: "character_prop", Rarity: "Epic", PreviewValue: "wizard-hat", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:bubble-tea-hat", Name: "Bubble Tea Hat", Slot: "character_prop", Rarity: "Epic", PreviewValue: "bubble-tea-hat", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:coffee-drip-hat", Name: "Coffee Drip Hat", Slot: "character_prop", Rarity: "Epic", PreviewValue: "coffee-drip-hat", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:star-wand", Name: "Star Wand", Slot: "character_prop", Rarity: "Legendary", PreviewValue: "star-wand", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:angel-wings", Name: "Angel Wings", Slot: "character_prop", Rarity: "Legendary", PreviewValue: "angel-wings", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
+	{ID: "character_prop:golden-keyboard", Name: "Golden Keyboard", Slot: "character_prop", Rarity: "Legendary", PreviewValue: "golden-keyboard", SourceHint: "Teacher Gift Boxes", RewardPools: []string{"character-box"}},
 }
 
 func (s *CosmeticService) Catalog() []domain.CosmeticCatalogItem {

@@ -11,6 +11,8 @@ func TestShowcasePropAllowsOnlyKnownCharacterProps(t *testing.T) {
 		{"character_prop:headphones", "headphones"},
 		{"character_prop:pixel-glasses", "pixel-glasses"},
 		{"character_prop:tiny-crown", "tiny-crown"},
+		{"character_prop:coffee-cup", "coffee-cup"},
+		{"character_prop:golden-keyboard", "golden-keyboard"},
 		{"palette:ocean", ""},
 		{"character_prop:unknown", ""},
 		{"", ""},

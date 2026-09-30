@@ -32,13 +32,14 @@ func (picker SecurePicker) Intn(limit int) (int, error) {
 	return int(value.Int64()), nil
 }
 
-var bodies = []string{"pebble", "bean", "drop", "tall", "pillow", "pear", "squish", "cloud", "boxy", "wobble", "mushroom", "dumpling"}
-var ears = []string{"round", "point", "horn", "antenna", "leaf", "cat", "none"}
-var eyes = []string{"dots", "oval", "sleepy", "spark", "wide"}
-var marks = []string{"star", "spots", "stripe", "heart", "moon", "none"}
-var palettes = []string{"Mint", "Peach", "Lilac", "Honey", "Lagoon", "Berry", "Moss", "Cloud"}
-var commonPatterns = []string{"freckles", "polka", "stripes", "waves", "marble", "checker", "sprouts", "hearts", "bubbles", "zigzag", "mosaic", "constellation", "paint", "petals"}
-var rarePatterns = []string{"egg", "potato", "ramen", "error404"}
+var bodies = []string{"pebble", "bean", "drop", "tall", "pillow", "pear", "squish", "cloud", "boxy", "wobble", "mushroom", "dumpling", "bun", "blob-cat", "teardrop", "onigiri", "bell", "star-cookie"}
+var ears = []string{"round", "point", "horn", "antenna", "leaf", "cat", "none", "bunny", "bear", "sprout", "fox", "droopy", "feather"}
+var eyes = []string{"dots", "oval", "sleepy", "spark", "wide", "happy-arc", "glasses-dots", "star", "heart", "wink", "sparkle-big"}
+var marks = []string{"star", "spots", "stripe", "heart", "moon", "none", "bolt", "flower", "coffee-bean", "blush", "bandaid", "tear"}
+var palettes = []string{"Mint", "Peach", "Lilac", "Honey", "Lagoon", "Berry", "Moss", "Cloud", "Coffee", "Matcha", "Sakura", "Midnight", "Mango", "Taro", "ThaiTea", "Sky"}
+var commonPatterns = []string{"freckles", "polka", "stripes", "waves", "marble", "checker", "sprouts", "hearts", "bubbles", "zigzag", "mosaic", "constellation", "paint", "petals", "coffee-beans", "clover", "raindrops", "leopard", "plaid", "confetti", "leaves", "cookie"}
+var rarePatterns = []string{"egg", "potato", "ramen", "error404", "coffee-stain", "this-is-fine", "merge-conflict", "semicolon", "mango-sticky-rice", "loading-spinner"}
+var legendaryPatterns = []string{"galaxy", "aurora", "golden-code", "rainbow-shimmer"}
 
 func RarityForRoll(roll int) (domain.CharacterRarity, error) {
 	if roll < 0 || roll >= 10000 {
@@ -117,8 +118,11 @@ func GenerateEggDNA(picker Picker, tier string) (domain.CharacterDNA, error) {
 
 func generateDNAForRarity(picker Picker, rarity domain.CharacterRarity) (domain.CharacterDNA, error) {
 	patternPool := commonPatterns
-	if rarity != domain.CharacterNormal {
+	if rarity == domain.CharacterMemeRare {
 		patternPool = rarePatterns
+	}
+	if rarity == domain.CharacterLegendary {
+		patternPool = legendaryPatterns
 	}
 	values := make([]string, 0, 6)
 	for _, pool := range [][]string{bodies, ears, eyes, marks, palettes, patternPool} {
