@@ -146,6 +146,30 @@ func (h *ShowcaseHandler) SetMood(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Lawn mood saved", state)
 }
 
+type showcaseEmoteRequest struct {
+	Emote  string `json:"emote"`
+	Target string `json:"target"`
+}
+
+func (h *ShowcaseHandler) SetEmote(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body showcaseEmoteRequest
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	state, err := h.service.SetEmote(c.UserContext(), claims.UserID, body.Emote, body.Target)
+	if errors.Is(err, showcase.ErrEntryNotFound) {
+		return utils.SendError(c, fiber.StatusNotFound, "Pin a character on the lawn before using an emote")
+	}
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Lawn emote saved", state)
+}
+
 func (h *ShowcaseHandler) Remove(c *fiber.Ctx) error {
 	claims, ok := c.Locals("user").(*middleware.Claims)
 	if !ok {

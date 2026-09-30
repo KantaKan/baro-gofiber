@@ -110,6 +110,19 @@ func (s *memoryStore) SetMood(_ context.Context, ownerID primitive.ObjectID, moo
 	return nil
 }
 
+func (s *memoryStore) SetEmote(_ context.Context, ownerID primitive.ObjectID, emote, target string, until time.Time) error {
+	entry, ok := s.entries[ownerID]
+	if !ok {
+		return ErrEntryNotFound
+	}
+	entry.Emote, entry.EmoteTarget, entry.EmoteUntil = emote, target, &until
+	if emote == "" {
+		entry.EmoteUntil = nil
+	}
+	s.entries[ownerID] = entry
+	return nil
+}
+
 func (s *memoryStore) Moderate(_ context.Context, ownerID, adminID primitive.ObjectID, hidden bool, reason string, at time.Time) error {
 	entry, ok := s.entries[ownerID]
 	if !ok {
@@ -311,5 +324,54 @@ func TestMoodLastsTwentyFourHoursAndLeavesCharacterStateAlone(t *testing.T) {
 	}
 	if store.entries[owner].Mood != "" || store.entries[owner].Character.ID != characterID {
 		t.Fatalf("cleared entry = %+v", store.entries[owner])
+	}
+}
+
+func TestEmoteLastsThirtyMinutesAndOnlyVisitsVisibleCohortFriends(t *testing.T) {
+	owner, friend, hidden, outsider := primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID(), primitive.NewObjectID()
+	characterID := primitive.NewObjectID()
+	store := &memoryStore{
+		viewers: map[primitive.ObjectID]Viewer{owner: {Cohort: 16, Role: "learner"}},
+		owned:   map[primitive.ObjectID]domain.BaroCharacter{characterID: {ID: characterID, OwnerID: owner}},
+		entries: map[primitive.ObjectID]Entry{
+			friend:   {OwnerID: friend.Hex(), Cohort: 16},
+			hidden:   {OwnerID: hidden.Hex(), Cohort: 16, Hidden: true},
+			outsider: {OwnerID: outsider.Hex(), Cohort: 17},
+		},
+		reactions: map[string]bool{},
+	}
+	clock := time.Date(2026, 9, 30, 3, 0, 0, 0, time.UTC)
+	service := NewService(store)
+	service.now = func() time.Time { return clock }
+	ctx := context.Background()
+	if _, err := service.SetEmote(ctx, owner.Hex(), "wave", ""); !errors.Is(err, ErrEntryNotFound) {
+		t.Fatalf("emote without a pin err = %v", err)
+	}
+	if err := service.Save(ctx, owner.Hex(), characterID.Hex(), "hi"); err != nil {
+		t.Fatal(err)
+	}
+	for _, emote := range []string{"wave", "dance", "jump", "heart", "nap"} {
+		state, err := service.SetEmote(ctx, owner.Hex(), emote, friend.Hex())
+		if err != nil || state.Emote != emote || state.Target != "" || !state.Until.Equal(clock.Add(30*time.Minute)) {
+			t.Fatalf("SetEmote(%q) = %+v, %v", emote, state, err)
+		}
+	}
+	if _, err := service.SetEmote(ctx, owner.Hex(), "punch", ""); !errors.Is(err, ErrInvalidEmote) {
+		t.Fatalf("invalid emote err = %v", err)
+	}
+	for _, target := range []string{"", "nope", owner.Hex(), hidden.Hex(), outsider.Hex(), primitive.NewObjectID().Hex()} {
+		if _, err := service.SetEmote(ctx, owner.Hex(), "visit", target); !errors.Is(err, ErrInvalidEmoteTarget) {
+			t.Fatalf("visit %q err = %v", target, err)
+		}
+	}
+	if state, err := service.SetEmote(ctx, owner.Hex(), "visit", friend.Hex()); err != nil || state.Target != friend.Hex() {
+		t.Fatalf("visit friend = %+v, %v", state, err)
+	}
+	if entry, _ := service.Mine(ctx, owner.Hex()); entry.Emote != "visit" || entry.EmoteTarget != friend.Hex() {
+		t.Fatalf("mine = %+v", entry)
+	}
+	clock = clock.Add(31 * time.Minute)
+	if entry, _ := service.Mine(ctx, owner.Hex()); entry.Emote != "" || entry.EmoteTarget != "" || entry.EmoteUntil != nil {
+		t.Fatalf("expired emote still visible: %+v", entry)
 	}
 }

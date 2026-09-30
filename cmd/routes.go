@@ -105,6 +105,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	lawn.Put("/me", h.Showcase.Save)
 	lawn.Delete("/me", h.Showcase.Remove)
 	lawn.Put("/me/mood", h.Showcase.SetMood)
+	lawn.Put("/me/emote", h.Showcase.SetEmote)
 	lawn.Post("/:ownerId/reactions", h.Showcase.React)
 
 	app.Get("/god-events", middleware.AuthMiddleware, h.GodEvent.List)

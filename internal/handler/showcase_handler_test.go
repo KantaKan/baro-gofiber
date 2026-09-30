@@ -100,6 +100,15 @@ func (s *showcaseHTTPStore) SetMood(_ context.Context, ownerID primitive.ObjectI
 	s.entries[ownerID] = entry
 	return nil
 }
+func (s *showcaseHTTPStore) SetEmote(_ context.Context, ownerID primitive.ObjectID, emote, target string, until time.Time) error {
+	entry, ok := s.entries[ownerID]
+	if !ok {
+		return showcase.ErrEntryNotFound
+	}
+	entry.Emote, entry.EmoteTarget, entry.EmoteUntil = emote, target, &until
+	s.entries[ownerID] = entry
+	return nil
+}
 func (s *showcaseHTTPStore) Moderate(_ context.Context, ownerID, adminID primitive.ObjectID, hidden bool, reason string, at time.Time) error {
 	entry, ok := s.entries[ownerID]
 	if !ok {
