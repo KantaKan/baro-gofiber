@@ -2,6 +2,8 @@ package milestone
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,17 +51,24 @@ func (s milestoneUserStore) FindByID(_ interface{}, _ primitive.ObjectID) (*doma
 }
 
 type milestoneRewardStore struct {
+	mu    sync.Mutex
 	keys  map[string]bool
 	boxes []domain.TeacherGiftBox
 }
 
 func (s *milestoneRewardStore) CreateOnce(_ context.Context, box domain.TeacherGiftBox) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.keys[box.GrantKey] {
 		return false, nil
 	}
 	s.keys[box.GrantKey] = true
 	s.boxes = append(s.boxes, box)
 	return true, nil
+}
+
+func (s *milestoneRewardStore) CreateCharacterEggOnce(ctx context.Context, box domain.TeacherGiftBox) (bool, error) {
+	return s.CreateOnce(ctx, box)
 }
 
 type milestoneHolidayCalendar struct{ dates map[string]bool }
@@ -81,7 +90,7 @@ func TestReconcileGrantsEachCrossedMilestoneOnce(t *testing.T) {
 		reflections = append(reflections, domain.Reflection{Day: date.Format("2006-01-02"), CreatedAt: date})
 	}
 	rewards := &milestoneRewardStore{keys: map[string]bool{}}
-	service := NewService(milestoneUserStore{user: &domain.User{ID: userID, Reflections: reflections}}, rewards, milestoneHolidayCalendar{})
+	service := NewService(milestoneUserStore{user: &domain.User{ID: userID, Role: "learner", Reflections: reflections}}, rewards, milestoneHolidayCalendar{})
 
 	first, err := service.Reconcile(context.Background(), userID, bangkokTime(t, "2026-10-09T12:00:00+07:00"))
 	if err != nil || len(first) != 2 {
@@ -90,5 +99,95 @@ func TestReconcileGrantsEachCrossedMilestoneOnce(t *testing.T) {
 	second, err := service.Reconcile(context.Background(), userID, bangkokTime(t, "2026-10-09T12:00:00+07:00"))
 	if err != nil || len(second) != 0 || len(rewards.boxes) != 2 {
 		t.Fatalf("second Reconcile duplicated rewards: result=%+v boxes=%+v err=%v", second, rewards.boxes, err)
+	}
+}
+
+func reflectionWorkdays(now time.Time, count int) []domain.Reflection {
+	result := make([]domain.Reflection, 0, count)
+	current := thailandDate(now)
+	for len(result) < count {
+		if !isWeekend(current) {
+			result = append(result, domain.Reflection{Day: current.Format("2006-01-02"), CreatedAt: current})
+		}
+		current = current.AddDate(0, 0, -1)
+	}
+	return result
+}
+
+func TestMajorReflectionMilestonesGrantStandardEggsAtBoundaries(t *testing.T) {
+	now := bangkokTime(t, "2026-09-30T12:00:00+07:00")
+	tests := []struct {
+		workdays int
+		wantEggs int
+	}{
+		{29, 0}, {30, 1}, {31, 1},
+		{59, 1}, {60, 2}, {61, 2},
+		{99, 2}, {100, 3}, {101, 3},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%d workdays", test.workdays), func(t *testing.T) {
+			userID := primitive.NewObjectID()
+			rewards := &milestoneRewardStore{keys: map[string]bool{}}
+			user := &domain.User{ID: userID, Role: "learner", Reflections: reflectionWorkdays(now, test.workdays)}
+			service := NewService(milestoneUserStore{user: user}, rewards, milestoneHolidayCalendar{})
+			if _, err := service.Reconcile(context.Background(), userID, now); err != nil {
+				t.Fatal(err)
+			}
+			eggs := 0
+			for _, box := range rewards.boxes {
+				if box.RewardPool == "character-egg" {
+					eggs++
+					if box.MinimumRarity != "Common" || box.Source != "reflection-milestone" {
+						t.Fatalf("milestone Egg = %+v", box)
+					}
+				}
+			}
+			if eggs != test.wantEggs {
+				t.Fatalf("Eggs = %d, want %d", eggs, test.wantEggs)
+			}
+		})
+	}
+}
+
+func TestMajorMilestoneEggReconciliationIsConcurrentSafe(t *testing.T) {
+	now := bangkokTime(t, "2026-09-30T12:00:00+07:00")
+	userID := primitive.NewObjectID()
+	rewards := &milestoneRewardStore{keys: map[string]bool{}}
+	user := &domain.User{ID: userID, Role: "learner", Reflections: reflectionWorkdays(now, 100)}
+	service := NewService(milestoneUserStore{user: user}, rewards, milestoneHolidayCalendar{})
+	var group sync.WaitGroup
+	for range 8 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if _, err := service.Reconcile(context.Background(), userID, now); err != nil {
+				t.Errorf("Reconcile() error = %v", err)
+			}
+		}()
+	}
+	group.Wait()
+	eggs := 0
+	for _, box := range rewards.boxes {
+		if box.RewardPool == "character-egg" {
+			eggs++
+		}
+	}
+	if eggs != 3 {
+		t.Fatalf("concurrent milestone Eggs = %d, want 3", eggs)
+	}
+}
+
+func TestMilestoneEggsSkipIneligibleAccounts(t *testing.T) {
+	now := bangkokTime(t, "2026-09-30T12:00:00+07:00")
+	for _, user := range []*domain.User{
+		{ID: primitive.NewObjectID(), Role: "admin", Reflections: reflectionWorkdays(now, 100)},
+		{ID: primitive.NewObjectID(), Role: "learner", Deleted: true, Reflections: reflectionWorkdays(now, 100)},
+	} {
+		rewards := &milestoneRewardStore{keys: map[string]bool{}}
+		service := NewService(milestoneUserStore{user: user}, rewards, milestoneHolidayCalendar{})
+		boxes, err := service.Reconcile(context.Background(), user.ID, now)
+		if err != nil || len(boxes) != 0 || len(rewards.boxes) != 0 {
+			t.Fatalf("ineligible account rewards = %+v persisted=%+v err=%v", boxes, rewards.boxes, err)
+		}
 	}
 }

@@ -192,6 +192,40 @@ func TestCharacterReleaseAgainstMongoDB(t *testing.T) {
 		}
 	}
 	giftRepository := repository.NewGiftBoxRepository(database)
+	milestoneOwner := ownerIDs[43]
+	milestoneCreates := make(chan bool, 8)
+	var milestoneGroup sync.WaitGroup
+	for range 8 {
+		milestoneGroup.Add(1)
+		go func() {
+			defer milestoneGroup.Done()
+			created, createErr := giftRepository.CreateCharacterEggOnce(ctx, domain.TeacherGiftBox{
+				ID: primitive.NewObjectID(), UserID: milestoneOwner, MinimumRarity: "Common",
+				Message: "Your 30-workday reflection milestone brought a mystery friend to meet.", Status: "unopened",
+				CreatedAt: time.Now().UTC(), GrantKey: "character-egg-milestone:30:" + milestoneOwner.Hex(),
+				Source: "reflection-milestone", RewardPool: giftbox.CharacterEggPool,
+			})
+			if createErr != nil {
+				t.Errorf("milestone Egg create: %v", createErr)
+			}
+			milestoneCreates <- created
+		}()
+	}
+	milestoneGroup.Wait()
+	close(milestoneCreates)
+	createdMilestoneEggs := 0
+	for created := range milestoneCreates {
+		if created {
+			createdMilestoneEggs++
+		}
+	}
+	grantKey := "character-egg-milestone:30:" + milestoneOwner.Hex()
+	if count, countErr := users.CountDocuments(ctx, bson.M{"_id": milestoneOwner, "gift_boxes.grant_key": grantKey}); countErr != nil || count != 1 || createdMilestoneEggs != 1 {
+		t.Fatalf("milestone Egg idempotency: created=%d persisted=%d err=%v", createdMilestoneEggs, count, countErr)
+	}
+	if count, countErr := database.Collection("notifications").CountDocuments(ctx, bson.M{"recipient_ids": milestoneOwner, "message": bson.M{"$not": primitive.Regex{Pattern: "(?i)(normal|rare|legendary|dna)"}}}); countErr != nil || count != 1 {
+		t.Fatalf("milestone Egg notification: count=%d err=%v", count, countErr)
+	}
 	for attempt := 1; attempt <= 6; attempt++ {
 		allowed, limitErr := giftRepository.AllowTransferAttempt(ctx, ownerIDs[44])
 		if limitErr != nil || allowed != (attempt <= 5) {
