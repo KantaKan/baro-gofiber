@@ -370,6 +370,14 @@ func TestEmoteLastsThirtyMinutesAndOnlyVisitsVisibleCohortFriends(t *testing.T) 
 	if entry, _ := service.Mine(ctx, owner.Hex()); entry.Emote != "visit" || entry.EmoteTarget != friend.Hex() {
 		t.Fatalf("mine = %+v", entry)
 	}
+	store.viewers[owner] = Viewer{Cohort: 0, Role: "admin"}
+	if state, err := service.SetEmote(ctx, owner.Hex(), "visit", outsider.Hex()); err != nil || state.Target != outsider.Hex() {
+		t.Fatalf("admin visiting another cohort = %+v, %v", state, err)
+	}
+	if _, err := service.SetEmote(ctx, owner.Hex(), "visit", hidden.Hex()); !errors.Is(err, ErrInvalidEmoteTarget) {
+		t.Fatalf("admin visiting a hidden friend err = %v", err)
+	}
+	store.viewers[owner] = Viewer{Cohort: 16, Role: "learner"}
 	clock = clock.Add(31 * time.Minute)
 	if entry, _ := service.Mine(ctx, owner.Hex()); entry.Emote != "" || entry.EmoteTarget != "" || entry.EmoteUntil != nil {
 		t.Fatalf("expired emote still visible: %+v", entry)
