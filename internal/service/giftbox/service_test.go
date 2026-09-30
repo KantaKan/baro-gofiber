@@ -35,6 +35,11 @@ func (s *fakeStore) SearchRecipients(_ context.Context, query string, exclude pr
 	return items, nil
 }
 
+func (s *fakeStore) IsLearner(_ context.Context, userID primitive.ObjectID) (bool, error) {
+	recipient, exists := s.recipients[userID]
+	return exists && recipient.Role == "learner", nil
+}
+
 func (s *fakeStore) Transfer(_ context.Context, boxID, fromID, toID primitive.ObjectID) (*domain.TeacherGiftBox, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -295,7 +300,7 @@ func TestGiftBoxTravelsAcrossAccountsAndPreservesOriginalGrant(t *testing.T) {
 	}
 	service := NewService(store, racingDrawer{store: store})
 	recipients, err := service.SearchRecipients(context.Background(), first.Hex(), "Teacher")
-	if err != nil || len(recipients) != 1 || recipients[0].ID != admin.Hex() {
+	if err != nil || len(recipients) != 0 {
 		t.Fatalf("admin recipient search = %+v, err=%v", recipients, err)
 	}
 	moved, err := service.Transfer(context.Background(), first.Hex(), boxID.Hex(), second.Hex())
@@ -305,14 +310,13 @@ func TestGiftBoxTravelsAcrossAccountsAndPreservesOriginalGrant(t *testing.T) {
 	if _, err := service.Open(context.Background(), first.Hex(), boxID.Hex()); !errors.Is(err, ErrBoxNotFound) {
 		t.Fatalf("former owner opened box: %v", err)
 	}
-	moved, err = service.Transfer(context.Background(), second.Hex(), boxID.Hex(), admin.Hex())
-	if err != nil || moved.UserID != admin || moved.GrantedBy != admin || moved.Message != "Keep exploring" || len(moved.TransferHistory) != 2 {
-		t.Fatalf("second transfer = %+v, err=%v", moved, err)
+	if _, err := service.Transfer(context.Background(), second.Hex(), boxID.Hex(), admin.Hex()); !errors.Is(err, ErrRecipientNotFound) {
+		t.Fatalf("transfer to admin error = %v", err)
 	}
-	if _, err := service.Open(context.Background(), admin.Hex(), boxID.Hex()); err != nil {
-		t.Fatalf("admin recipient could not open box: %v", err)
+	if _, err := service.Open(context.Background(), second.Hex(), boxID.Hex()); err != nil {
+		t.Fatalf("learner recipient could not open box: %v", err)
 	}
-	if _, err := service.Transfer(context.Background(), admin.Hex(), boxID.Hex(), first.Hex()); !errors.Is(err, ErrBoxNotFound) {
+	if _, err := service.Transfer(context.Background(), second.Hex(), boxID.Hex(), first.Hex()); !errors.Is(err, ErrBoxNotFound) {
 		t.Fatalf("opened box transferred: %v", err)
 	}
 }
@@ -343,7 +347,7 @@ func TestTransferAndOpenCannotBothSucceed(t *testing.T) {
 		from := primitive.NewObjectID()
 		to := primitive.NewObjectID()
 		boxID := primitive.NewObjectID()
-		store := &fakeStore{boxes: map[primitive.ObjectID]domain.TeacherGiftBox{boxID: {ID: boxID, UserID: from, Status: "unopened"}}, recipients: map[primitive.ObjectID]Recipient{to: {ID: to.Hex()}}}
+		store := &fakeStore{boxes: map[primitive.ObjectID]domain.TeacherGiftBox{boxID: {ID: boxID, UserID: from, Status: "unopened"}}, recipients: map[primitive.ObjectID]Recipient{to: {ID: to.Hex(), Role: "learner"}}}
 		service := NewService(store, racingDrawer{store: store})
 		start := make(chan struct{})
 		results := make(chan error, 2)
