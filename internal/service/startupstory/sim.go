@@ -58,7 +58,9 @@ func PickFounder(run *domain.StartupRun, index int) error {
 	run.Founder = run.FounderOffer[index].Title
 	run.FounderOffer = nil
 	run.Act = 1
+	onNewAct(run)
 	run.Candidates = rollCandidates(run, CandidateOffers)
+	refreshPitches(run)
 	run.Stage = domain.StartupStageHub
 	return nil
 }
@@ -189,6 +191,7 @@ func StartProject(run *domain.StartupRun, typeName, theme string, staffIDs []str
 	boss := ""
 	if isBossIndex(run.ProjectIndex) {
 		boss = bossForRun(run.ProjectIndex, run.BossOrder)
+		onBossStart(run)
 	}
 	secs := projectDurationSecs(run, team, boss)
 	run.Project = &domain.StartupProject{
@@ -218,6 +221,7 @@ func projectDurationSecs(run *domain.StartupRun, team []domain.StartupDev, boss 
 	}
 	mult *= effectsOf(run.Items).durMult
 	mult *= jobsFor(team).durMult
+	mult *= perkDurationMult(run, team)
 	secs := int(math.Round(float64(base) * mult))
 	if secs < MinDurationSecs {
 		secs = MinDurationSecs
@@ -236,6 +240,10 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	if boss == BossRequirements {
 		swapTheme(run)
 	}
+	team, err := teamFor(run, run.Project.StaffIDs)
+	if err != nil {
+		return err
+	}
 	result, err := evaluate(run)
 	if err != nil {
 		return err
@@ -245,6 +253,7 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	run.LastResult = result
 	run.Project = nil
 	run.ProjectIndex++
+	afterShipLevels(run, team, result)
 	if boss != "" {
 		if result.Total < bossThreshold(run.Act) {
 			endRun(run, domain.StartupOutcomePivot, now)
@@ -260,23 +269,40 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 		endRun(run, domain.StartupOutcomePivot, now)
 		return nil
 	}
-	if run.ProjectIndex >= ProjectsPerRun {
-		outcome := domain.StartupOutcomePivot
-		if boss == BossIPO {
-			outcome = domain.StartupOutcomeIPO
-		}
-		endRun(run, outcome, now)
+	if afterShipBurnout(run, team, now) {
 		return nil
 	}
+	if endlessCheckpoint(run, boss, now) {
+		return nil
+	}
+	prevAct := run.Act
 	run.Act = actFor(run.ProjectIndex)
+	if run.Act != prevAct {
+		onNewAct(run)
+	}
 	run.Candidates = rollCandidates(run, CandidateOffers)
+	refreshPitches(run)
 	if boss != "" {
 		run.Stage = domain.StartupStageHub
-		return nil
+	} else {
+		run.ItemOffer = rollItemOffer(run, CandidateOffers)
+		run.Stage = domain.StartupStageItem
 	}
-	run.ItemOffer = rollItemOffer(run, CandidateOffers)
-	run.Stage = domain.StartupStageItem
+	queuePerk(run)
+	queueEvent(run)
 	return nil
+}
+
+func interrupt(run *domain.StartupRun, stage string) {
+	if run.ResumeStage == "" {
+		run.ResumeStage = run.Stage
+	}
+	run.Stage = stage
+}
+
+func resume(run *domain.StartupRun) {
+	run.Stage = run.ResumeStage
+	run.ResumeStage = ""
 }
 
 func swapTheme(run *domain.StartupRun) {
@@ -396,6 +422,7 @@ func endRun(run *domain.StartupRun, outcome string, now time.Time) {
 	if outcome == domain.StartupOutcomeIPO {
 		score += BossWinBonus
 	}
+	score += endlessScoreBonus(run)
 	run.Score = score
 	run.EndedAt = &now
 }
@@ -465,6 +492,11 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	if p.Boss == BossOutage {
 		weights = outageWeights
 	}
+	sc := &scoring{run: run, team: team, combo: combo, weights: weights, powerMult: 1, reviewer: map[string]float64{}, reviewers: reviewers, moneyMult: 1, fansMult: 1}
+	applyGimmicks(sc)
+	applyPerks(sc)
+	applyOSS(sc)
+	weights = sc.weights
 	jobs := jobsFor(team)
 	var sums [4]int
 	var power float64
@@ -503,13 +535,14 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	power *= comboMultipliers[combo]
 	power *= marketMult(run.Market, p.Theme)
 	power *= fx.powerMult
-	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd-int(math.Round(jobs.bugCut)))
+	power *= sc.powerMult
+	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd+sc.bugs-int(math.Round(jobs.bugCut)))
 
 	r := rngFor(run)
 	quality := (power - BugPenalty*float64(bugs)) / actScale(run.Act) * (0.9 + 0.2*r.Float64())
 
 	result := &domain.StartupResult{Type: p.Type, Theme: p.Theme, Combo: combo, Bugs: bugs}
-	for _, rv := range reviewers {
+	for _, rv := range sc.reviewers {
 		bias := 0.0
 		if rv.Favor >= 0 {
 			bias = (float64(sums[rv.Favor])/float64(len(team)) - 3) * 0.4
@@ -530,6 +563,7 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 			bias += float64(fx.devCommunity)
 		}
 		bias += jobs.reviewer[rv.Name]
+		bias += sc.reviewer[rv.Name]
 		score := int(math.Round(quality*ReviewScale + bias + (2*r.Float64() - 1)))
 		score = min(10, max(1, score))
 		tier := 2
@@ -545,7 +579,20 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 			result.Total += score
 		}
 	}
-	result.MoneyDelta = result.Total*result.Total*MoneyPerPoint - salaries
-	result.FansDelta = result.Total * result.Total * FansPerPoint
+	result.MoneyDelta = int(math.Round(float64(result.Total*result.Total*MoneyPerPoint)*sc.moneyMult)) - salaries
+	result.FansDelta = int(math.Round(float64(result.Total*result.Total*FansPerPoint) * sc.fansMult))
 	return result, nil
+}
+
+type scoring struct {
+	run       *domain.StartupRun
+	team      []domain.StartupDev
+	combo     string
+	weights   [4]float64
+	powerMult float64
+	bugs      int
+	reviewer  map[string]float64
+	reviewers []reviewer
+	moneyMult float64
+	fansMult  float64
 }
