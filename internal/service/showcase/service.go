@@ -135,7 +135,7 @@ func (s *Service) SetEmote(ctx context.Context, ownerHex, emote, targetHex strin
 			return nil, err
 		}
 		target, err := s.store.ReactionTarget(ctx, targetID)
-		if errors.Is(err, ErrEntryNotFound) || (err == nil && (target == nil || viewer == nil || target.Hidden || target.Cohort != viewer.Cohort)) {
+		if errors.Is(err, ErrEntryNotFound) || (err == nil && (target == nil || viewer == nil || target.Hidden || (viewer.Role != "admin" && target.Cohort != viewer.Cohort))) {
 			return nil, ErrInvalidEmoteTarget
 		}
 		if err != nil {
