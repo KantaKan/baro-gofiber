@@ -234,6 +234,77 @@ func TestCharacterReleaseAgainstMongoDB(t *testing.T) {
 	if persistedBox == nil || persistedBox.UserID != currentOwner.ID || len(persistedBox.TransferHistory) != 1 {
 		t.Fatalf("gift transfer history or owner is invalid: owner=%s box=%+v", currentOwner.ID.Hex(), persistedBox)
 	}
+
+	eggOwner := ownerIDs[5]
+	eggID := primitive.NewObjectID()
+	egg := domain.TeacherGiftBox{
+		ID: eggID, UserID: eggOwner, MinimumRarity: "Common", Message: "meet your new friend",
+		GrantedBy: ownerIDs[4], Status: "unopened", CreatedAt: time.Now().UTC(), RewardPool: giftbox.CharacterEggPool,
+	}
+	starterID := seenByOwner[eggOwner]
+	if _, err := users.UpdateOne(ctx, bson.M{"_id": eggOwner}, bson.M{
+		"$set":  bson.M{"equipped_character_id": starterID, "pinned_character_id": starterID},
+		"$push": bson.M{"gift_boxes": egg},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	eggService := character.NewEggService(characterRepository, character.SecurePicker{})
+	eggGiftService := giftbox.NewService(giftRepository, nil, eggService)
+	type hatchResult struct {
+		characterID primitive.ObjectID
+		err         error
+	}
+	hatches := make(chan hatchResult, 8)
+	var hatchGroup sync.WaitGroup
+	for range 8 {
+		hatchGroup.Add(1)
+		go func() {
+			defer hatchGroup.Done()
+			result, hatchErr := eggGiftService.Open(ctx, eggOwner.Hex(), eggID.Hex())
+			if hatchErr != nil || result == nil || result.Character == nil {
+				hatches <- hatchResult{err: hatchErr}
+				return
+			}
+			hatches <- hatchResult{characterID: result.Character.ID}
+		}()
+	}
+	hatchGroup.Wait()
+	close(hatches)
+	var revealedID primitive.ObjectID
+	for result := range hatches {
+		if result.err != nil || result.characterID.IsZero() {
+			t.Fatalf("concurrent Egg open failed: %+v", result)
+		}
+		if revealedID.IsZero() {
+			revealedID = result.characterID
+		} else if revealedID != result.characterID {
+			t.Fatalf("Egg rerolled under concurrency: first=%s next=%s", revealedID.Hex(), result.characterID.Hex())
+		}
+	}
+	retry, err := eggGiftService.Open(ctx, eggOwner.Hex(), eggID.Hex())
+	if err != nil || retry.Character == nil || retry.Character.ID != revealedID {
+		t.Fatalf("Egg retry result = %+v, err=%v", retry, err)
+	}
+	origin := "character-egg:" + eggID.Hex()
+	if count, err := database.Collection("baro_characters").CountDocuments(ctx, bson.M{"origin_key": origin}); err != nil || count != 1 {
+		t.Fatalf("Egg origin count = %d, err=%v", count, err)
+	}
+	collection, err := characterService.Collection(ctx, eggOwner.Hex())
+	if err != nil || len(collection) != 2 {
+		t.Fatalf("Egg character collection = %+v, err=%v", collection, err)
+	}
+	ownership := character.NewOwnershipService(characterRepository, character.SecurePicker{})
+	selection, err := ownership.Selection(ctx, eggOwner.Hex())
+	if err != nil || selection.EquippedID != starterID.Hex() || selection.PinnedID != starterID.Hex() {
+		t.Fatalf("Egg changed selection without consent: %+v, err=%v", selection, err)
+	}
+	selection, err = ownership.Equip(ctx, eggOwner.Hex(), revealedID.Hex())
+	if err != nil || selection.EquippedID != revealedID.Hex() || selection.PinnedID != starterID.Hex() {
+		t.Fatalf("explicit Egg equip = %+v, err=%v", selection, err)
+	}
+	if _, err := giftRepository.Transfer(ctx, eggID, eggOwner, ownerIDs[6]); !errors.Is(err, giftbox.ErrBoxNotFound) {
+		t.Fatalf("opened Egg transferred: %v", err)
+	}
 }
 
 func careEnergySnapshot(t *testing.T, ctx context.Context, users *mongo.Collection) migration.CareEnergySnapshot {

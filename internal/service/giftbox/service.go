@@ -62,13 +62,28 @@ type Drawer interface {
 	Odds(ctx context.Context, request reward.DrawRequest) (reward.Eligibility, error)
 }
 
-type Service struct {
-	store  Store
-	drawer Drawer
+type EggHatcher interface {
+	Hatch(ctx context.Context, ownerID, eggID string) (*domain.BaroCharacter, error)
 }
 
-func NewService(store Store, drawer Drawer) *Service {
-	return &Service{store: store, drawer: drawer}
+type OpenResult struct {
+	Kind string `json:"kind"`
+	*reward.DrawResult
+	Character *domain.BaroCharacter `json:"character,omitempty"`
+}
+
+type Service struct {
+	store   Store
+	drawer  Drawer
+	hatcher EggHatcher
+}
+
+func NewService(store Store, drawer Drawer, hatchers ...EggHatcher) *Service {
+	service := &Service{store: store, drawer: drawer}
+	if len(hatchers) > 0 {
+		service.hatcher = hatchers[0]
+	}
+	return service
 }
 
 func (s *Service) Grant(ctx context.Context, userID, adminID, minimumRarity, message string) (*domain.TeacherGiftBox, error) {
@@ -227,13 +242,20 @@ func (s *Service) Transfer(ctx context.Context, senderID, boxID, recipientID str
 	return s.store.Transfer(ctx, box, from, to)
 }
 
-func (s *Service) Open(ctx context.Context, userID, boxID string) (*reward.DrawResult, error) {
+func (s *Service) Open(ctx context.Context, userID, boxID string) (*OpenResult, error) {
 	box, err := s.boxForUser(ctx, userID, boxID)
 	if err != nil {
 		return nil, err
 	}
 	if box.RewardPool == CharacterEggPool {
-		return nil, ErrCharacterEggNotReady
+		if s.hatcher == nil {
+			return nil, ErrCharacterEggNotReady
+		}
+		character, err := s.hatcher.Hatch(ctx, userID, boxID)
+		if err != nil {
+			return nil, err
+		}
+		return &OpenResult{Kind: "character", Character: character}, nil
 	}
 	result, err := s.drawer.Open(ctx, reward.DrawRequest{
 		IdempotencyKey: box.ID.Hex(), UserID: userID,
@@ -245,7 +267,7 @@ func (s *Service) Open(ctx context.Context, userID, boxID string) (*reward.DrawR
 	if result == nil || result.UserID != userID {
 		return nil, ErrBoxNotFound
 	}
-	return result, nil
+	return &OpenResult{Kind: "cosmetic", DrawResult: result}, nil
 }
 
 func (s *Service) Odds(ctx context.Context, userID, boxID string) (reward.Eligibility, error) {

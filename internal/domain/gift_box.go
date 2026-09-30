@@ -14,6 +14,7 @@ type TeacherGiftBox struct {
 	GrantedBy       primitive.ObjectID   `bson:"granted_by" json:"granted_by"`
 	Status          string               `bson:"status" json:"status"`
 	Reward          *CosmeticCatalogItem `bson:"reward,omitempty" json:"reward,omitempty"`
+	Character       *BaroCharacter       `bson:"character,omitempty" json:"character,omitempty"`
 	CreatedAt       time.Time            `bson:"created_at" json:"created_at"`
 	OpenedAt        *time.Time           `bson:"opened_at,omitempty" json:"opened_at,omitempty"`
 	GrantKey        string               `bson:"grant_key,omitempty" json:"-"`

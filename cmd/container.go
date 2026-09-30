@@ -60,6 +60,7 @@ type Container struct {
 	CharacterService            *character.Service
 	CharacterGrowthService      *character.GrowthService
 	CharacterOwnershipService   *character.OwnershipService
+	CharacterEggService         *character.EggService
 	ShowcaseService             *showcase.Service
 	GodEventService             *godevent.Service
 	MilestoneService            *milestone.Service
@@ -137,10 +138,11 @@ func (c *Container) initServices() {
 	c.CosmeticService = userService.NewCosmeticService(c.UserRepo, c.NotificationService)
 	rewardCatalog := append(c.CosmeticService.Catalog(), c.CosmeticService.CharacterCatalog()...)
 	c.RewardService = reward.NewService(c.GiftBoxRepo, reward.NewSelector(reward.SystemRandom{}), rewardCatalog)
-	c.GiftBoxService = giftbox.NewService(c.GiftBoxRepo, c.RewardService)
 	c.CharacterService = character.NewService(c.CharacterRepo, character.SecurePicker{})
 	c.CharacterGrowthService = character.NewGrowthService(c.UserRepo, c.HolidayService)
 	c.CharacterOwnershipService = character.NewOwnershipService(c.CharacterRepo, character.SecurePicker{})
+	c.CharacterEggService = character.NewEggService(c.CharacterRepo, character.SecurePicker{})
+	c.GiftBoxService = giftbox.NewService(c.GiftBoxRepo, c.RewardService, c.CharacterEggService)
 	c.ShowcaseService = showcase.NewService(c.ShowcaseRepo)
 	c.GodEventService = godevent.NewService(c.GodEventRepo)
 	c.MilestoneService = milestone.NewService(c.UserRepo, c.GiftBoxRepo, c.HolidayService)

@@ -167,6 +167,16 @@ type fakeDrawer struct {
 	requests []reward.DrawRequest
 }
 
+type fakeEggHatcher struct {
+	character *domain.BaroCharacter
+	calls     int
+}
+
+func (h *fakeEggHatcher) Hatch(_ context.Context, ownerID, eggID string) (*domain.BaroCharacter, error) {
+	h.calls++
+	return h.character, nil
+}
+
 func (d *fakeDrawer) Open(_ context.Context, request reward.DrawRequest) (*reward.DrawResult, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -244,6 +254,31 @@ func TestCharacterEggHasFixedOddsAndCannotOpenBeforeHatchingShips(t *testing.T) 
 	}
 }
 
+func TestCharacterEggOpensAsAWholeCharacterReveal(t *testing.T) {
+	learner := primitive.NewObjectID()
+	admin := primitive.NewObjectID()
+	eggID := primitive.NewObjectID()
+	characterID := primitive.NewObjectID()
+	store := &fakeStore{boxes: map[primitive.ObjectID]domain.TeacherGiftBox{
+		eggID: {ID: eggID, UserID: learner, GrantedBy: admin, Status: "unopened", RewardPool: CharacterEggPool, MinimumRarity: "Common"},
+	}}
+	hatcher := &fakeEggHatcher{character: &domain.BaroCharacter{
+		ID: characterID, OwnerID: learner, Serial: "B-" + characterID.Hex(), Source: "character_egg", OriginKey: "character-egg:" + eggID.Hex(),
+	}}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}}, hatcher)
+
+	result, err := service.Open(context.Background(), learner.Hex(), eggID.Hex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Kind != "character" || result.Character == nil || result.Character.ID != characterID || result.DrawResult != nil {
+		t.Fatalf("character egg reveal = %+v", result)
+	}
+	if hatcher.calls != 1 {
+		t.Fatalf("hatcher calls = %d", hatcher.calls)
+	}
+}
+
 func TestCharacterEggCanOnlyBeGrantedToLearners(t *testing.T) {
 	admin := primitive.NewObjectID()
 	store := &fakeStore{
@@ -313,7 +348,7 @@ func TestOpeningTheSameBoxConcurrentlyReturnsOneReward(t *testing.T) {
 	service := NewService(store, drawer)
 
 	const attempts = 12
-	results := make(chan *reward.DrawResult, attempts)
+	results := make(chan *OpenResult, attempts)
 	var group sync.WaitGroup
 	for range attempts {
 		group.Add(1)

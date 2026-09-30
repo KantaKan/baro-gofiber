@@ -72,6 +72,14 @@ type giftBoxHTTPDrawer struct {
 	request reward.DrawRequest
 }
 
+type giftBoxHTTPHatcher struct {
+	character *domain.BaroCharacter
+}
+
+func (h *giftBoxHTTPHatcher) Hatch(context.Context, string, string) (*domain.BaroCharacter, error) {
+	return h.character, nil
+}
+
 func (d *giftBoxHTTPDrawer) Odds(_ context.Context, request reward.DrawRequest) (reward.Eligibility, error) {
 	d.request = request
 	return reward.Eligibility{EligibleCount: 1, Odds: map[string]float64{"Rare": 1}}, nil
@@ -180,6 +188,39 @@ func TestCharacterEggHTTPContractKeepsGrantOddsAndOpenDistinct(t *testing.T) {
 	}
 	if drawer.request.Pool != "" {
 		t.Fatalf("egg open reached cosmetic drawer: %+v", drawer.request)
+	}
+}
+
+func TestCharacterEggOpenReturnsDiscriminatedWholeCharacter(t *testing.T) {
+	t.Setenv("JWT_SECRET_KEY", "test-character-secret")
+	learner := primitive.NewObjectID()
+	other := primitive.NewObjectID()
+	eggID := primitive.NewObjectID()
+	characterID := primitive.NewObjectID()
+	store := &giftBoxHTTPStore{boxes: []domain.TeacherGiftBox{{
+		ID: eggID, UserID: learner, Status: "unopened", RewardPool: giftbox.CharacterEggPool, MinimumRarity: "Common",
+	}}}
+	hatcher := &giftBoxHTTPHatcher{character: &domain.BaroCharacter{
+		ID: characterID, OwnerID: learner, Serial: "B-" + characterID.Hex(), Source: "character_egg", OriginKey: "character-egg:" + eggID.Hex(),
+	}}
+	h := NewGiftBoxHandler(giftbox.NewService(store, &giftBoxHTTPDrawer{}, hatcher))
+	app := fiber.New()
+	app.Post("/gift-boxes/:id/open", middleware.AuthMiddleware, h.Open)
+	path := "/gift-boxes/" + eggID.Hex() + "/open"
+	if status, _ := characterRequest(t, app, http.MethodPost, path, characterToken(t, other, "learner")); status != http.StatusBadRequest {
+		t.Fatalf("non-owner egg open status = %d", status)
+	}
+	status, body := characterRequest(t, app, http.MethodPost, path, characterToken(t, learner, "learner"))
+	if status != http.StatusOK {
+		t.Fatalf("owner egg open status = %d", status)
+	}
+	var reveal struct {
+		Kind      string                `json:"kind"`
+		Character *domain.BaroCharacter `json:"character"`
+		Item      json.RawMessage       `json:"item"`
+	}
+	if err := json.Unmarshal(body["data"], &reveal); err != nil || reveal.Kind != "character" || reveal.Character == nil || reveal.Character.ID != characterID || len(reveal.Item) != 0 {
+		t.Fatalf("egg reveal = %+v, err=%v", reveal, err)
 	}
 }
 
