@@ -62,7 +62,7 @@ func (h *GiftBoxHandler) Grant(c *fiber.Ctx) error {
 	body.MinimumRarity = strings.TrimSpace(body.MinimumRarity)
 	body.Message = strings.TrimSpace(body.Message)
 	body.RewardPool = strings.TrimSpace(body.RewardPool)
-	if !validMinimumRarity(body.MinimumRarity) || body.Message == "" || len(body.Message) > 500 || (body.RewardPool != "" && body.RewardPool != "character-box") {
+	if !validMinimumRarity(body.MinimumRarity) || body.Message == "" || len(body.Message) > 500 || (body.RewardPool != "" && body.RewardPool != "character-box" && body.RewardPool != giftbox.CharacterEggPool) {
 		return utils.SendError(c, fiber.StatusBadRequest, "A valid rarity and message of 500 characters or fewer are required")
 	}
 	box, err := h.service.GrantWithPool(context.Background(), c.Params("id"), claims.UserID, body.MinimumRarity, body.Message, body.RewardPool)

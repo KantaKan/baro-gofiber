@@ -91,6 +91,7 @@ func TestCharacterGiftBoxRequiresAdminGrantAndOwnerOdds(t *testing.T) {
 	h := NewGiftBoxHandler(giftbox.NewService(store, drawer))
 	app := fiber.New()
 	self := app.Group("/gift-boxes", middleware.AuthMiddleware)
+	self.Get("", h.List)
 	self.Get("/:id/odds", h.Odds)
 	self.Post("/:id/open", h.Open)
 	self.Post("/:id/transfer", h.Transfer)
@@ -127,6 +128,58 @@ func TestCharacterGiftBoxRequiresAdminGrantAndOwnerOdds(t *testing.T) {
 	}
 	if store.boxes[0].UserID != learner || store.boxes[0].GrantedBy != admin {
 		t.Fatalf("transferred box = %+v", store.boxes[0])
+	}
+}
+
+func TestCharacterEggHTTPContractKeepsGrantOddsAndOpenDistinct(t *testing.T) {
+	t.Setenv("JWT_SECRET_KEY", "test-character-secret")
+	learner := primitive.NewObjectID()
+	admin := primitive.NewObjectID()
+	store := &giftBoxHTTPStore{recipientRoles: map[primitive.ObjectID]string{learner: "learner", admin: "admin"}}
+	drawer := &giftBoxHTTPDrawer{}
+	h := NewGiftBoxHandler(giftbox.NewService(store, drawer))
+	app := fiber.New()
+	self := app.Group("/gift-boxes", middleware.AuthMiddleware)
+	self.Get("", h.List)
+	self.Get("/:id/odds", h.Odds)
+	self.Post("/:id/open", h.Open)
+	adminGroup := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole)
+	adminGroup.Post("/users/:id/gift-boxes", h.Grant)
+
+	path := "/admin/users/" + learner.Hex() + "/gift-boxes"
+	payload := `{"minimum_rarity":"Common","message":"A new friend is waiting","reward_pool":"character-egg"}`
+	if status, _ := characterRequest(t, app, http.MethodPost, path, characterToken(t, learner, "learner"), payload); status != http.StatusForbidden {
+		t.Fatalf("learner grant status = %d", status)
+	}
+	if status, _ := characterRequest(t, app, http.MethodPost, path, characterToken(t, admin, "admin"), payload); status != http.StatusCreated {
+		t.Fatalf("admin grant status = %d", status)
+	}
+	if len(store.boxes) != 1 || store.boxes[0].RewardPool != giftbox.CharacterEggPool {
+		t.Fatalf("saved character eggs = %+v", store.boxes)
+	}
+	status, body := characterRequest(t, app, http.MethodGet, "/gift-boxes", characterToken(t, learner, "learner"))
+	if status != http.StatusOK {
+		t.Fatalf("egg list status = %d", status)
+	}
+	var boxes []domain.TeacherGiftBox
+	if err := json.Unmarshal(body["data"], &boxes); err != nil || len(boxes) != 1 || boxes[0].RewardPool != giftbox.CharacterEggPool {
+		t.Fatalf("listed character eggs = %+v, err=%v", boxes, err)
+	}
+
+	eggID := store.boxes[0].ID.Hex()
+	status, body = characterRequest(t, app, http.MethodGet, "/gift-boxes/"+eggID+"/odds", characterToken(t, learner, "learner"))
+	if status != http.StatusOK {
+		t.Fatalf("egg odds status = %d", status)
+	}
+	var odds reward.Eligibility
+	if err := json.Unmarshal(body["data"], &odds); err != nil || odds.Odds["Normal"] != 0.83 || odds.Odds["Meme Rare"] != 0.15 || odds.Odds["Legendary"] != 0.02 {
+		t.Fatalf("egg odds = %+v, err=%v", odds, err)
+	}
+	if status, _ := characterRequest(t, app, http.MethodPost, "/gift-boxes/"+eggID+"/open", characterToken(t, learner, "learner")); status != http.StatusBadRequest {
+		t.Fatalf("egg open status = %d", status)
+	}
+	if drawer.request.Pool != "" {
+		t.Fatalf("egg open reached cosmetic drawer: %+v", drawer.request)
 	}
 }
 

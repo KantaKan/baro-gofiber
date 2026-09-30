@@ -15,6 +15,10 @@ import (
 var ErrBoxNotFound = errors.New("gift box not found")
 var ErrSameRecipient = errors.New("cannot send a gift box to yourself")
 var ErrRecipientNotFound = errors.New("recipient not found")
+var ErrCharacterEggNotReady = errors.New("character egg hatching is not available yet")
+var ErrInvalidCharacterEggTier = errors.New("character eggs must use the Standard tier")
+
+const CharacterEggPool = "character-egg"
 
 type Recipient struct {
 	ID           string `json:"id"`
@@ -72,8 +76,11 @@ func (s *Service) Grant(ctx context.Context, userID, adminID, minimumRarity, mes
 }
 
 func (s *Service) GrantWithPool(ctx context.Context, userID, adminID, minimumRarity, message, rewardPool string) (*domain.TeacherGiftBox, error) {
-	if rewardPool != "" && rewardPool != "character-box" {
+	if rewardPool != "" && rewardPool != "character-box" && rewardPool != CharacterEggPool {
 		return nil, errors.New("invalid reward pool")
+	}
+	if rewardPool == CharacterEggPool && minimumRarity != "Common" {
+		return nil, ErrInvalidCharacterEggTier
 	}
 	learner, err := primitive.ObjectIDFromHex(userID)
 	if err != nil {
@@ -82,6 +89,15 @@ func (s *Service) GrantWithPool(ctx context.Context, userID, adminID, minimumRar
 	admin, err := primitive.ObjectIDFromHex(adminID)
 	if err != nil {
 		return nil, errors.New("invalid admin ID")
+	}
+	if rewardPool == CharacterEggPool {
+		eligible, err := s.store.IsLearner(ctx, learner)
+		if err != nil {
+			return nil, err
+		}
+		if !eligible {
+			return nil, ErrRecipientNotFound
+		}
 	}
 	box := domain.TeacherGiftBox{
 		ID:            primitive.NewObjectID(),
@@ -216,6 +232,9 @@ func (s *Service) Open(ctx context.Context, userID, boxID string) (*reward.DrawR
 	if err != nil {
 		return nil, err
 	}
+	if box.RewardPool == CharacterEggPool {
+		return nil, ErrCharacterEggNotReady
+	}
 	result, err := s.drawer.Open(ctx, reward.DrawRequest{
 		IdempotencyKey: box.ID.Hex(), UserID: userID,
 		Pool: drawPool(box.Source, box.RewardPool), MinimumRarity: box.MinimumRarity,
@@ -233,6 +252,16 @@ func (s *Service) Odds(ctx context.Context, userID, boxID string) (reward.Eligib
 	box, err := s.boxForUser(ctx, userID, boxID)
 	if err != nil {
 		return reward.Eligibility{}, err
+	}
+	if box.RewardPool == CharacterEggPool {
+		return reward.Eligibility{
+			EligibleCount: 1,
+			Odds: map[string]float64{
+				"Normal":    0.83,
+				"Meme Rare": 0.15,
+				"Legendary": 0.02,
+			},
+		}, nil
 	}
 	return s.drawer.Odds(ctx, reward.DrawRequest{
 		IdempotencyKey: box.ID.Hex(), UserID: userID,

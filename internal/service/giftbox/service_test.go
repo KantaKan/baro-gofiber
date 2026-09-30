@@ -212,6 +212,61 @@ func TestCharacterBoxUsesSeparatePoolAndKeepsLegacyBox(t *testing.T) {
 	}
 }
 
+func TestCharacterEggHasFixedOddsAndCannotOpenBeforeHatchingShips(t *testing.T) {
+	learner := primitive.NewObjectID()
+	admin := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes: map[primitive.ObjectID]domain.TeacherGiftBox{},
+		recipients: map[primitive.ObjectID]Recipient{
+			learner: {ID: learner.Hex(), Role: "learner"},
+			admin:   {ID: admin.Hex(), Role: "admin"},
+		},
+	}
+	drawer := &fakeDrawer{results: map[string]*reward.DrawResult{}}
+	service := NewService(store, drawer)
+
+	egg, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), "Common", "A new friend is waiting", "character-egg")
+	if err != nil || egg.RewardPool != "character-egg" {
+		t.Fatalf("character egg = %+v, err=%v", egg, err)
+	}
+	odds, err := service.Odds(context.Background(), learner.Hex(), egg.ID.Hex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if odds.EligibleCount != 1 || odds.Complete || odds.Odds["Normal"] != 0.83 || odds.Odds["Meme Rare"] != 0.15 || odds.Odds["Legendary"] != 0.02 {
+		t.Fatalf("character egg odds = %+v", odds)
+	}
+	if _, err := service.Open(context.Background(), learner.Hex(), egg.ID.Hex()); !errors.Is(err, ErrCharacterEggNotReady) {
+		t.Fatalf("open character egg error = %v", err)
+	}
+	if len(drawer.requests) != 0 {
+		t.Fatalf("character egg called cosmetic drawer: %+v", drawer.requests)
+	}
+}
+
+func TestCharacterEggCanOnlyBeGrantedToLearners(t *testing.T) {
+	admin := primitive.NewObjectID()
+	store := &fakeStore{
+		boxes: map[primitive.ObjectID]domain.TeacherGiftBox{},
+		recipients: map[primitive.ObjectID]Recipient{
+			admin: {ID: admin.Hex(), Role: "admin"},
+		},
+	}
+	service := NewService(store, &fakeDrawer{results: map[string]*reward.DrawResult{}})
+
+	learner := primitive.NewObjectID()
+	store.recipients[learner] = Recipient{ID: learner.Hex(), Role: "learner"}
+	if _, err := service.GrantWithPool(context.Background(), learner.Hex(), admin.Hex(), "Rare", "Not a Standard Egg", "character-egg"); !errors.Is(err, ErrInvalidCharacterEggTier) {
+		t.Fatalf("non-standard character egg grant error = %v", err)
+	}
+	if _, err := service.GrantWithPool(context.Background(), admin.Hex(), admin.Hex(), "Common", "Not for admins", "character-egg"); !errors.Is(err, ErrRecipientNotFound) {
+		t.Fatalf("admin character egg grant error = %v", err)
+	}
+	if len(store.boxes) != 0 {
+		t.Fatalf("admin received character egg: %+v", store.boxes)
+	}
+}
+
 func TestAchievementBoxesDrawFromAchievementPool(t *testing.T) {
 	learner := primitive.NewObjectID()
 	boxID := primitive.NewObjectID()
