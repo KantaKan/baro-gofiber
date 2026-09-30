@@ -76,6 +76,12 @@ func main() {
 	}
 	cancelIndexes()
 	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.GiftBoxRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure gift box indexes:", err)
+	}
+	cancelIndexes()
+	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
 	if err := container.GodEventRepo.EnsureIndexes(indexCtx); err != nil {
 		cancelIndexes()
 		log.Fatal("Failed to ensure GOD event indexes:", err)

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
-	"gofiber-baro/internal/service/giftbox"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -58,7 +57,7 @@ func (r *BaroCharacterRepository) CommitCharacterEgg(ctx context.Context, ownerI
 		filter := bson.M{"_id": ownerID, "role": "learner", "deleted": bson.M{"$ne": true}, "gift_boxes._id": eggID}
 		if err := r.users.FindOne(tx, filter, options.FindOne().SetProjection(bson.M{"gift_boxes": 1})).Decode(&record); err != nil {
 			if errors.Is(err, mongo.ErrNoDocuments) {
-				return nil, giftbox.ErrBoxNotFound
+				return nil, domain.ErrGiftBoxNotFound
 			}
 			return nil, err
 		}
@@ -69,14 +68,14 @@ func (r *BaroCharacterRepository) CommitCharacterEgg(ctx context.Context, ownerI
 				break
 			}
 		}
-		if egg == nil || egg.UserID != ownerID || egg.RewardPool != giftbox.CharacterEggPool {
-			return nil, giftbox.ErrBoxNotFound
+		if egg == nil || egg.UserID != ownerID || egg.RewardPool != domain.CharacterEggPool {
+			return nil, domain.ErrGiftBoxNotFound
 		}
 		if egg.Status == "opened" && egg.Character != nil {
 			return egg.Character, nil
 		}
 		if egg.Status != "unopened" {
-			return nil, giftbox.ErrBoxNotFound
+			return nil, domain.ErrGiftBoxNotFound
 		}
 		if _, err := r.characters.InsertOne(tx, candidate); err != nil {
 			if mongo.IsDuplicateKeyError(err) {
@@ -87,7 +86,7 @@ func (r *BaroCharacterRepository) CommitCharacterEgg(ctx context.Context, ownerI
 		openedAt := time.Now().UTC()
 		updated, err := r.users.UpdateOne(tx, bson.M{
 			"_id":        ownerID,
-			"gift_boxes": bson.M{"$elemMatch": bson.M{"_id": eggID, "status": "unopened", "reward_pool": giftbox.CharacterEggPool}},
+			"gift_boxes": bson.M{"$elemMatch": bson.M{"_id": eggID, "status": "unopened", "reward_pool": domain.CharacterEggPool}},
 		}, bson.M{"$set": bson.M{
 			"gift_boxes.$.status": "opened", "gift_boxes.$.character": candidate, "gift_boxes.$.opened_at": openedAt,
 		}})
@@ -95,7 +94,7 @@ func (r *BaroCharacterRepository) CommitCharacterEgg(ctx context.Context, ownerI
 			return nil, err
 		}
 		if updated.ModifiedCount != 1 {
-			return nil, giftbox.ErrBoxNotFound
+			return nil, domain.ErrGiftBoxNotFound
 		}
 		return &candidate, nil
 	})

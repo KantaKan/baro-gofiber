@@ -13,14 +13,14 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-var ErrBoxNotFound = errors.New("gift box not found")
+var ErrBoxNotFound = domain.ErrGiftBoxNotFound
 var ErrSameRecipient = errors.New("cannot send a gift box to yourself")
 var ErrRecipientNotFound = errors.New("recipient not found")
 var ErrCharacterEggNotReady = errors.New("character egg hatching is not available yet")
 var ErrInvalidCharacterEggTier = errors.New("character eggs must use the Standard, Rare, or Legendary tier")
 var ErrTransferRateLimited = errors.New("please give your gift a little rest before sending again")
 
-const CharacterEggPool = "character-egg"
+const CharacterEggPool = domain.CharacterEggPool
 
 type Recipient struct {
 	ID           string `json:"id"`

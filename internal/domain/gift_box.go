@@ -1,10 +1,15 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+var ErrGiftBoxNotFound = errors.New("gift box not found")
+
+const CharacterEggPool = "character-egg"
 
 type TeacherGiftBox struct {
 	ID              primitive.ObjectID   `bson:"_id" json:"id"`

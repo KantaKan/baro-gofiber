@@ -28,6 +28,14 @@ func NewGiftBoxRepository(db *mongo.Database) *GiftBoxRepository {
 	return &GiftBoxRepository{users: db.Collection("users"), notifications: db.Collection("notifications"), transferLimits: db.Collection("gift_box_transfer_limits"), client: db.Client()}
 }
 
+func (r *GiftBoxRepository) EnsureIndexes(ctx context.Context) error {
+	_, err := r.transferLimits.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "expires_at", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(0).SetName("expire_gift_box_transfer_limits"),
+	})
+	return err
+}
+
 func (r *GiftBoxRepository) AllowTransferAttempt(ctx context.Context, senderID primitive.ObjectID) (bool, error) {
 	now := time.Now().UTC()
 	cutoff := now.Add(-10 * time.Minute)
