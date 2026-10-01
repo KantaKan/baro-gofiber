@@ -1,7 +1,9 @@
 package startupstory
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"gofiber-baro/internal/domain"
 
@@ -83,5 +85,46 @@ func TestOSSReviewersKeepTheirRoles(t *testing.T) {
 		if !found {
 			t.Fatalf("%s must stand in for a standard reviewer so roles, perks and items still apply", rv.Name)
 		}
+	}
+}
+
+func TestShippingThreeDevToolsUnlocksTheSecretFounder(t *testing.T) {
+	ctx := context.Background()
+	store := &fakeStore{}
+	svc := &Service{store: store, now: func() time.Time { return t0 }}
+	player := Player{ID: primitive.NewObjectID().Hex(), Cohort: 12, Role: "learner"}
+	if _, err := svc.StartRun(ctx, player, domain.StartupModeFree); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PickFounder(ctx, player, 0); err != nil {
+		t.Fatal(err)
+	}
+	for shipped := 0; shipped < OSSUnlockShips; {
+		switch store.run.Stage {
+		case domain.StartupStageHub:
+			store.run.Staff[0].Burnout = 0
+			store.run.Staff[0].Frontend, store.run.Staff[0].Backend, store.run.Staff[0].Design, store.run.Staff[0].Debug = 30, 30, 30, 30
+			if _, err := svc.StartProject(ctx, player, "Dev Tool/CLI", "Productivity", nil); err != nil {
+				t.Fatal(err)
+			}
+			store.run.Project.EndsAt = t0.Add(-time.Second)
+			if _, err := svc.Ship(ctx, player); err != nil {
+				t.Fatal(err)
+			}
+			shipped++
+		case domain.StartupStageItem:
+			_, _ = svc.PickItem(ctx, player, 0)
+		case domain.StartupStagePerk:
+			_, _ = svc.PickPerk(ctx, player, 0)
+		default:
+			t.Fatalf("unexpected stage %s", store.run.Stage)
+		}
+	}
+	overview, err := svc.Overview(ctx, player)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !overview.OSSUnlocked || store.studio.OSSShips != OSSUnlockShips {
+		t.Fatalf("3 Dev Tool ships should unlock the secret founder: %+v", store.studio)
 	}
 }
