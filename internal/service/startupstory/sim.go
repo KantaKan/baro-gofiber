@@ -145,10 +145,11 @@ func Hire(run *domain.StartupRun, candidateID string) error {
 		return domain.ErrStartupTeamFull
 	}
 	cand := run.Candidates[idx]
-	if run.Money < cand.Salary {
+	cost := hireCost(run, cand.Salary)
+	if run.Money < cost {
 		return domain.ErrStartupNoFunds
 	}
-	run.Money -= cand.Salary
+	run.Money -= cost
 	run.Staff = append(run.Staff, cand)
 	run.Candidates = append(run.Candidates[:idx], run.Candidates[idx+1:]...)
 	return nil
@@ -196,6 +197,8 @@ func StartProject(run *domain.StartupRun, typeName, theme string, staffIDs []str
 	if isBossIndex(run.ProjectIndex) {
 		boss = bossForRun(run.ProjectIndex, run.BossOrder)
 		onBossStart(run)
+	} else {
+		run.BossGimmick = ""
 	}
 	secs := projectDurationSecs(run, team, boss)
 	run.Project = &domain.StartupProject{
@@ -226,6 +229,7 @@ func projectDurationSecs(run *domain.StartupRun, team []domain.StartupDev, boss 
 	mult *= effectsOf(run.Items).durMult
 	mult *= jobsFor(team).durMult
 	mult *= perkDurationMult(run, team)
+	mult *= worldDurationMult(run)
 	secs := int(math.Round(float64(base) * mult))
 	if secs < MinDurationSecs {
 		secs = MinDurationSecs
@@ -295,7 +299,9 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 		run.Stage = domain.StartupStageItem
 	}
 	queuePerk(run)
-	queueEvent(run)
+	if boss == "" {
+		queueEvent(run)
+	}
 	return nil
 }
 

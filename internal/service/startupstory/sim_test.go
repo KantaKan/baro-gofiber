@@ -71,6 +71,11 @@ func TestRunEndsAfterLastProject(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		for run.Stage == domain.StartupStageEvent {
+			if err := PickEvent(run, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
 		if run.Stage == domain.StartupStageItem {
 			if err := PickItem(run, 0); err != nil {
 				t.Fatal(err)
@@ -272,6 +277,12 @@ func TestServiceGuardsShipAndConflicts(t *testing.T) {
 	}
 	if err := store.SaveRun(ctx, stale, stale.Version); !errors.Is(err, domain.ErrStartupRunConflict) {
 		t.Fatalf("expected double ship to conflict, got %v", err)
+	}
+	if shipped.Stage == domain.StartupStageEvent {
+		if _, err := svc.PickEvent(ctx, player, 0); err != nil {
+			t.Fatal(err)
+		}
+		shipped, _ = store.FindActiveRun(ctx, primitive.NilObjectID)
 	}
 	if shipped.LastResult == nil || shipped.Stage != domain.StartupStageItem {
 		t.Fatalf("unexpected state after ship: %+v", shipped)

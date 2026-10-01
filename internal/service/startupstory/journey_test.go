@@ -59,6 +59,11 @@ func TestFullFreePlayJourney(t *testing.T) {
 				t.Fatal(err)
 			}
 			continue
+		case domain.StartupStageEvent:
+			if _, err := svc.PickEvent(ctx, player, 0); err != nil {
+				t.Fatal(err)
+			}
+			continue
 		default:
 			t.Fatalf("unexpected stage %s", active.Stage)
 		}

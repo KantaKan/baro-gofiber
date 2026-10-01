@@ -105,6 +105,10 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 			if err := PickPerk(run, 0); err != nil {
 				t.Fatal(err)
 			}
+		case domain.StartupStageEvent:
+			if err := PickEvent(run, 0); err != nil {
+				t.Fatal(err)
+			}
 		case domain.StartupStageIPOChoice:
 			reachedIPO = true
 			if err := ChooseAfterIPO(run, smart, t0); err != nil {

@@ -298,6 +298,12 @@ func (s *Service) PickPerk(ctx context.Context, player Player, index int) (*doma
 	})
 }
 
+func (s *Service) PickEvent(ctx context.Context, player Player, index int) (*domain.StartupRun, error) {
+	return s.mutate(ctx, player, func(run *domain.StartupRun, _ time.Time) error {
+		return PickEvent(run, index)
+	})
+}
+
 func (s *Service) IPOChoice(ctx context.Context, player Player, keepGoing bool) (*domain.StartupRun, error) {
 	run, err := s.mutate(ctx, player, func(run *domain.StartupRun, now time.Time) error {
 		return ChooseAfterIPO(run, keepGoing, now)

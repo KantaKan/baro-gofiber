@@ -312,6 +312,15 @@ var itemCatalog = []StartupItem{
 	{ID: "senior-mentor", Name: "Senior Mentor", Icon: "🧑‍🏫", Rarity: ItemRarityRare, Desc: "+50% XP for everyone", PowerMult: 1, DurationMult: 1, XPPct: 50},
 	{ID: "kopi-addiction", Name: "Kopi Addiction", Icon: "☕", Rarity: ItemRarityCommon, Desc: "+30% XP, +3 burnout per project", PowerMult: 1, DurationMult: 1, XPPct: 30, Burnout: 3},
 	{ID: "team-retreat", Name: "Team Retreat Fund", Icon: "🏖️", Rarity: ItemRarityRare, Desc: "−5 burnout gain per project for everyone", PowerMult: 1, DurationMult: 1, Burnout: -5},
+	{ID: "works-on-my-machine", Name: "Works on My Machine 💻", Icon: "💻", Rarity: ItemRarityRare, Desc: "×1.15 power, +4 bugs", Bugs: 4, PowerMult: 1.15, DurationMult: 1},
+	{ID: "vibe-coding", Name: "Vibe Coding ✨", Icon: "✨", Rarity: ItemRarityLegendary, Desc: "×1.3 power, +8 bugs. No plan, just vibes", Bugs: 8, PowerMult: 1.3, DurationMult: 1},
+	{ID: "blame-the-intern", Name: "Blame the Intern ☝️", Icon: "☝️", Rarity: ItemRarityCursed, Desc: "−4 bugs, +4 burnout. Someone had to take the fall", Bugs: -4, Burnout: 4, PowerMult: 1, DurationMult: 1},
+	{ID: "its-a-feature", Name: "It's Not a Bug, It's a Feature 🐛", Icon: "🐛", Rarity: ItemRarityCommon, Desc: "+1 Dev Community, +2 bugs", Bugs: 2, DevCommunity: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "chatgpt-paste", Name: "Copy-Paste from ChatGPT 📋", Icon: "📋", Rarity: ItemRarityCommon, Desc: "×1.1 power, −1 Design. It all looks the same", Design: -1, Bugs: 2, PowerMult: 1.1, DurationMult: 1},
+	{ID: "dark-mode-only", Name: "Dark Mode Only 🌚", Icon: "🌚", Rarity: ItemRarityRare, Desc: "+1 Design, +1 Dev Community", Design: 1, DevCommunity: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "rubber-duck-ceo", Name: "Rubber Duck CEO 🦆", Icon: "🦆", Rarity: ItemRarityLegendary, Desc: "+1 all stats. The duck approves all decisions", AllStats: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "paper-prototype", Name: "Paper Prototype First 📄", Icon: "📄", Rarity: ItemRarityCommon, Desc: "−2 bugs, +1 Design", Bugs: -2, Design: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "nft-roadmap", Name: "NFT Roadmap 🗺️", Icon: "🗺️", Rarity: ItemRarityCursed, Desc: "×1.2 power, +5 burnout. The roadmap is a jpeg", Bugs: 3, Burnout: 5, PowerMult: 1.2, DurationMult: 1},
 }
 
 var rarityWeights = []struct {
