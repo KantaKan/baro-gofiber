@@ -14,7 +14,7 @@ const (
 	BossDuration    = 90
 	FounderOffers   = 3
 	CandidateOffers = 3
-	ReviewScale     = 0.56
+	ReviewScale     = 0.6
 	MoneyPerPoint   = 15
 	FansPerPoint    = 2
 	SalaryRate      = 150
@@ -63,7 +63,7 @@ func bossThreshold(act int) int {
 	case 2:
 		return 26
 	case 3:
-		return 36
+		return 38
 	default:
 		return 18
 	}

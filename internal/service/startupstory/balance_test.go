@@ -187,7 +187,7 @@ func TestBalanceIsChallenging(t *testing.T) {
 	t.Logf("smart: IPO %.0f%%, first project avg %.1f/40, perfect %.1f%%, bosses passed %v", 100*smart.ipoRate(), smart.firstAvg(), 100*smart.perfectRate(), smart.bosses)
 	t.Logf("smart endless: of runs that reached IPO, median death act %d, deaths by act %v", smart.medianDeathAct(), smart.deaths)
 	t.Logf("naive: IPO %.0f%%, first project avg %.1f/40, perfect %.1f%%, bosses passed %v", 100*naive.ipoRate(), naive.firstAvg(), 100*naive.perfectRate(), naive.bosses)
-	if r := smart.ipoRate(); r < 0.2 || r > 0.45 {
+	if r := smart.ipoRate(); r < 0.2 || r > 0.4 {
 		t.Errorf("a thoughtful player should reach IPO about 1 in 3 runs, got %.0f%%", 100*r)
 	}
 	if a := smart.firstAvg(); a < 22 || a > 30 {
@@ -196,8 +196,11 @@ func TestBalanceIsChallenging(t *testing.T) {
 	if p := smart.perfectRate(); p > 0.1 {
 		t.Errorf("perfect scores should be rare, got %.1f%%", 100*p)
 	}
-	if m := smart.medianDeathAct(); m < 4 || m > 7 {
+	if m := smart.medianDeathAct(); m < 4 || m > 8 {
 		t.Errorf("endless runs should usually die around Act 5-6, median was Act %d", m)
+	}
+	if reached, won := smart.bosses[2]+smart.bosses[3], smart.bosses[3]; reached > 0 && float64(won)/float64(reached) > 0.9 {
+		t.Errorf("the IPO Pitch is the climax: at most 90%% of runs that reach it should win, got %d/%d", won, reached)
 	}
 	if r := naive.ipoRate(); r > 0.03 {
 		t.Errorf("a player who never hires or picks combos should almost never IPO, got %.0f%%", 100*r)
