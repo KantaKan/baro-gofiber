@@ -58,9 +58,11 @@ func PickFounder(run *domain.StartupRun, index int) error {
 	run.Founder = run.FounderOffer[index].Title
 	run.FounderOffer = nil
 	run.Act = 1
+	run.MaxAct = 1
 	onNewAct(run)
 	run.Candidates = rollCandidates(run, CandidateOffers)
 	refreshPitches(run)
+	refreshNextBoss(run)
 	run.Stage = domain.StartupStageHub
 	return nil
 }
@@ -255,7 +257,7 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	run.ProjectIndex++
 	afterShipLevels(run, team, result)
 	if boss != "" {
-		if result.Total < bossThreshold(run.Act) {
+		if result.Total < bossPassMark(run.Act, boss) {
 			endRun(run, domain.StartupOutcomePivot, now)
 			return nil
 		}
@@ -276,12 +278,14 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 		return nil
 	}
 	prevAct := run.Act
-	run.Act = actFor(run.ProjectIndex)
+	run.Act = actForRun(run)
+	run.MaxAct = max(run.MaxAct, run.Act)
 	if run.Act != prevAct {
 		onNewAct(run)
 	}
 	run.Candidates = rollCandidates(run, CandidateOffers)
 	refreshPitches(run)
+	refreshNextBoss(run)
 	if boss != "" {
 		run.Stage = domain.StartupStageHub
 	} else {

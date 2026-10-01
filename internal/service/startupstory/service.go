@@ -23,6 +23,7 @@ type Store interface {
 	CountRankedRuns(ctx context.Context, ownerID primitive.ObjectID, weekKey string) (int, error)
 	LeaderboardWeekly(ctx context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error)
 	LeaderboardFame(ctx context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error)
+	LeaderboardDeepest(ctx context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error)
 	ListGenmates(ctx context.Context, cohort int, excludeID primitive.ObjectID) ([]domain.StartupGenmate, error)
 	SetStartupOptOut(ctx context.Context, userID primitive.ObjectID, optOut bool) error
 	FindStartupOptOut(ctx context.Context, userID primitive.ObjectID) (bool, error)
@@ -252,6 +253,8 @@ func (s *Service) Leaderboard(ctx context.Context, player Player, tab string) ([
 		tab = domain.StartupBoardWeekly
 	}
 	switch tab {
+	case domain.StartupBoardDeepest:
+		return s.store.LeaderboardDeepest(ctx, player.Cohort, weekKeyFor(s.now()), domain.StartupLeaderboardLimit)
 	case domain.StartupBoardFame:
 		return s.store.LeaderboardFame(ctx, player.Cohort, domain.StartupLeaderboardLimit)
 	case domain.StartupBoardWeekly:
@@ -259,6 +262,23 @@ func (s *Service) Leaderboard(ctx context.Context, player Player, tab string) ([
 	default:
 		return nil, domain.ErrStartupInvalidChoice
 	}
+}
+
+func (s *Service) IPOChoice(ctx context.Context, player Player, keepGoing bool) (*domain.StartupRun, error) {
+	run, err := s.mutate(ctx, player, func(run *domain.StartupRun, now time.Time) error {
+		return ChooseAfterIPO(run, keepGoing, now)
+	})
+	if err != nil {
+		return nil, err
+	}
+	owner, err := ownerID(player)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.settleIfEnded(ctx, owner, run); err != nil {
+		return nil, err
+	}
+	return run, nil
 }
 
 func (s *Service) Abandon(ctx context.Context, player Player) (*domain.StartupRun, error) {

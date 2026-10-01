@@ -45,6 +45,21 @@ func weeklyLeaderboardPipeline(cohort int, weekKey string, limit int) mongo.Pipe
 	}
 }
 
+func deepestLeaderboardPipeline(cohort int, weekKey string, limit int) mongo.Pipeline {
+	byDepth := bson.D{{Key: "depth", Value: -1}, {Key: "score", Value: -1}}
+	return mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{"cohort": cohort, "mode": domain.StartupModeRanked, "week_key": weekKey, "status": domain.StartupStatusEnded, "role": bson.M{"$ne": "admin"}}}},
+		bson.D{{Key: "$addFields", Value: bson.M{"depth": bson.M{"$ifNull": bson.A{"$max_act", 0}}}}},
+		bson.D{{Key: "$sort", Value: byDepth}},
+		bson.D{{Key: "$group", Value: bson.M{"_id": "$owner_id", "depth": bson.M{"$first": "$depth"}, "score": bson.M{"$first": "$score"}, "run_id": bson.M{"$first": "$_id"}, "outcome": bson.M{"$first": "$outcome"}}}},
+		bson.D{{Key: "$lookup", Value: bson.M{"from": "users", "localField": "_id", "foreignField": "_id", "as": "user"}}},
+		bson.D{{Key: "$unwind", Value: "$user"}},
+		bson.D{{Key: "$sort", Value: byDepth}},
+		bson.D{{Key: "$limit", Value: limit}},
+		bson.D{{Key: "$project", Value: bson.M{"_id": 0, "owner_id": "$_id", "name": leaderboardNameExpr(), "max_act": "$depth", "score": 1, "best_run_id": "$run_id", "outcome": 1}}},
+	}
+}
+
 func fameLeaderboardPipeline(cohort int, limit int) mongo.Pipeline {
 	return mongo.Pipeline{
 		bson.D{{Key: "$match", Value: bson.M{"cohort": cohort}}},
@@ -55,6 +70,10 @@ func fameLeaderboardPipeline(cohort int, limit int) mongo.Pipeline {
 		bson.D{{Key: "$sort", Value: bson.M{"fame": -1}}},
 		bson.D{{Key: "$limit", Value: limit}},
 	}
+}
+
+func (r *StartupStoryRepository) LeaderboardDeepest(ctx context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error) {
+	return r.runLeaderboard(ctx, r.runs, deepestLeaderboardPipeline(cohort, weekKey, limit))
 }
 
 func (r *StartupStoryRepository) LeaderboardWeekly(ctx context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error) {

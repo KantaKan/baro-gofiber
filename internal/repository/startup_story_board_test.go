@@ -120,3 +120,28 @@ func TestGenmateProjectionHidesIdentity(t *testing.T) {
 		t.Fatalf("projection must not expose surname, email or any other field: %+v", p)
 	}
 }
+
+func TestDeepestPipelineSortsByActThenScore(t *testing.T) {
+	p := deepestLeaderboardPipeline(12, "2026-W40", 100)
+	op, match := stageOf(t, p, 0)
+	if op != "$match" || match["mode"] != "ranked" || match["status"] != "ended" {
+		t.Fatalf("bad deepest match: %+v", match)
+	}
+	if role, ok := match["role"].(bson.M); !ok || role["$ne"] != "admin" {
+		t.Fatalf("deepest must exclude admin runs: %+v", match)
+	}
+	sorts := 0
+	for _, stage := range p {
+		if stage[0].Key != "$sort" {
+			continue
+		}
+		sorts++
+		keys, ok := stage[0].Value.(bson.D)
+		if !ok || len(keys) != 2 || keys[0].Key != "depth" || keys[1].Key != "score" {
+			t.Fatalf("deepest must sort by depth, then score, in that order: %+v", stage[0].Value)
+		}
+	}
+	if sorts != 2 {
+		t.Fatalf("expected a sort before grouping and after the lookup, got %d", sorts)
+	}
+}

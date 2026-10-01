@@ -121,6 +121,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	startup.Post("/runs/active/ship", h.StartupStory.Ship)
 	startup.Post("/runs/active/item", h.StartupStory.PickItem)
 	startup.Post("/runs/active/abandon", h.StartupStory.Abandon)
+	startup.Post("/runs/active/ipo-choice", h.StartupStory.IPOChoice)
 	startup.Post("/runs/active/hire", h.StartupStory.Hire)
 	startup.Delete("/runs/active/staff/:id", h.StartupStory.Dismiss)
 

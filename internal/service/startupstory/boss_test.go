@@ -148,6 +148,12 @@ func TestIPOWinDoublesInvestor(t *testing.T) {
 	staff := []domain.StartupDev{mkDev("a", 14, 14, 14, 14), mkDev("b", 14, 14, 14, 14), mkDev("c", 14, 14, 14, 14)}
 	run := hubRunAt(t, 66, 8, staff)
 	shipNow(t, run, "Web App", "Education")
+	if run.Stage != domain.StartupStageIPOChoice {
+		t.Fatalf("beating the IPO Pitch should offer cash out or keep going, got %s", run.Stage)
+	}
+	if err := ChooseAfterIPO(run, false, t0); err != nil {
+		t.Fatal(err)
+	}
 	if run.Outcome != domain.StartupOutcomeIPO || run.Status != domain.StartupStatusEnded {
 		t.Fatalf("expected IPO win: %+v", run)
 	}

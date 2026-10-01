@@ -36,7 +36,8 @@ const (
 	StartupOutcomeIPO   = "ipo"
 	StartupOutcomePivot = "pivot"
 
-	StartupBoardWeekly = "weekly"
+	StartupBoardWeekly  = "weekly"
+	StartupBoardDeepest = "deepest"
 	StartupBoardFame   = "fame"
 
 	StartupLeaderboardLimit = 100
@@ -47,6 +48,7 @@ type StartupLeaderboardEntry struct {
 	Name      string             `bson:"name" json:"name"`
 	Score     int                `bson:"score,omitempty" json:"score,omitempty"`
 	Fame      int                `bson:"fame,omitempty" json:"fame,omitempty"`
+	MaxAct    int                `bson:"max_act,omitempty" json:"max_act,omitempty"`
 	BestRunID primitive.ObjectID `bson:"best_run_id,omitempty" json:"best_run_id,omitempty"`
 	Outcome   string             `bson:"outcome,omitempty" json:"outcome,omitempty"`
 }
@@ -191,5 +193,7 @@ type StartupRun struct {
 	PendingPerk   *StartupPendingPerk  `bson:"pending_perk,omitempty" json:"pending_perk,omitempty"`
 	PendingEvent  *StartupPendingEvent `bson:"pending_event,omitempty" json:"pending_event,omitempty"`
 	ResumeStage   string               `bson:"resume_stage,omitempty" json:"-"`
+	NextBoss      string               `bson:"next_boss,omitempty" json:"next_boss,omitempty"`
+	NextPassMark  int                  `bson:"next_pass_mark,omitempty" json:"next_pass_mark,omitempty"`
 	Log           []string             `bson:"log,omitempty" json:"log,omitempty"`
 }

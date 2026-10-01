@@ -44,6 +44,31 @@ func (f *fakeStore) LeaderboardWeekly(_ context.Context, cohort int, weekKey str
 	return out, nil
 }
 
+func (f *fakeStore) LeaderboardDeepest(_ context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error) {
+	best := map[string]*domain.StartupLeaderboardEntry{}
+	deeper := func(a, b domain.StartupLeaderboardEntry) bool {
+		return a.MaxAct > b.MaxAct || (a.MaxAct == b.MaxAct && a.Score > b.Score)
+	}
+	for _, r := range f.boardRuns {
+		if r.Cohort != cohort || r.Mode != domain.StartupModeRanked || r.WeekKey != weekKey || r.Status != domain.StartupStatusEnded || f.boardRoles[r.OwnerID.Hex()] == "admin" {
+			continue
+		}
+		e := domain.StartupLeaderboardEntry{OwnerID: r.OwnerID, Name: f.boardName(r.OwnerID), MaxAct: r.MaxAct, Score: r.Score, BestRunID: r.ID, Outcome: r.Outcome}
+		if cur, ok := best[r.OwnerID.Hex()]; !ok || deeper(e, *cur) {
+			best[r.OwnerID.Hex()] = &e
+		}
+	}
+	out := []domain.StartupLeaderboardEntry{}
+	for _, e := range best {
+		out = append(out, *e)
+	}
+	sort.Slice(out, func(i, j int) bool { return deeper(out[i], out[j]) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (f *fakeStore) LeaderboardFame(_ context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error) {
 	out := []domain.StartupLeaderboardEntry{}
 	for _, s := range f.boardStudios {

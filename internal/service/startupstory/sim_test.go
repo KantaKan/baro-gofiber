@@ -71,6 +71,12 @@ func TestRunEndsAfterLastProject(t *testing.T) {
 			}
 		}
 	}
+	if run.Stage != domain.StartupStageIPOChoice {
+		t.Fatalf("beating the IPO Pitch should offer cash out or keep going, got %s", run.Stage)
+	}
+	if err := ChooseAfterIPO(run, false, t0); err != nil {
+		t.Fatal(err)
+	}
 	wantScore := run.Money/10 + run.Fans + BossPassBonus*run.BossesPassed + BossWinBonus
 	if run.Status != domain.StartupStatusEnded || run.Outcome != domain.StartupOutcomeIPO || run.BossesPassed != 3 || run.Score != wantScore {
 		t.Fatalf("run not ended correctly: %+v", run)

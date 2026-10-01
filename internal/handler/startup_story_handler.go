@@ -194,6 +194,24 @@ func (h *StartupStoryHandler) PickItem(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Item drafted", run)
 }
 
+func (h *StartupStoryHandler) IPOChoice(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		KeepGoing bool `json:"keep_going"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.IPOChoice(c.UserContext(), player, body.KeepGoing)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "IPO choice made", run)
+}
+
 func (h *StartupStoryHandler) Abandon(c *fiber.Ctx) error {
 	player, ok := startupPlayer(c)
 	if !ok {

@@ -23,9 +23,19 @@ const (
 	BossWinBonus    = 2000
 	BossPassBonus   = 500
 	BugPenalty      = 0.3
+
+	EndlessScaleGrowth = 1.28
+	EndlessPassBase    = 28
+	EndlessPassStep    = 2
+	EndlessPassCap     = 36
+	EndlessTeamCap     = 8
+	EndlessActBonus    = 1500
 )
 
 func actScale(act int) float64 {
+	if act > 3 {
+		return 3.4 * math.Pow(EndlessScaleGrowth, float64(act-3))
+	}
 	switch act {
 	case 2:
 		return 2.1
@@ -63,8 +73,11 @@ func isBossIndex(projectIndex int) bool {
 }
 
 func bossForRun(projectIndex int, order []string) string {
-	act := actFor(projectIndex)
-	if act >= 3 {
+	act := 1 + projectIndex/3
+	if act > 3 {
+		return endlessBoss(act, order)
+	}
+	if act == 3 {
 		return BossIPO
 	}
 	if act-1 < len(order) {
@@ -85,6 +98,9 @@ const (
 var traits = []string{TraitNightOwl, TraitTabs, TraitTenX, TraitMeeting, TraitSOSurfer, TraitPixelPerf}
 
 func TeamCap(act int) int {
+	if act > 3 {
+		return min(EndlessTeamCap, 6+(act-3))
+	}
 	switch act {
 	case 2:
 		return 4
@@ -96,11 +112,11 @@ func TeamCap(act int) int {
 }
 
 func baseDurationSecs(act int) int {
-	switch act {
-	case 2:
-		return 45
-	case 3:
+	switch {
+	case act >= 3:
 		return 60
+	case act == 2:
+		return 45
 	default:
 		return ProjectDuration
 	}
