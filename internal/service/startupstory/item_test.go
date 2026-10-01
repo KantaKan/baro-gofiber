@@ -125,6 +125,11 @@ func TestServiceDraftSurvivesRefresh(t *testing.T) {
 	if !reflect.DeepEqual(a.ItemOffer, b.ItemOffer) || !reflect.DeepEqual(shipped.ItemOffer, a.ItemOffer) {
 		t.Fatal("refresh rerolled the item offer")
 	}
+	if a.Stage == domain.StartupStageEvent {
+		if _, err := svc.PickEvent(ctx, player, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := svc.PickItem(ctx, player, 0); err != nil {
 		t.Fatal(err)
 	}

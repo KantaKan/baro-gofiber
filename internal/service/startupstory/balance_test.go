@@ -105,6 +105,10 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 			if err := PickPerk(run, 0); err != nil {
 				t.Fatal(err)
 			}
+		case domain.StartupStageEvent:
+			if err := PickEvent(run, 0); err != nil {
+				t.Fatal(err)
+			}
 		case domain.StartupStageIPOChoice:
 			reachedIPO = true
 			if err := ChooseAfterIPO(run, smart, t0); err != nil {
@@ -142,14 +146,16 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 				t.Fatal(err)
 			}
 		case domain.StartupStageDeveloping:
-			outOf := 40
+			act, outOf := run.Act, 40
 			if run.Project.Boss == BossIPO {
 				outOf = 50
 			}
 			if err := Ship(run, run.Project.EndsAt); err != nil {
 				t.Fatal(err)
 			}
-			totals = append(totals, run.LastResult.Total*40/outOf)
+			if act <= 3 {
+				totals = append(totals, run.LastResult.Total*40/outOf)
+			}
 		default:
 			t.Fatalf("unexpected stage %s", run.Stage)
 		}
@@ -194,7 +200,7 @@ func TestBalanceIsChallenging(t *testing.T) {
 		t.Errorf("first project should average ~26/40 for a thoughtful player, got %.1f", a)
 	}
 	if p := smart.perfectRate(); p > 0.1 {
-		t.Errorf("perfect scores should be rare, got %.1f%%", 100*p)
+		t.Errorf("perfect scores should be rare in the main game (Acts 1-3), got %.1f%%", 100*p)
 	}
 	if m := smart.medianDeathAct(); m < 4 || m > 8 {
 		t.Errorf("endless runs should usually die around Act 5-6, median was Act %d", m)

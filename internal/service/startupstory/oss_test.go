@@ -44,6 +44,7 @@ func ossRun(t *testing.T, oss bool) *domain.StartupRun {
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
 	}
+	run.WorldEvent = ""
 	run.Staff[0].Frontend, run.Staff[0].Backend, run.Staff[0].Design, run.Staff[0].Debug = 6, 6, 6, 6
 	if err := StartProject(run, "Web App", "Education", nil, t0); err != nil {
 		t.Fatal(err)
@@ -116,6 +117,8 @@ func TestShippingThreeDevToolsUnlocksTheSecretFounder(t *testing.T) {
 			_, _ = svc.PickItem(ctx, player, 0)
 		case domain.StartupStagePerk:
 			_, _ = svc.PickPerk(ctx, player, 0)
+		case domain.StartupStageEvent:
+			_, _ = svc.PickEvent(ctx, player, 0)
 		default:
 			t.Fatalf("unexpected stage %s", store.run.Stage)
 		}
