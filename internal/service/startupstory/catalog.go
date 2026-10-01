@@ -342,8 +342,16 @@ func marketMult(market domain.StartupMarket, theme string) float64 {
 
 type reviewer struct {
 	Name  string
+	Alias string
 	Favor int // index into stats, -1 = none
 	Lines [3][]string
+}
+
+func (rv reviewer) role() string {
+	if rv.Alias != "" {
+		return rv.Alias
+	}
+	return rv.Name
 }
 
 var reviewers = []reviewer{

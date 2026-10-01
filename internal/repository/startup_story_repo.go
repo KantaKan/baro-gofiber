@@ -221,6 +221,11 @@ func (r *StartupStoryRepository) InsertRun(ctx context.Context, run *domain.Star
 	return err
 }
 
+func (r *StartupStoryRepository) IncOSSShips(ctx context.Context, ownerID primitive.ObjectID) error {
+	_, err := r.studios.UpdateOne(ctx, bson.M{"owner_id": ownerID}, bson.M{"$inc": bson.M{"oss_ships": 1}})
+	return err
+}
+
 func (r *StartupStoryRepository) AddDiscoveredCombo(ctx context.Context, ownerID primitive.ObjectID, key string) error {
 	_, err := r.studios.UpdateOne(ctx,
 		bson.M{"owner_id": ownerID},

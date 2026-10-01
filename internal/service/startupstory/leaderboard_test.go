@@ -69,6 +69,14 @@ func (f *fakeStore) LeaderboardDeepest(_ context.Context, cohort int, weekKey st
 	return out, nil
 }
 
+func (f *fakeStore) IncOSSShips(_ context.Context, ownerID primitive.ObjectID) error {
+	if f.studio == nil {
+		f.studio = &domain.StartupStudio{OwnerID: ownerID}
+	}
+	f.studio.OSSShips++
+	return nil
+}
+
 func (f *fakeStore) LeaderboardFame(_ context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error) {
 	out := []domain.StartupLeaderboardEntry{}
 	for _, s := range f.boardStudios {

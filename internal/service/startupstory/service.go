@@ -24,6 +24,7 @@ type Store interface {
 	LeaderboardWeekly(ctx context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error)
 	LeaderboardFame(ctx context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error)
 	LeaderboardDeepest(ctx context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error)
+	IncOSSShips(ctx context.Context, ownerID primitive.ObjectID) error
 	ListGenmates(ctx context.Context, cohort int, excludeID primitive.ObjectID) ([]domain.StartupGenmate, error)
 	SetStartupOptOut(ctx context.Context, userID primitive.ObjectID, optOut bool) error
 	FindStartupOptOut(ctx context.Context, userID primitive.ObjectID) (bool, error)
@@ -47,6 +48,7 @@ type Overview struct {
 	Unlocks    []UnlockInfo          `json:"unlocks"`
 	Roles              []RoleInfo            `json:"roles"`
 	Perks              []PerkInfo            `json:"perks"`
+	OSSUnlocked        bool                  `json:"oss_unlocked"`
 	OptOut     bool                  `json:"opt_out"`
 }
 
@@ -116,7 +118,7 @@ func (s *Service) Overview(ctx context.Context, player Player) (*Overview, error
 		typeNames[i] = t.Name
 	}
 	items := append(append([]StartupItem{}, itemCatalog...), unlockableItems...)
-	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OptOut: optOut}, nil
+	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OSSUnlocked: ossFounderUnlocked(studio), OptOut: optOut}, nil
 }
 
 func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*domain.StartupRun, error) {
@@ -150,7 +152,7 @@ func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*do
 	if err != nil {
 		return nil, err
 	}
-	run := newRunWithPool(owner, player.Cohort, player.Role, mode, seedValue, s.now(), founderPool(studio.UnlockedFounders), studio.UnlockedItems)
+	run := newRunWithPool(owner, player.Cohort, player.Role, mode, seedValue, s.now(), founderPoolFor(studio), studio.UnlockedItems)
 	run.WeekKey = weekKey
 	genmates, err := s.store.ListGenmates(ctx, player.Cohort, owner)
 	if err != nil {
@@ -212,6 +214,11 @@ func (s *Service) Ship(ctx context.Context, player Player) (*domain.StartupRun, 
 	if run.LastResult != nil {
 		if err := s.store.AddDiscoveredCombo(ctx, owner, ComboKey(run.LastResult.Type, run.LastResult.Theme)); err != nil {
 			return nil, err
+		}
+		if IsOSSProduct(run.LastResult.Type) {
+			if err := s.store.IncOSSShips(ctx, owner); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if err := s.settleIfEnded(ctx, owner, run); err != nil {

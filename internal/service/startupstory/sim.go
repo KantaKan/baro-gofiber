@@ -56,6 +56,7 @@ func PickFounder(run *domain.StartupRun, index int) error {
 	}
 	run.Staff = []domain.StartupDev{run.FounderOffer[index]}
 	run.Founder = run.FounderOffer[index].Title
+	onFounderPicked(run)
 	run.FounderOffer = nil
 	run.Act = 1
 	run.MaxAct = 1
@@ -560,10 +561,10 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 		if rv.Favor >= 0 {
 			bias = (float64(sums[rv.Favor])/float64(len(team)) - 3) * 0.4
 		}
-		if rv.Name == "Dev Community" {
+		if rv.role() == "Dev Community" {
 			bias += map[string]float64{"great": 1, "good": 0, "meh": -1}[combo]
 		}
-		if rv.Name == "Investor" {
+		if rv.role() == "Investor" {
 			bias += float64(investorBonus + fx.investor)
 			switch marketMult(run.Market, p.Theme) {
 			case MarketHotMult:
@@ -572,11 +573,11 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 				bias -= 1
 			}
 		}
-		if rv.Name == "Dev Community" {
+		if rv.role() == "Dev Community" {
 			bias += float64(fx.devCommunity)
 		}
-		bias += jobs.reviewer[rv.Name]
-		bias += sc.reviewer[rv.Name]
+		bias += jobs.reviewer[rv.role()]
+		bias += sc.reviewer[rv.role()]
 		score := int(math.Round(quality*ReviewScale + bias + (2*r.Float64() - 1)))
 		score = min(10, max(1, score))
 		tier := 2
@@ -588,7 +589,7 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 		lines := rv.Lines[tier]
 		result.Reviews = append(result.Reviews, domain.StartupReview{Reviewer: rv.Name, Score: score, Line: lines[r.IntN(len(lines))]})
 		result.Total += score
-		if p.Boss == BossIPO && rv.Name == "Investor" {
+		if p.Boss == BossIPO && rv.role() == "Investor" {
 			result.Total += score
 		}
 	}
