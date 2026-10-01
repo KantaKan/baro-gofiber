@@ -59,11 +59,17 @@ func TestRunEndsAfterLastProject(t *testing.T) {
 	_ = PickFounder(run, 1)
 	run.Staff[0].Frontend, run.Staff[0].Backend, run.Staff[0].Design, run.Staff[0].Debug = 25, 25, 25, 25
 	for i := 0; i < ProjectsPerRun; i++ {
+		run.Staff[0].Burnout = 0
 		if err := StartProject(run, "Web App", "Education", nil, t0); err != nil {
 			t.Fatal(err)
 		}
 		if err := Ship(run, run.Project.EndsAt); err != nil {
 			t.Fatal(err)
+		}
+		for run.Stage == domain.StartupStagePerk {
+			if err := PickPerk(run, 0); err != nil {
+				t.Fatal(err)
+			}
 		}
 		if run.Stage == domain.StartupStageItem {
 			if err := PickItem(run, 0); err != nil {

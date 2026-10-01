@@ -46,6 +46,7 @@ type Overview struct {
 	Items      []StartupItem         `json:"items"`
 	Unlocks    []UnlockInfo          `json:"unlocks"`
 	Roles              []RoleInfo            `json:"roles"`
+	Perks              []PerkInfo            `json:"perks"`
 	OptOut     bool                  `json:"opt_out"`
 }
 
@@ -115,7 +116,7 @@ func (s *Service) Overview(ctx context.Context, player Player) (*Overview, error
 		typeNames[i] = t.Name
 	}
 	items := append(append([]StartupItem{}, itemCatalog...), unlockableItems...)
-	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, OptOut: optOut}, nil
+	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OptOut: optOut}, nil
 }
 
 func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*domain.StartupRun, error) {
@@ -262,6 +263,12 @@ func (s *Service) Leaderboard(ctx context.Context, player Player, tab string) ([
 	default:
 		return nil, domain.ErrStartupInvalidChoice
 	}
+}
+
+func (s *Service) PickPerk(ctx context.Context, player Player, index int) (*domain.StartupRun, error) {
+	return s.mutate(ctx, player, func(run *domain.StartupRun, _ time.Time) error {
+		return PickPerk(run, index)
+	})
 }
 
 func (s *Service) IPOChoice(ctx context.Context, player Player, keepGoing bool) (*domain.StartupRun, error) {

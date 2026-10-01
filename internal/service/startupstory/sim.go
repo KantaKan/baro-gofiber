@@ -397,6 +397,8 @@ type itemEffects struct {
 	investor     int
 	devCommunity int
 	burnout      int
+	xpPct        int
+	levelStats   int
 }
 
 func effectsOf(items []string) itemEffects {
@@ -419,6 +421,8 @@ func effectsOf(items []string) itemEffects {
 		fx.investor += it.Investor
 		fx.devCommunity += it.DevCommunity
 		fx.burnout += it.Burnout
+		fx.xpPct += it.XPPct
+		fx.levelStats += it.LevelStats
 	}
 	return fx
 }

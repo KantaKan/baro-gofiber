@@ -20,6 +20,8 @@ func runAtIPOChoice(t *testing.T, seed uint64) *domain.StartupRun {
 		switch run.Stage {
 		case domain.StartupStageItem:
 			_ = PickItem(run, 0)
+		case domain.StartupStagePerk:
+			_ = PickPerk(run, 0)
 		case domain.StartupStageHub:
 			run.Staff[0].Burnout = 0
 			if err := StartProject(run, "Web App", "Education", nil, t0); err != nil {

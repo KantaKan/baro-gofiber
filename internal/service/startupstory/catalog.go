@@ -13,7 +13,7 @@ const (
 	BossDuration    = 90
 	FounderOffers   = 3
 	CandidateOffers = 3
-	ReviewScale     = 0.6
+	ReviewScale     = 0.56
 	MoneyPerPoint   = 15
 	FansPerPoint    = 2
 	SalaryRate      = 150
@@ -282,6 +282,8 @@ type StartupItem struct {
 	Investor     int     `json:"investor"`
 	DevCommunity int     `json:"dev_community"`
 	Burnout      int     `json:"burnout,omitempty"`
+	XPPct        int     `json:"xp_pct,omitempty"`
+	LevelStats   int     `json:"level_stats,omitempty"`
 }
 
 var itemCatalog = []StartupItem{
@@ -294,6 +296,9 @@ var itemCatalog = []StartupItem{
 	{ID: "pitch-deck", Name: "Pitch Deck", Icon: "📊", Rarity: ItemRarityLegendary, Desc: "+2 Investor review", Investor: 2, PowerMult: 1, DurationMult: 1},
 	{ID: "legacy-codebase", Name: "Legacy Codebase", Icon: "☠️", Rarity: ItemRarityCursed, Desc: "×1.3 power, +6 bugs", Bugs: 6, PowerMult: 1.3, DurationMult: 1},
 	{ID: "crunch-culture", Name: "Crunch Culture", Icon: "☠️", Rarity: ItemRarityCursed, Desc: "−40% duration, −1 all stats, much more burnout", AllStats: -1, PowerMult: 1, DurationMult: 0.6},
+	{ID: "udemy-course", Name: "Udemy Course (on sale)", Icon: "📚", Rarity: ItemRarityCommon, Desc: "Level-ups give +1 extra stat", PowerMult: 1, DurationMult: 1, LevelStats: 1},
+	{ID: "senior-mentor", Name: "Senior Mentor", Icon: "🧑‍🏫", Rarity: ItemRarityRare, Desc: "+50% XP for everyone", PowerMult: 1, DurationMult: 1, XPPct: 50},
+	{ID: "kopi-addiction", Name: "Kopi Addiction", Icon: "☕", Rarity: ItemRarityCommon, Desc: "+30% XP, +3 burnout per project", PowerMult: 1, DurationMult: 1, XPPct: 30, Burnout: 3},
 	{ID: "team-retreat", Name: "Team Retreat Fund", Icon: "🏖️", Rarity: ItemRarityRare, Desc: "−5 burnout gain per project for everyone", PowerMult: 1, DurationMult: 1, Burnout: -5},
 }
 

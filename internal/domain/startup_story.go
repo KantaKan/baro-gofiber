@@ -38,7 +38,7 @@ const (
 
 	StartupBoardWeekly  = "weekly"
 	StartupBoardDeepest = "deepest"
-	StartupBoardFame   = "fame"
+	StartupBoardFame    = "fame"
 
 	StartupLeaderboardLimit = 100
 )
@@ -106,6 +106,7 @@ type StartupDev struct {
 	XP        int      `bson:"xp,omitempty" json:"xp,omitempty"`
 	Burnout   int      `bson:"burnout,omitempty" json:"burnout,omitempty"`
 	Perks     []string `bson:"perks,omitempty" json:"perks,omitempty"`
+	XPNext    int      `bson:"xp_next,omitempty" json:"xp_next,omitempty"`
 }
 
 type StartupPitch struct {
@@ -191,6 +192,7 @@ type StartupRun struct {
 	WorldEvent    string               `bson:"world_event,omitempty" json:"world_event,omitempty"`
 	BossGimmick   string               `bson:"boss_gimmick,omitempty" json:"boss_gimmick,omitempty"`
 	PendingPerk   *StartupPendingPerk  `bson:"pending_perk,omitempty" json:"pending_perk,omitempty"`
+	PerkQueue     []string             `bson:"perk_queue,omitempty" json:"-"`
 	PendingEvent  *StartupPendingEvent `bson:"pending_event,omitempty" json:"pending_event,omitempty"`
 	ResumeStage   string               `bson:"resume_stage,omitempty" json:"-"`
 	NextBoss      string               `bson:"next_boss,omitempty" json:"next_boss,omitempty"`

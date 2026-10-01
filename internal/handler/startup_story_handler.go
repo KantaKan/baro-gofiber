@@ -194,6 +194,24 @@ func (h *StartupStoryHandler) PickItem(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Item drafted", run)
 }
 
+func (h *StartupStoryHandler) PickPerk(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		Index int `json:"index"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.PickPerk(c.UserContext(), player, body.Index)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Perk picked", run)
+}
+
 func (h *StartupStoryHandler) IPOChoice(c *fiber.Ctx) error {
 	player, ok := startupPlayer(c)
 	if !ok {

@@ -112,6 +112,10 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 	}
 	for run.Status == domain.StartupStatusActive && run.Act < 60 {
 		switch run.Stage {
+		case domain.StartupStagePerk:
+			if err := PickPerk(run, 0); err != nil {
+				t.Fatal(err)
+			}
 		case domain.StartupStageIPOChoice:
 			reachedIPO = true
 			if err := ChooseAfterIPO(run, smart, t0); err != nil {
@@ -146,10 +150,14 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 				t.Fatal(err)
 			}
 		case domain.StartupStageDeveloping:
+			outOf := 40
+			if run.Project.Boss == BossIPO {
+				outOf = 50
+			}
 			if err := Ship(run, run.Project.EndsAt); err != nil {
 				t.Fatal(err)
 			}
-			totals = append(totals, run.LastResult.Total)
+			totals = append(totals, run.LastResult.Total*40/outOf)
 		default:
 			t.Fatalf("unexpected stage %s", run.Stage)
 		}
