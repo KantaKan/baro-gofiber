@@ -50,6 +50,7 @@ type Overview struct {
 	Perks              []PerkInfo            `json:"perks"`
 	OSSUnlocked        bool                  `json:"oss_unlocked"`
 	OptOut     bool                  `json:"opt_out"`
+	ComboRatings map[string]string     `json:"combo_ratings,omitempty"`
 }
 
 type Service struct {
@@ -113,12 +114,21 @@ func (s *Service) Overview(ctx context.Context, player Player) (*Overview, error
 	if err != nil {
 		return nil, err
 	}
-	typeNames := make([]string, len(productTypes))
-	for i, t := range productTypes {
-		typeNames[i] = t.Name
+	typeNames := make([]string, 0, len(productTypes))
+	for _, t := range productTypes {
+		if t.OSSOnly && (run == nil || !run.OSS) {
+			continue
+		}
+		typeNames = append(typeNames, t.Name)
 	}
 	items := append(append([]StartupItem{}, itemCatalog...), unlockableItems...)
-	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OSSUnlocked: ossFounderUnlocked(studio), OptOut: optOut}, nil
+	ratings := map[string]string{}
+	for _, key := range studio.DiscoveredCombos {
+		if r, ok := ratingForComboKey(key); ok {
+			ratings[key] = r
+		}
+	}
+	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OSSUnlocked: ossFounderUnlocked(studio), OptOut: optOut, ComboRatings: ratings}, nil
 }
 
 func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*domain.StartupRun, error) {
@@ -175,6 +185,16 @@ func (s *Service) PickFounder(ctx context.Context, player Player, index int) (*d
 func (s *Service) StartProject(ctx context.Context, player Player, typeName, theme string, staffIDs []string) (*domain.StartupRun, error) {
 	return s.mutate(ctx, player, func(run *domain.StartupRun, now time.Time) error {
 		return StartProject(run, typeName, theme, staffIDs, now)
+	})
+}
+
+func (s *Service) StartProjectPitch(ctx context.Context, player Player, pitchIndex int, staffIDs []string) (*domain.StartupRun, error) {
+	return s.mutate(ctx, player, func(run *domain.StartupRun, now time.Time) error {
+		if pitchIndex < 0 || pitchIndex >= len(run.Pitches) {
+			return domain.ErrStartupInvalidChoice
+		}
+		p := run.Pitches[pitchIndex]
+		return StartProject(run, p.Type, p.Theme, staffIDs, now)
 	})
 }
 
