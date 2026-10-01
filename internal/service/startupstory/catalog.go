@@ -2,6 +2,7 @@ package startupstory
 
 import (
 	"math"
+	"strings"
 
 	"gofiber-baro/internal/domain"
 )
@@ -233,18 +234,29 @@ type productType struct {
 	Weights [4]float64 // frontend, backend, design, debug
 	Great   []string
 	Meh     []string
+	OSSOnly bool
 }
 
 var productTypes = []productType{
 	{Name: "Web App", Weights: [4]float64{0.4, 0.3, 0.2, 0.1}, Great: []string{"Productivity", "Education"}, Meh: []string{"Travel"}},
-	{Name: "Mobile App", Weights: [4]float64{0.4, 0.2, 0.3, 0.1}, Great: []string{"Food Delivery", "Health", "Social"}, Meh: []string{"Productivity"}},
-	{Name: "Game", Weights: [4]float64{0.3, 0.1, 0.4, 0.2}, Great: []string{"Thai Culture", "Social"}, Meh: []string{"Fintech", "Health"}},
-	{Name: "AI Chatbot", Weights: [4]float64{0.2, 0.4, 0.1, 0.3}, Great: []string{"Education", "Health", "Travel"}, Meh: []string{"Thai Culture"}},
+	{Name: "Mobile App", Weights: [4]float64{0.4, 0.2, 0.3, 0.1}, Great: []string{"Food Delivery", "Health", "Social", "Dating", "Pets"}, Meh: []string{"Productivity"}},
+	{Name: "Game", Weights: [4]float64{0.3, 0.1, 0.4, 0.2}, Great: []string{"Thai Culture", "Social", "Esports", "K-pop/Idols"}, Meh: []string{"Fintech", "Health"}},
+	{Name: "AI Chatbot", Weights: [4]float64{0.2, 0.4, 0.1, 0.3}, Great: []string{"Education", "Health", "Travel"}, Meh: []string{"Thai Culture", "Dating"}},
 	{Name: "API/SaaS", Weights: [4]float64{0.1, 0.5, 0.1, 0.3}, Great: []string{"Fintech", "Productivity"}, Meh: []string{"Social", "Thai Culture"}},
-	{Name: "Browser Extension", Weights: [4]float64{0.4, 0.2, 0.2, 0.2}, Great: []string{"Productivity"}, Meh: []string{"Food Delivery", "Travel"}},
+	{Name: "Browser Extension", Weights: [4]float64{0.4, 0.2, 0.2, 0.2}, Great: []string{"Productivity", "Crypto"}, Meh: []string{"Food Delivery", "Travel"}},
+	{Name: "Dev Tool/CLI", Weights: [4]float64{0.2, 0.5, 0.1, 0.2}, Great: []string{"Productivity", "Government/Tax"}, Meh: []string{"Dating", "K-pop/Idols"}},
+	{Name: "LINE Bot", Weights: [4]float64{0.2, 0.4, 0.2, 0.2}, Great: []string{"Street Food", "Thai Culture", "Government/Tax"}, Meh: []string{"Crypto", "Esports"}},
+	{Name: "Web3 dApp", Weights: [4]float64{0.2, 0.5, 0.1, 0.2}, Great: []string{"Crypto", "Esports"}, Meh: []string{"Government/Tax", "Health"}},
+	{Name: "Data Dashboard", Weights: [4]float64{0.3, 0.3, 0.3, 0.1}, Great: []string{"Fintech", "Government/Tax", "Productivity"}, Meh: []string{"Dating", "K-pop/Idols"}},
+	{Name: "IoT Gadget", Weights: [4]float64{0.2, 0.4, 0.2, 0.2}, Great: []string{"Health", "Food Delivery"}, Meh: []string{"Productivity", "Travel"}},
+	{Name: "VR Game", Weights: [4]float64{0.2, 0.2, 0.4, 0.2}, Great: []string{"Esports", "K-pop/Idols", "Social"}, Meh: []string{"Fintech", "Government/Tax"}},
+	{Name: "Open-Source Library", Weights: [4]float64{0.3, 0.4, 0.1, 0.2}, Great: []string{"Education", "Productivity"}, Meh: []string{"Dating", "Fintech"}, OSSOnly: true},
 }
 
-var themes = []string{"Food Delivery", "Fintech", "Education", "Health", "Thai Culture", "Social", "Productivity", "Travel"}
+var themes = []string{
+	"Food Delivery", "Fintech", "Education", "Health", "Thai Culture", "Social", "Productivity", "Travel",
+	"Crypto", "K-pop/Idols", "Street Food", "Dating", "Pets", "Esports", "Government/Tax",
+}
 
 var comboMultipliers = map[string]float64{"great": 1.4, "good": 1.1, "meh": 0.8}
 
@@ -394,4 +406,16 @@ func comboFor(t productType, theme string) string {
 		}
 	}
 	return "good"
+}
+
+func ratingForComboKey(key string) (string, bool) {
+	typeName, theme, ok := strings.Cut(key, "|")
+	if !ok {
+		return "", false
+	}
+	t, ok := findType(typeName)
+	if !ok || !validTheme(theme) {
+		return "", false
+	}
+	return comboFor(t, theme), true
 }

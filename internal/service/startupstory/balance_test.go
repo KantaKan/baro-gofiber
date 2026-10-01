@@ -34,17 +34,6 @@ func (b botStats) ipoRate() float64     { return float64(b.ipo) / float64(b.runs
 func (b botStats) perfectRate() float64 { return float64(b.perfect) / float64(b.projects) }
 func (b botStats) firstAvg() float64    { return float64(b.firstTotal) / float64(b.runs) }
 
-func teamPower(run *domain.StartupRun, t productType, theme string) float64 {
-	power := 0.0
-	for _, d := range run.Staff {
-		s := stats(d)
-		for i := range s {
-			power += float64(s[i]) * t.Weights[i]
-		}
-	}
-	return power * comboMultipliers[comboFor(t, theme)] * marketMult(run.Market, theme)
-}
-
 const BotRestAt = 60
 
 func maxBurnout(run *domain.StartupRun) int {
@@ -131,9 +120,12 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 				smartHire(run)
 				best := -1.0
 				for _, pt := range productTypes {
+					if pt.OSSOnly && !run.OSS {
+						continue
+					}
 					for _, th := range themes {
-						if p := teamPower(run, pt, th); p > best {
-							best, typ, theme = p, pt.Name, th
+						if score := teamPower(run, pt, th); score > best {
+							best, typ, theme = score, pt.Name, th
 						}
 					}
 				}

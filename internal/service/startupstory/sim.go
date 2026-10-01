@@ -178,7 +178,8 @@ func StartProject(run *domain.StartupRun, typeName, theme string, staffIDs []str
 	if run.Stage != domain.StartupStageHub {
 		return domain.ErrStartupWrongStage
 	}
-	if _, ok := findType(typeName); !ok || !validTheme(theme) {
+	pt, ok := findType(typeName)
+	if !ok || !validTheme(theme) || (pt.OSSOnly && !run.OSS) {
 		return domain.ErrStartupInvalidChoice
 	}
 	if len(staffIDs) == 0 {

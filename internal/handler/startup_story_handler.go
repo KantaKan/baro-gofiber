@@ -132,14 +132,21 @@ func (h *StartupStoryHandler) StartProject(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
 	}
 	var body struct {
-		Type     string   `json:"type"`
-		Theme    string   `json:"theme"`
-		StaffIDs []string `json:"staff_ids"`
+		Type       string   `json:"type"`
+		Theme      string   `json:"theme"`
+		StaffIDs   []string `json:"staff_ids"`
+		PitchIndex *int     `json:"pitch_index"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	run, err := h.service.StartProject(c.UserContext(), player, body.Type, body.Theme, body.StaffIDs)
+	var run *domain.StartupRun
+	var err error
+	if body.PitchIndex != nil {
+		run, err = h.service.StartProjectPitch(c.UserContext(), player, *body.PitchIndex, body.StaffIDs)
+	} else {
+		run, err = h.service.StartProject(c.UserContext(), player, body.Type, body.Theme, body.StaffIDs)
+	}
 	if err != nil {
 		return startupError(c, err)
 	}
