@@ -45,6 +45,35 @@ func teamPower(run *domain.StartupRun, t productType, theme string) float64 {
 	return power * comboMultipliers[comboFor(t, theme)] * marketMult(run.Market, theme)
 }
 
+const BotRestAt = 60
+
+func maxBurnout(run *domain.StartupRun) int {
+	m := 0
+	for _, d := range run.Staff {
+		m = max(m, d.Burnout)
+	}
+	return m
+}
+
+func restedStaff(run *domain.StartupRun) []string {
+	var ids []string
+	for _, d := range run.Staff {
+		if d.Burnout < BotRestAt {
+			ids = append(ids, d.ID)
+		}
+	}
+	if len(ids) == 0 {
+		best := run.Staff[0]
+		for _, d := range run.Staff {
+			if d.Burnout < best.Burnout {
+				best = d
+			}
+		}
+		ids = []string{best.ID}
+	}
+	return ids
+}
+
 func smartHire(run *domain.StartupRun) {
 	for len(run.Staff) < TeamCap(run.Act) && len(run.Candidates) > 0 {
 		have := map[string]bool{}
@@ -89,7 +118,11 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 				t.Fatal(err)
 			}
 		case domain.StartupStageItem:
-			if err := PickItem(run, 0); err != nil {
+			pick := 0
+			if smart && maxBurnout(run) >= BotRestAt {
+				pick = SkipItemForRetreat
+			}
+			if err := PickItem(run, pick); err != nil {
 				t.Fatal(err)
 			}
 		case domain.StartupStageHub:
@@ -105,7 +138,11 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 					}
 				}
 			}
-			if err := StartProject(run, typ, theme, nil, t0); err != nil {
+			var staff []string
+			if smart {
+				staff = restedStaff(run)
+			}
+			if err := StartProject(run, typ, theme, staff, t0); err != nil {
 				t.Fatal(err)
 			}
 		case domain.StartupStageDeveloping:

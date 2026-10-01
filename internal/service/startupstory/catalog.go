@@ -281,6 +281,7 @@ type StartupItem struct {
 	DurationMult float64 `json:"duration_mult"`
 	Investor     int     `json:"investor"`
 	DevCommunity int     `json:"dev_community"`
+	Burnout      int     `json:"burnout,omitempty"`
 }
 
 var itemCatalog = []StartupItem{
@@ -292,7 +293,8 @@ var itemCatalog = []StartupItem{
 	{ID: "dark-mode", Name: "Dark Mode", Icon: "🌙", Rarity: ItemRarityRare, Desc: "+1 Dev Community review", DevCommunity: 1, PowerMult: 1, DurationMult: 1},
 	{ID: "pitch-deck", Name: "Pitch Deck", Icon: "📊", Rarity: ItemRarityLegendary, Desc: "+2 Investor review", Investor: 2, PowerMult: 1, DurationMult: 1},
 	{ID: "legacy-codebase", Name: "Legacy Codebase", Icon: "☠️", Rarity: ItemRarityCursed, Desc: "×1.3 power, +6 bugs", Bugs: 6, PowerMult: 1.3, DurationMult: 1},
-	{ID: "crunch-culture", Name: "Crunch Culture", Icon: "☠️", Rarity: ItemRarityCursed, Desc: "−40% duration, −1 all stats", AllStats: -1, PowerMult: 1, DurationMult: 0.6},
+	{ID: "crunch-culture", Name: "Crunch Culture", Icon: "☠️", Rarity: ItemRarityCursed, Desc: "−40% duration, −1 all stats, much more burnout", AllStats: -1, PowerMult: 1, DurationMult: 0.6},
+	{ID: "team-retreat", Name: "Team Retreat Fund", Icon: "🏖️", Rarity: ItemRarityRare, Desc: "−5 burnout gain per project for everyone", PowerMult: 1, DurationMult: 1, Burnout: -5},
 }
 
 var rarityWeights = []struct {

@@ -71,7 +71,7 @@ func TestPickItemAdvancesToHub(t *testing.T) {
 
 func TestPickItemGuards(t *testing.T) {
 	run := shipToDraft(t, 33)
-	if err := PickItem(run, -1); !errors.Is(err, domain.ErrStartupInvalidChoice) {
+	if err := PickItem(run, -2); !errors.Is(err, domain.ErrStartupInvalidChoice) {
 		t.Fatalf("expected invalid choice, got %v", err)
 	}
 	if err := PickItem(run, len(run.ItemOffer)); !errors.Is(err, domain.ErrStartupInvalidChoice) {

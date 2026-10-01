@@ -377,10 +377,13 @@ func PickItem(run *domain.StartupRun, index int) error {
 	if run.Stage != domain.StartupStageItem {
 		return domain.ErrStartupWrongStage
 	}
-	if index < 0 || index >= len(run.ItemOffer) {
+	if index == SkipItemForRetreat {
+		teamRetreat(run)
+	} else if index < 0 || index >= len(run.ItemOffer) {
 		return domain.ErrStartupInvalidChoice
+	} else {
+		run.Items = append(run.Items, run.ItemOffer[index])
 	}
-	run.Items = append(run.Items, run.ItemOffer[index])
 	run.ItemOffer = nil
 	run.Stage = domain.StartupStageHub
 	return nil
@@ -393,6 +396,7 @@ type itemEffects struct {
 	durMult      float64
 	investor     int
 	devCommunity int
+	burnout      int
 }
 
 func effectsOf(items []string) itemEffects {
@@ -414,6 +418,7 @@ func effectsOf(items []string) itemEffects {
 		fx.durMult *= it.DurationMult
 		fx.investor += it.Investor
 		fx.devCommunity += it.DevCommunity
+		fx.burnout += it.Burnout
 	}
 	return fx
 }
