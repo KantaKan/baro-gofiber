@@ -87,6 +87,12 @@ func main() {
 		log.Fatal("Failed to ensure GOD event indexes:", err)
 	}
 	cancelIndexes()
+	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.StartupStoryRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure Startup Story indexes:", err)
+	}
+	cancelIndexes()
 
 	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
 
@@ -154,6 +160,7 @@ func main() {
 		Character:    container.CharacterHandler,
 		Showcase:     container.ShowcaseHandler,
 		GodEvent:     container.GodEventHandler,
+		StartupStory: container.StartupStoryHandler,
 		Audit:        container.AuditMiddleware,
 	}
 

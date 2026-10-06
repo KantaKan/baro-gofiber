@@ -18,6 +18,7 @@ import (
 	reflectionService "gofiber-baro/internal/service/reflection"
 	"gofiber-baro/internal/service/reward"
 	"gofiber-baro/internal/service/showcase"
+	"gofiber-baro/internal/service/startupstory"
 	userService "gofiber-baro/internal/service/user"
 	"gofiber-baro/internal/storage"
 	"gofiber-baro/pkg/middleware"
@@ -43,6 +44,7 @@ type Container struct {
 	CharacterRepo      *repository.BaroCharacterRepository
 	ShowcaseRepo       *repository.ShowcaseRepository
 	GodEventRepo       *repository.GodEventRepository
+	StartupStoryRepo   *repository.StartupStoryRepository
 
 	StampStorage storage.Storage
 
@@ -70,6 +72,7 @@ type Container struct {
 	AttendanceStatsService      *attendance.StatsService
 	AttendanceOverviewService   *attendance.OverviewService
 	AttendanceExportService     *attendance.ExportService
+	StartupStoryService         *startupstory.Service
 
 	UserHandler         *handler.UserHandler
 	AdminHandler        *handler.AdminHandler
@@ -85,6 +88,7 @@ type Container struct {
 	CharacterHandler    *handler.BaroCharacterHandler
 	ShowcaseHandler     *handler.ShowcaseHandler
 	GodEventHandler     *handler.GodEventHandler
+	StartupStoryHandler *handler.StartupStoryHandler
 
 	AuditMiddleware fiber.Handler
 }
@@ -115,6 +119,7 @@ func (c *Container) initRepositories() {
 	c.CharacterRepo = repository.NewBaroCharacterRepository(c.DB)
 	c.ShowcaseRepo = repository.NewShowcaseRepository(c.DB)
 	c.GodEventRepo = repository.NewGodEventRepository(c.DB)
+	c.StartupStoryRepo = repository.NewStartupStoryRepository(c.DB)
 }
 
 func (c *Container) initStorage() {
@@ -147,6 +152,7 @@ func (c *Container) initServices() {
 	c.GodEventService = godevent.NewService(c.GodEventRepo)
 	c.MilestoneService = milestone.NewService(c.UserRepo, c.GiftBoxRepo, c.HolidayService)
 	c.AchievementService = achievement.NewService(c.UserRepo, c.GiftBoxRepo, c.HolidayService)
+	c.StartupStoryService = startupstory.NewService(c.StartupStoryRepo)
 
 	c.AttendanceCodeService = attendance.NewCodeService(c.AttendanceCodeRepo, c.AttendanceRepo, c.UserService)
 	c.AttendanceSubmissionService = attendance.NewSubmissionService(c.AttendanceRepo, c.UserService)
@@ -177,6 +183,7 @@ func (c *Container) initHandlers() {
 	c.CharacterHandler = handler.NewBaroCharacterHandler(c.CharacterService, c.CharacterGrowthService, c.CharacterOwnershipService)
 	c.ShowcaseHandler = handler.NewShowcaseHandler(c.ShowcaseService)
 	c.GodEventHandler = handler.NewGodEventHandler(c.GodEventService)
+	c.StartupStoryHandler = handler.NewStartupStoryHandler(c.StartupStoryService)
 
 	c.AuditMiddleware = middleware.AuditMiddleware(c.AuditLogRepo)
 }

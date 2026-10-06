@@ -25,6 +25,7 @@ type Handlers struct {
 	Character    *handler.BaroCharacterHandler
 	Showcase     *handler.ShowcaseHandler
 	GodEvent     *handler.GodEventHandler
+	StartupStory *handler.StartupStoryHandler
 	Audit        fiber.Handler
 }
 
@@ -109,6 +110,22 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	lawn.Post("/:ownerId/reactions", h.Showcase.React)
 
 	app.Get("/god-events", middleware.AuthMiddleware, h.GodEvent.List)
+
+	startup := app.Group("/startup-story", middleware.AuthMiddleware)
+	startup.Get("", h.StartupStory.Overview)
+	startup.Get("/leaderboard", h.StartupStory.Leaderboard)
+	startup.Put("/opt-out", h.StartupStory.OptOut)
+	startup.Post("/runs", h.StartupStory.StartRun)
+	startup.Post("/runs/active/founder", h.StartupStory.PickFounder)
+	startup.Post("/runs/active/projects", h.StartupStory.StartProject)
+	startup.Post("/runs/active/ship", h.StartupStory.Ship)
+	startup.Post("/runs/active/item", h.StartupStory.PickItem)
+	startup.Post("/runs/active/abandon", h.StartupStory.Abandon)
+	startup.Post("/runs/active/ipo-choice", h.StartupStory.IPOChoice)
+	startup.Post("/runs/active/perk", h.StartupStory.PickPerk)
+	startup.Post("/runs/active/event", h.StartupStory.PickEvent)
+	startup.Post("/runs/active/hire", h.StartupStory.Hire)
+	startup.Delete("/runs/active/staff/:id", h.StartupStory.Dismiss)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
