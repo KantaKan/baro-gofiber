@@ -612,7 +612,7 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 			result.Total += score
 		}
 	}
-	result.CloudBill = cloudBill(run)
+	result.CloudBill = cloudBill(run) + infra.scaleBill
 	result.MoneyDelta = int(math.Round(float64(result.Total*result.Total*MoneyPerPoint)*sc.moneyMult)) - salaries - result.CloudBill
 	result.FansDelta = int(math.Round(float64(result.Total*result.Total*FansPerPoint) * sc.fansMult))
 	if infra.ratio > 1 {

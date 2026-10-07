@@ -29,6 +29,10 @@ const (
 	CDNAppCut         = 0.7
 	CDNUsersBias      = 0.5
 	ContainerDiscount = 0.7
+
+	QueueSpikeShare    = 1.0 / 3
+	AutoscaleMaxExtra  = 1.0
+	AutoscalePer100Req = 150
 )
 
 var tierCapacity = [4]int{0, 300, 700, 1200}
@@ -109,6 +113,14 @@ var infraCatalog = []InfraItem{
 		What: "Every change is tested and deployed automatically.", Need: "Bugs keep slipping into releases.",
 		Effect: "−1 bug per ship.",
 		Thai:   "ทุกการแก้โค้ดถูกทดสอบและนำขึ้นระบบอัตโนมัติ บั๊กหลุดไปถึงผู้ใช้น้อยลง"},
+	{ID: "autoscale", Branch: "servers", Fixes: "spikes", Name: "Auto-scaling", Act: 3, Price: 4000, Bill: 200,
+		What: "Rents extra servers automatically when traffic jumps, and returns them after.", Need: "Traffic spikes keep catching you out.",
+		Effect: "Covers app overloads up to 2x your server capacity. You pay ฿150 per extra 100 req/s it uses.",
+		Thai:   "เพิ่มเซิร์ฟเวอร์ให้อัตโนมัติเมื่อคนเข้าเยอะ แล้วคืนเมื่อเงียบลง จ่ายตามที่ใช้จริง"},
+	{ID: "queue", Branch: "reliability", Fixes: "spikes", Name: "Message Queue", Act: 3, Price: 3500, Bill: 300,
+		What: "Lines up sudden bursts of work so your servers handle them at their own pace.", Need: "A viral moment is about to hit.",
+		Effect: "Traffic spikes from events hit at one third of their size.",
+		Thai:   "ต่อคิวงานที่เข้ามาพร้อมกันจำนวนมาก ให้เซิร์ฟเวอร์ค่อย ๆ ทำทีละงาน ลดผลกระทบจากช่วงคนเข้าพุ่ง"},
 	{ID: "monitoring", Branch: "reliability", Fixes: "bugs", Name: "Monitoring", Act: 1, Price: 800, Bill: 100,
 		What: "Dashboards that show how busy your servers and database are.", Need: "You want to see problems before users do.",
 		Effect: "Shows the App and DB meters before you ship. −1 bug per ship.",
@@ -119,7 +131,7 @@ var infraCatalog = []InfraItem{
 		Thai:   "สำรองข้อมูลไว้อีกที่ทุกวัน ถ้ามีคนลบฐานข้อมูลจริง ก็กู้คืนได้ทันที"},
 }
 
-var partIDs = []string{"lb", "index", "monitoring", "backups", "cache", "cdn", "containers", "cicd"}
+var partIDs = []string{"lb", "index", "monitoring", "backups", "cache", "cdn", "containers", "cicd", "autoscale", "queue"}
 
 type InfraPrices struct {
 	Upgrade []int       `json:"upgrade"`
@@ -155,7 +167,11 @@ func appCapacity(inf *domain.StartupInfra) int {
 }
 
 func trafficLoad(run *domain.StartupRun) (app, db int) {
-	raw := float64(run.Fans) / FansPerRequest * (1 + run.NextTraffic)
+	spike := run.NextTraffic
+	if hasPart(run.Infra, "queue") {
+		spike *= QueueSpikeShare
+	}
+	raw := float64(run.Fans) / FansPerRequest * (1 + spike)
 	appLoad, dbLoad := raw, raw
 	if hasPart(run.Infra, "cdn") {
 		appLoad *= CDNAppCut
@@ -314,6 +330,7 @@ type infraOutcome struct {
 	bugs       int
 	powerMult  float64
 	usersBias  float64
+	scaleBill  int
 	postmortem string
 }
 
@@ -324,6 +341,12 @@ func infraEffects(run *domain.StartupRun) infraOutcome {
 		return out
 	}
 	load := currentLoad(run)
+	if hasPart(inf, "autoscale") && load.App > load.AppCap {
+		extra := min(load.App-load.AppCap, int(float64(load.AppCap)*AutoscaleMaxExtra))
+		out.scaleBill = int(math.Ceil(float64(extra)/100)) * AutoscalePer100Req
+		addLog(run, fmt.Sprintf("Auto-scaling rented %d extra req/s for the launch (฿%d).", extra, out.scaleBill))
+		load.AppCap += extra
+	}
 	appRatio := float64(load.App) / float64(max(1, load.AppCap))
 	dbRatio := float64(load.DB) / float64(max(1, load.DBCap))
 	out.ratio = max(appRatio, dbRatio)

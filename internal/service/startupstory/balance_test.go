@@ -124,6 +124,10 @@ func smartInfra(run *domain.StartupRun) {
 		app, db := l.App*13/10, l.DB*13/10
 		var err error
 		switch {
+		case run.Act >= 3 && !hasPart(inf, "queue") && run.Money > 20000:
+			err = InfraAction(run, "part", 0, "queue")
+		case run.Act >= 3 && !hasPart(inf, "autoscale") && run.Money > 20000:
+			err = InfraAction(run, "part", 0, "autoscale")
 		case db > l.DBCap && !hasPart(inf, "index"):
 			err = InfraAction(run, "part", 0, "index")
 		case db > l.DBCap && inf.DB == "sqlite":
