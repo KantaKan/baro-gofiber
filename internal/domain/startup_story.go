@@ -165,7 +165,8 @@ type StartupServer struct {
 type StartupInfra struct {
 	Servers []StartupServer `bson:"servers" json:"servers"`
 	DB      string          `bson:"db" json:"db"`
-	Parts   []string        `bson:"parts,omitempty" json:"parts"`
+	Parts    []string        `bson:"parts,omitempty" json:"parts"`
+	Replicas int             `bson:"replicas,omitempty" json:"replicas,omitempty"`
 }
 
 type StartupLoad struct {
@@ -173,6 +174,9 @@ type StartupLoad struct {
 	AppCap int `json:"app_cap"`
 	DB     int `json:"db"`
 	DBCap  int `json:"db_cap"`
+
+	NextServer  int `json:"next_server"`
+	NextReplica int `json:"next_replica"`
 }
 
 type StartupRun struct {

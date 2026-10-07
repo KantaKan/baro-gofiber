@@ -21,7 +21,7 @@ func TestInfraTeachesScaling(t *testing.T) {
 	if without < 150 {
 		t.Errorf("a team that never scales should overload by act 2 in most runs, got %d/200", without)
 	}
-	if with*100 > reachedAct3*15 {
-		t.Errorf("a team that scales sensibly should rarely overload in acts 1-3 (only DB spikes, which cache/replicas fix in 25b), got %d/%d", with, reachedAct3)
+	if with*10 > reachedAct3 {
+		t.Errorf("a team that scales sensibly should almost never overload in acts 1-3, got %d/%d", with, reachedAct3)
 	}
 }

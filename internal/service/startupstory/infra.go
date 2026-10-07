@@ -21,6 +21,14 @@ const (
 	OverloadBugs    = 10
 
 	OutageHeadroomBoost = 0.1
+
+	ReplicaPrice      = 2500
+	ReplicaBill       = 250
+	ReplicaCapacity   = 0.6
+	CacheDBCut        = 0.6
+	CDNAppCut         = 0.7
+	CDNUsersBias      = 0.5
+	ContainerDiscount = 0.7
 )
 
 var tierCapacity = [4]int{0, 300, 700, 1200}
@@ -81,6 +89,26 @@ var infraCatalog = []InfraItem{
 		What: "Like a book's index: the database finds rows without reading every page.", Need: "Your DB meter is filling up.",
 		Effect: "−30% DB load. Cheap. Good database design first, bigger hardware second.",
 		Thai:   "เหมือนสารบัญหนังสือ ฐานข้อมูลหาข้อมูลได้โดยไม่ต้องอ่านทุกแถว ลดโหลดฐานข้อมูล 30%"},
+	{ID: "replica", Branch: "database", Fixes: "db", Name: "Read Replica", Act: 2, Price: ReplicaPrice, Bill: ReplicaBill,
+		What: "A live copy of your database that answers read-only questions.", Need: "Your DB meter is red even with indexes.",
+		Effect: "+60% DB capacity each. Not for the single-file database. Half price on the lightweight relational one.",
+		Thai:   "สำเนาฐานข้อมูลที่คอยตอบคำขอแบบอ่านอย่างเดียว เพิ่มความจุฐานข้อมูล ใช้กับฐานข้อมูลไฟล์เดียวไม่ได้"},
+	{ID: "cache", Branch: "speed", Fixes: "db", Name: "Cache", Act: 2, Price: 3000, Bill: 400,
+		What: "Keeps popular answers in memory so the database isn't asked the same thing twice.", Need: "Your DB meter is red but App is fine.",
+		Effect: "−40% DB load.",
+		Thai:   "เก็บคำตอบที่ถูกถามบ่อยไว้ในหน่วยความจำ ฐานข้อมูลจึงไม่ต้องตอบคำถามเดิมซ้ำ ลดโหลดฐานข้อมูล 40%"},
+	{ID: "cdn", Branch: "speed", Fixes: "app", Name: "CDN", Act: 2, Price: 2500, Bill: 300,
+		What: "Copies your images and files to servers near your users.", Need: "Your App meter is red and pages feel slow.",
+		Effect: "−30% App load, and the Users reviewer likes the speed.",
+		Thai:   "กระจายไฟล์และรูปภาพไปไว้ที่เซิร์ฟเวอร์ใกล้ผู้ใช้ เว็บโหลดเร็วขึ้น ลดโหลดเซิร์ฟเวอร์แอป 30%"},
+	{ID: "containers", Branch: "servers", Fixes: "bugs", Name: "Containers", Act: 2, Price: 1500, Bill: 100,
+		What: "Packs your app with everything it needs, so it runs the same everywhere.", Need: "You hear \"it works on my machine\".",
+		Effect: "−1 bug per ship, and new servers cost 30% less.",
+		Thai:   "แพ็กแอปพร้อมทุกอย่างที่ต้องใช้ รันที่ไหนก็เหมือนกัน เลิกพูดว่า \"เครื่องผมรันได้นะ\""},
+	{ID: "cicd", Branch: "reliability", Fixes: "bugs", Name: "CI/CD Pipeline", Act: 2, Price: 2000, Bill: 150,
+		What: "Every change is tested and deployed automatically.", Need: "Bugs keep slipping into releases.",
+		Effect: "−1 bug per ship.",
+		Thai:   "ทุกการแก้โค้ดถูกทดสอบและนำขึ้นระบบอัตโนมัติ บั๊กหลุดไปถึงผู้ใช้น้อยลง"},
 	{ID: "monitoring", Branch: "reliability", Fixes: "bugs", Name: "Monitoring", Act: 1, Price: 800, Bill: 100,
 		What: "Dashboards that show how busy your servers and database are.", Need: "You want to see problems before users do.",
 		Effect: "Shows the App and DB meters before you ship. −1 bug per ship.",
@@ -91,7 +119,7 @@ var infraCatalog = []InfraItem{
 		Thai:   "สำรองข้อมูลไว้อีกที่ทุกวัน ถ้ามีคนลบฐานข้อมูลจริง ก็กู้คืนได้ทันที"},
 }
 
-var partIDs = []string{"lb", "index", "monitoring", "backups"}
+var partIDs = []string{"lb", "index", "monitoring", "backups", "cache", "cdn", "containers", "cicd"}
 
 type InfraPrices struct {
 	Upgrade []int       `json:"upgrade"`
@@ -127,12 +155,18 @@ func appCapacity(inf *domain.StartupInfra) int {
 }
 
 func trafficLoad(run *domain.StartupRun) (app, db int) {
-	app = int(math.Round(float64(run.Fans) / FansPerRequest * (1 + run.NextTraffic)))
-	db = app
-	if hasPart(run.Infra, "index") {
-		db = db * 7 / 10
+	raw := float64(run.Fans) / FansPerRequest * (1 + run.NextTraffic)
+	appLoad, dbLoad := raw, raw
+	if hasPart(run.Infra, "cdn") {
+		appLoad *= CDNAppCut
 	}
-	return app, db
+	if hasPart(run.Infra, "index") {
+		dbLoad *= 0.7
+	}
+	if hasPart(run.Infra, "cache") {
+		dbLoad *= CacheDBCut
+	}
+	return int(math.Round(appLoad)), int(math.Round(dbLoad))
 }
 
 func currentLoad(run *domain.StartupRun) *domain.StartupLoad {
@@ -140,7 +174,23 @@ func currentLoad(run *domain.StartupRun) *domain.StartupLoad {
 		return nil
 	}
 	app, db := trafficLoad(run)
-	return &domain.StartupLoad{App: app, AppCap: appCapacity(run.Infra), DB: db, DBCap: databases[run.Infra.DB].Capacity}
+	return &domain.StartupLoad{App: app, AppCap: appCapacity(run.Infra), DB: db, DBCap: dbCapacity(run.Infra), NextServer: NextServerPrice(run), NextReplica: NextReplicaPrice(run)}
+}
+
+func dbCapacity(inf *domain.StartupInfra) int {
+	base := databases[inf.DB].Capacity
+	return base + int(math.Round(float64(base)*ReplicaCapacity*float64(inf.Replicas)))
+}
+
+func NextReplicaPrice(run *domain.StartupRun) int {
+	if run.Infra == nil {
+		return ReplicaPrice
+	}
+	price := ReplicaPrice * math.Pow(ServerPriceStep, float64(run.Infra.Replicas))
+	if run.Infra.DB == "mariadb" {
+		price /= 2
+	}
+	return int(math.Round(price/100)) * 100
 }
 
 func NextServerPrice(run *domain.StartupRun) int {
@@ -148,7 +198,11 @@ func NextServerPrice(run *domain.StartupRun) int {
 	if run.Infra != nil {
 		n = len(run.Infra.Servers)
 	}
-	return int(math.Round(ServerPrice*math.Pow(ServerPriceStep, float64(max(0, n-1)))/100)) * 100
+	price := ServerPrice * math.Pow(ServerPriceStep, float64(max(0, n-1)))
+	if hasPart(run.Infra, "containers") {
+		price *= ContainerDiscount
+	}
+	return int(math.Round(price/100)) * 100
 }
 
 func catalogItem(id string) (InfraItem, bool) {
@@ -206,8 +260,17 @@ func InfraAction(run *domain.StartupRun, action string, index int, id string) er
 			return err
 		}
 		inf.Parts = append(inf.Parts, id)
+	case "replica":
+		it, _ := catalogItem("replica")
+		if run.Act < it.Act || inf.DB == "sqlite" {
+			return domain.ErrStartupInvalidChoice
+		}
+		if err := spend(run, NextReplicaPrice(run)); err != nil {
+			return err
+		}
+		inf.Replicas++
 	case "db":
-		if _, ok := databases[id]; !ok || id == inf.DB {
+		if _, ok := databases[id]; !ok || id == inf.DB || (id == "sqlite" && inf.Replicas > 0) {
 			return domain.ErrStartupInvalidChoice
 		}
 		if err := spend(run, MigrationPrice); err != nil {
@@ -236,6 +299,7 @@ func cloudBill(run *domain.StartupRun) int {
 			bill += it.Bill
 		}
 	}
+	bill += ReplicaBill * inf.Replicas
 	for _, d := range run.Staff {
 		if d.Role == RoleDevOps {
 			return int(math.Round(float64(bill) * DevOpsBillCut))
@@ -249,6 +313,7 @@ type infraOutcome struct {
 	headroom   float64
 	bugs       int
 	powerMult  float64
+	usersBias  float64
 	postmortem string
 }
 
@@ -263,8 +328,13 @@ func infraEffects(run *domain.StartupRun) infraOutcome {
 	dbRatio := float64(load.DB) / float64(max(1, load.DBCap))
 	out.ratio = max(appRatio, dbRatio)
 	out.headroom = max(0, 1-out.ratio)
-	if hasPart(inf, "monitoring") {
-		out.bugs--
+	for _, id := range []string{"monitoring", "containers", "cicd"} {
+		if hasPart(inf, id) {
+			out.bugs--
+		}
+	}
+	if hasPart(inf, "cdn") {
+		out.usersBias = CDNUsersBias
 	}
 	switch inf.DB {
 	case "postgres":
@@ -295,8 +365,10 @@ func dbPostmortem(inf *domain.StartupInfra, load *domain.StartupLoad) string {
 		return lead + " Add indexes first: cheap, and the database stops reading every row."
 	case inf.DB == "sqlite":
 		return lead + " The single-file database is full. Move to a bigger database."
+	case !hasPart(inf, "cache"):
+		return lead + " Add a cache so popular answers never reach the database."
 	default:
-		return lead + " Even a big database has a limit. The next step is a cache or read replicas, so fewer queries reach it."
+		return lead + " Add a read replica to share the reading work."
 	}
 }
 
@@ -316,5 +388,9 @@ func appPostmortem(inf *domain.StartupInfra, load *domain.StartupLoad) string {
 	} else if weak.RAM < weak.CPU {
 		part = "RAM was"
 	}
-	return fmt.Sprintf("Your servers handled %d of %d requests per second. %s the bottleneck. Upgrade the weakest part, or add a server behind a load balancer.", load.AppCap, load.App, part)
+	hint := "Upgrade the weakest part, or add a server behind a load balancer."
+	if weak.CPU == 3 && weak.RAM == 3 && !hasPart(inf, "cdn") {
+		hint = "Your servers are maxed. A CDN would take the images and files off them."
+	}
+	return fmt.Sprintf("Your servers handled %d of %d requests per second. %s the bottleneck. %s", load.AppCap, load.App, part, hint)
 }

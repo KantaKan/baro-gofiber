@@ -564,6 +564,7 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	power *= sc.powerMult
 	power *= max(0.5, 1+run.NextPower)
 	infra := infraEffects(run)
+	sc.reviewer["Users"] += infra.usersBias
 	power *= infra.powerMult
 	if p.Boss == BossOutage {
 		power *= 1 + OutageHeadroomBoost*infra.headroom

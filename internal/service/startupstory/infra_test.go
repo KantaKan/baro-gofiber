@@ -109,3 +109,65 @@ func TestBackupsNeutraliseTheInternEvent(t *testing.T) {
 		t.Fatalf("backups should make the restore free, lost %d", before-run.Money)
 	}
 }
+
+func TestReplicaRules(t *testing.T) {
+	run := newHubRun(t, 53)
+	run.Money = 100000
+	run.Act = 2
+	if err := InfraAction(run, "replica", 0, ""); !errors.Is(err, domain.ErrStartupInvalidChoice) {
+		t.Fatalf("the single-file database can't have replicas, got %v", err)
+	}
+	run.Infra.DB = "mariadb"
+	if NextReplicaPrice(run) != 1300 {
+		t.Fatalf("lightweight relational replicas are half price (1250, rounded to 100), got %d", NextReplicaPrice(run))
+	}
+	if err := InfraAction(run, "replica", 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := dbCapacity(run.Infra); got != 1200+720 {
+		t.Fatalf("one replica adds 60%%, got %d", got)
+	}
+	if err := InfraAction(run, "db", 0, "sqlite"); !errors.Is(err, domain.ErrStartupInvalidChoice) {
+		t.Fatalf("can't go back to a single file with replicas, got %v", err)
+	}
+	run.Act = 1
+	if err := InfraAction(run, "replica", 0, ""); !errors.Is(err, domain.ErrStartupInvalidChoice) {
+		t.Fatalf("replicas unlock in act 2, got %v", err)
+	}
+}
+
+func TestSpeedPartsCutLoad(t *testing.T) {
+	run := &domain.StartupRun{Fans: 10000, Infra: &domain.StartupInfra{Servers: []domain.StartupServer{{CPU: 1, RAM: 1}}, DB: "postgres", Parts: []string{"cdn", "index", "cache"}}}
+	app, db := trafficLoad(run)
+	if app != 700 || db != 420 {
+		t.Fatalf("CDN -30%% app, index+cache -30%% and -40%% DB: got app %d db %d", app, db)
+	}
+	if out := infraEffects(run); out.usersBias != CDNUsersBias {
+		t.Fatalf("a CDN should please the Users reviewer, got %v", out.usersBias)
+	}
+}
+
+func TestContainersAndCICD(t *testing.T) {
+	run := &domain.StartupRun{Infra: &domain.StartupInfra{Servers: []domain.StartupServer{{CPU: 1, RAM: 1}, {CPU: 1, RAM: 1}}, DB: "sqlite"}}
+	plain := NextServerPrice(run)
+	run.Infra.Parts = []string{"containers", "cicd"}
+	if got := NextServerPrice(run); got != plain*7/10 {
+		t.Fatalf("containers make servers 30%% cheaper: %d vs %d", got, plain)
+	}
+	if out := infraEffects(run); out.bugs != -2 {
+		t.Fatalf("containers and CI/CD should each cut a bug, got %d", out.bugs)
+	}
+}
+
+func TestDBPostmortemPointsAtCacheThenReplicas(t *testing.T) {
+	run := &domain.StartupRun{Fans: 40000, Infra: &domain.StartupInfra{Servers: []domain.StartupServer{{CPU: 3, RAM: 3}}, DB: "postgres", Parts: []string{"index", "lb"}}}
+	run.Infra.Servers = append(run.Infra.Servers, run.Infra.Servers[0], run.Infra.Servers[0], run.Infra.Servers[0])
+	if out := infraEffects(run); !strings.Contains(out.postmortem, "cache") {
+		t.Fatalf("expected a cache hint, got %q", out.postmortem)
+	}
+	run.Infra.Parts = append(run.Infra.Parts, "cache")
+	run.Fans = 80000
+	if out := infraEffects(run); !strings.Contains(out.postmortem, "replica") {
+		t.Fatalf("expected a replica hint, got %q", out.postmortem)
+	}
+}

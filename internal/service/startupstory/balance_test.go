@@ -128,6 +128,10 @@ func smartInfra(run *domain.StartupRun) {
 			err = InfraAction(run, "part", 0, "index")
 		case db > l.DBCap && inf.DB == "sqlite":
 			err = InfraAction(run, "db", 0, "postgres")
+		case db > l.DBCap && !hasPart(inf, "cache") && run.Act >= 2:
+			err = InfraAction(run, "part", 0, "cache")
+		case db > l.DBCap && run.Act >= 2:
+			err = InfraAction(run, "replica", 0, "")
 		case app > l.AppCap:
 			weak := 0
 			for i, s := range inf.Servers {
@@ -143,6 +147,8 @@ func smartInfra(run *domain.StartupRun) {
 				err = InfraAction(run, "ram", weak, "")
 			case !hasPart(inf, "lb"):
 				err = InfraAction(run, "part", 0, "lb")
+			case !hasPart(inf, "cdn") && run.Act >= 2:
+				err = InfraAction(run, "part", 0, "cdn")
 			default:
 				err = InfraAction(run, "server", 0, "")
 			}
