@@ -257,6 +257,7 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	run.NextBugs, run.NextPower = 0, 0
 	run.Money += result.MoneyDelta
 	run.Fans += result.FansDelta
 	run.LastResult = result
@@ -281,6 +282,7 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	if afterShipBurnout(run, team, now) {
 		return nil
 	}
+	sideQuests(run, team)
 	if endlessCheckpoint(run, boss, now) {
 		return nil
 	}
@@ -560,7 +562,8 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	power *= marketMult(run.Market, p.Theme)
 	power *= fx.powerMult
 	power *= sc.powerMult
-	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd+sc.bugs-int(math.Round(jobs.bugCut)))
+	power *= max(0.5, 1+run.NextPower)
+	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd+sc.bugs+run.NextBugs-int(math.Round(jobs.bugCut)))
 
 	r := rngFor(run)
 	quality := (power - BugPenalty*float64(bugs)) / actScale(run.Act) * (0.9 + 0.2*r.Float64())

@@ -39,14 +39,20 @@ var worldEventPool = []string{
 }
 
 type eventEffect struct {
-	Money   int
-	Fans    int
-	Burnout int
+	Money     int
+	Fans      int
+	Burnout   int
+	NextBugs  int
+	NextPower float64
 }
 
 type choiceOption struct {
-	Label  string
-	Effect eventEffect
+	Label    string
+	Effect   eventEffect
+	Odds     int
+	Risk     eventEffect
+	RiskNote string
+	SafeNote string
 }
 
 type ChoiceEventInfo struct {
@@ -98,9 +104,62 @@ var choiceEventCatalog = []ChoiceEventInfo{
 	}},
 }
 
+var memeEvents = []ChoiceEventInfo{
+	{ID: "dns", Title: "It's Always DNS", Options: [2]choiceOption{
+		{Label: "Hire an expert", Effect: eventEffect{Money: -800}},
+		{Label: "Debug it ourselves", Effect: eventEffect{Burnout: 10}},
+	}},
+	{ID: "leaked-env", Title: "Leaked .env on GitHub", Options: [2]choiceOption{
+		{Label: "Rotate every key", Effect: eventEffect{Money: -600}},
+		{Label: "Nobody saw it (30%: someone did)", Odds: 30, Risk: eventEffect{Money: -3000}, RiskNote: "Someone saw the .env. The cloud bill says crypto miners did too.", SafeNote: "Nobody saw the .env. This time."},
+	}},
+	{ID: "rust-rewrite", Title: "Tech Twitter Says Rewrite It In Rust", Options: [2]choiceOption{
+		{Label: "Rewrite it in Rust", Effect: eventEffect{Fans: 300, NextPower: -0.15}},
+		{Label: "No.", Effect: eventEffect{Fans: 100}},
+	}},
+	{ID: "gpu-bill", Title: "Someone Left the GPU Instance On", Options: [2]choiceOption{
+		{Label: "Pay the bill", Effect: eventEffect{Money: -1500}},
+		{Label: "Beg support (50%: refund)", Effect: eventEffect{Money: -1500}, Odds: 50, Risk: eventEffect{Money: 1500}, RiskNote: "Support refunded the GPU bill. Legends.", SafeNote: "Support said no. The GPU bill stands."},
+	}},
+	{ID: "left-pad", Title: "A Tiny Dependency Vanished", Options: [2]choiceOption{
+		{Label: "Vendor a copy", Effect: eventEffect{Money: -400}},
+		{Label: "Write it ourselves", Effect: eventEffect{Burnout: 8}},
+	}},
+	{ID: "dst-bug", Title: "Daylight Saving Time Bug", Options: [2]choiceOption{
+		{Label: "Hotfix tonight", Effect: eventEffect{Burnout: 10}},
+		{Label: "Ship it anyway (+2 bugs)", Effect: eventEffect{NextBugs: 2}},
+	}},
+	{ID: "so-down", Title: "Stack Overflow Is Down", Options: [2]choiceOption{
+		{Label: "Read the actual docs", Effect: eventEffect{Burnout: 8, NextPower: 0.1}},
+		{Label: "Everyone go home", Effect: eventEffect{Burnout: -10}},
+	}},
+	{ID: "copilot-api", Title: "Copilot Invented an API", Options: [2]choiceOption{
+		{Label: "Rewrite it by hand", Effect: eventEffect{Burnout: 8}},
+		{Label: "Trust it (50%: +3 bugs)", Odds: 50, Risk: eventEffect{NextBugs: 3}, RiskNote: "The API Copilot invented does not exist. +3 bugs next project.", SafeNote: "Somehow the made-up API worked."},
+	}},
+	{ID: "merge-marathon", Title: "Merge Conflict Marathon", Options: [2]choiceOption{
+		{Label: "Pair it out", Effect: eventEffect{Burnout: 10}},
+		{Label: "git push --force (40%: +4 bugs)", Odds: 40, Risk: eventEffect{NextBugs: 4}, RiskNote: "The force push ate someone's work. +4 bugs next project.", SafeNote: "The force push went through clean. Nobody will ever know."},
+	}},
+	{ID: "center-div", Title: "Nobody Can Center the Div", Options: [2]choiceOption{
+		{Label: "Flexbox", Effect: eventEffect{Fans: 100}},
+		{Label: "Table layout (+1 bug, retro fans)", Effect: eventEffect{Fans: 250, NextBugs: 1}},
+	}},
+	{ID: "npm-audit", Title: "npm audit: 900 Vulnerabilities", Options: [2]choiceOption{
+		{Label: "npm audit fix --force (50%: chaos)", Effect: eventEffect{Fans: 100}, Odds: 50, Risk: eventEffect{NextBugs: 4}, RiskNote: "npm audit fix --force upgraded React three majors. +4 bugs next project.", SafeNote: "npm audit fix --force actually fixed things."},
+		{Label: "Close the terminal", Effect: eventEffect{}},
+	}},
+	{ID: "recruiter", Title: "Recruiters Are Messaging Your Team", Options: [2]choiceOption{
+		{Label: "Counter-offer bonuses", Effect: eventEffect{Money: -1000, Burnout: -10}},
+		{Label: "Ignore it", Effect: eventEffect{Burnout: 6}},
+	}},
+}
+
 var choiceEventPool = []string{
 	"blockchain", "friday-deploy", "code-review", "intern-db", "youtuber",
 	"team-lunch", "grant", "ads", "oss-pr", "office-dog",
+	"dns", "leaked-env", "rust-rewrite", "gpu-bill", "left-pad", "dst-bug",
+	"so-down", "copilot-api", "merge-marathon", "center-div", "npm-audit", "recruiter",
 }
 
 func findWorldEvent(id string) (WorldEventInfo, bool) {
@@ -113,7 +172,7 @@ func findWorldEvent(id string) (WorldEventInfo, bool) {
 }
 
 func findChoiceEvent(id string) (ChoiceEventInfo, bool) {
-	for _, e := range choiceEventCatalog {
+	for _, e := range append(choiceEventCatalog[:len(choiceEventCatalog):len(choiceEventCatalog)], memeEvents...) {
 		if e.ID == id {
 			return e, true
 		}
@@ -171,12 +230,16 @@ func queueEvent(run *domain.StartupRun) {
 	if r.IntN(100) >= eventChance {
 		return
 	}
-	ev, ok := findChoiceEvent(choiceEventPool[r.IntN(len(choiceEventPool))])
+	fresh := unseenEvents(run)
+	id := fresh[r.IntN(len(fresh))]
+	ev, ok := findChoiceEvent(id)
 	if !ok {
 		return
 	}
+	run.SeenEvents = append(run.SeenEvents, id)
 	run.PendingEvent = &domain.StartupPendingEvent{
 		ID:      ev.ID,
+		Title:   ev.Title,
 		Options: []string{ev.Options[0].Label, ev.Options[1].Label},
 	}
 	interrupt(run, domain.StartupStageEvent)
@@ -190,16 +253,45 @@ func PickEvent(run *domain.StartupRun, index int) error {
 		return domain.ErrStartupInvalidChoice
 	}
 	if ev, ok := findChoiceEvent(run.PendingEvent.ID); ok && index < len(ev.Options) {
-		applyEventEffect(run, ev.Options[index].Effect)
+		opt := ev.Options[index]
+		applyEventEffect(run, opt.Effect)
+		if opt.Odds > 0 {
+			if rngFor(run).IntN(100) < opt.Odds {
+				applyEventEffect(run, opt.Risk)
+				addLog(run, opt.RiskNote)
+			} else {
+				addLog(run, opt.SafeNote)
+			}
+		}
 	}
 	run.PendingEvent = nil
 	resume(run)
 	return nil
 }
 
+func unseenEvents(run *domain.StartupRun) []string {
+	seen := map[string]bool{}
+	for _, id := range run.SeenEvents {
+		seen[id] = true
+	}
+	var fresh []string
+	for _, id := range choiceEventPool {
+		if !seen[id] {
+			fresh = append(fresh, id)
+		}
+	}
+	if len(fresh) == 0 {
+		run.SeenEvents = nil
+		return choiceEventPool
+	}
+	return fresh
+}
+
 func applyEventEffect(run *domain.StartupRun, fx eventEffect) {
 	run.Money += fx.Money
 	run.Fans = max(0, run.Fans+fx.Fans)
+	run.NextBugs += fx.NextBugs
+	run.NextPower += fx.NextPower
 	if fx.Burnout == 0 {
 		return
 	}

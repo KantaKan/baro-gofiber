@@ -106,6 +106,7 @@ type StartupDev struct {
 	Level     int      `bson:"level,omitempty" json:"level,omitempty"`
 	XP        int      `bson:"xp,omitempty" json:"xp,omitempty"`
 	Burnout   int      `bson:"burnout,omitempty" json:"burnout,omitempty"`
+	QuestAct  int      `bson:"quest_act,omitempty" json:"-"`
 	Perks     []string `bson:"perks,omitempty" json:"perks,omitempty"`
 	XPNext    int      `bson:"xp_next,omitempty" json:"xp_next,omitempty"`
 }
@@ -123,6 +124,7 @@ type StartupPendingPerk struct {
 
 type StartupPendingEvent struct {
 	ID      string   `bson:"id" json:"id"`
+	Title   string   `bson:"title,omitempty" json:"title,omitempty"`
 	Options []string `bson:"options" json:"options"`
 }
 
@@ -176,6 +178,9 @@ type StartupRun struct {
 	FounderOffer  []StartupDev         `bson:"founder_offer,omitempty" json:"founder_offer,omitempty"`
 	Staff         []StartupDev         `bson:"staff" json:"staff"`
 	Desks         []int                `bson:"desks,omitempty" json:"desks"`
+	SeenEvents    []string             `bson:"seen_events,omitempty" json:"-"`
+	NextBugs      int                  `bson:"next_bugs,omitempty" json:"next_bugs,omitempty"`
+	NextPower     float64              `bson:"next_power,omitempty" json:"next_power,omitempty"`
 	DeskLimit     int                  `bson:"-" json:"desk_limit"`
 	Candidates    []StartupDev         `bson:"candidates,omitempty" json:"candidates,omitempty"`
 	Items         []string             `bson:"items,omitempty" json:"items,omitempty"`
