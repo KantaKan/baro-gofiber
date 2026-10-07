@@ -210,6 +210,8 @@ type StartupRun struct {
 	NextBugs      int                  `bson:"next_bugs,omitempty" json:"next_bugs,omitempty"`
 	NextPower     float64              `bson:"next_power,omitempty" json:"next_power,omitempty"`
 	NextTraffic   float64              `bson:"next_traffic,omitempty" json:"next_traffic,omitempty"`
+	BossVisits    int                  `bson:"boss_visits,omitempty" json:"boss_visits,omitempty"`
+	BossVisiting  bool                 `bson:"boss_visiting,omitempty" json:"boss_visiting,omitempty"`
 	Infra         *StartupInfra        `bson:"infra,omitempty" json:"infra,omitempty"`
 	Load          *StartupLoad         `bson:"-" json:"load,omitempty"`
 	DeskLimit     int                  `bson:"-" json:"desk_limit"`

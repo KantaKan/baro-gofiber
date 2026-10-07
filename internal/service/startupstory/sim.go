@@ -293,6 +293,7 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 		return nil
 	}
 	wildcardBurnout(run)
+	bossVisit(run)
 	sideQuests(run, team)
 	if endlessCheckpoint(run, boss, now) {
 		return nil
