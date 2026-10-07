@@ -55,6 +55,9 @@ func MoveOffice(run *domain.StartupRun, id string) error {
 	}
 	ensureDesks(run)
 	ensureOffice(run)
+	if err := noDebt(run); err != nil {
+		return err
+	}
 	to := officeIndex(id)
 	if to <= officeIndex(run.Office) {
 		return domain.ErrStartupInvalidChoice

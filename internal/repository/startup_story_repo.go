@@ -80,6 +80,51 @@ func (r *StartupStoryRepository) LeaderboardWeekly(ctx context.Context, cohort i
 	return r.runLeaderboard(ctx, r.runs, weeklyLeaderboardPipeline(cohort, weekKey, limit))
 }
 
+func valueLeaderboardPipeline(cohort int, limit int) mongo.Pipeline {
+	value := bson.M{"$add": bson.A{
+		bson.M{"$max": bson.A{"$money", 0}}, "$fans",
+		bson.M{"$multiply": bson.A{2000, bson.M{"$size": bson.M{"$ifNull": bson.A{"$staff", bson.A{}}}}}},
+		bson.M{"$multiply": bson.A{10000, bson.M{"$ifNull": bson.A{"$max_act", 1}}}},
+		bson.M{"$multiply": bson.A{-1, bson.M{"$ifNull": bson.A{"$debt", 0}}}},
+	}}
+	byValue := bson.D{{Key: "score", Value: -1}}
+	return mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{"cohort": cohort, "mode": bson.M{"$ne": domain.StartupModeRanked}, "role": bson.M{"$ne": "admin"}}}},
+		bson.D{{Key: "$addFields", Value: bson.M{"score": value}}},
+		bson.D{{Key: "$sort", Value: byValue}},
+		bson.D{{Key: "$group", Value: bson.M{"_id": "$owner_id", "score": bson.M{"$first": "$score"}, "max_act": bson.M{"$first": "$max_act"}, "run_id": bson.M{"$first": "$_id"}}}},
+		bson.D{{Key: "$lookup", Value: bson.M{"from": "users", "localField": "_id", "foreignField": "_id", "as": "user"}}},
+		bson.D{{Key: "$unwind", Value: "$user"}},
+		bson.D{{Key: "$sort", Value: byValue}},
+		bson.D{{Key: "$limit", Value: limit}},
+		bson.D{{Key: "$project", Value: bson.M{"_id": 0, "owner_id": "$_id", "name": leaderboardNameExpr(), "score": 1, "max_act": 1, "best_run_id": "$run_id"}}},
+	}
+}
+
+func (r *StartupStoryRepository) LeaderboardValue(ctx context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error) {
+	return r.runLeaderboard(ctx, r.runs, valueLeaderboardPipeline(cohort, limit))
+}
+
+func (r *StartupStoryRepository) AddFame(ctx context.Context, ownerID primitive.ObjectID, fameGain int, founders, items []string, skin string) error {
+	setDoc := bson.M{"updated_at": time.Now().UTC()}
+	if skin != "" {
+		setDoc["office_skin"] = skin
+	}
+	update := bson.M{"$inc": bson.M{"fame": fameGain}, "$set": setDoc}
+	addToSet := bson.M{}
+	if len(founders) > 0 {
+		addToSet["unlocked_founders"] = bson.M{"$each": founders}
+	}
+	if len(items) > 0 {
+		addToSet["unlocked_items"] = bson.M{"$each": items}
+	}
+	if len(addToSet) > 0 {
+		update["$addToSet"] = addToSet
+	}
+	_, err := r.studios.UpdateOne(ctx, bson.M{"owner_id": ownerID}, update)
+	return err
+}
+
 func (r *StartupStoryRepository) LeaderboardFame(ctx context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error) {
 	return r.runLeaderboard(ctx, r.studios, fameLeaderboardPipeline(cohort, limit))
 }

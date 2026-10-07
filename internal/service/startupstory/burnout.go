@@ -118,6 +118,11 @@ func afterShipBurnout(run *domain.StartupRun, team []domain.StartupDev, now time
 		if r == nil {
 			r = rngFor(run)
 		}
+		if isFounder(d) && isCompany(run) {
+			founderBreak(run, &d)
+			stay = append(stay, d)
+			continue
+		}
 		if isFounder(d) {
 			addLog(run, pickLine(r, founderBurnouts, d.Name))
 			endRun(run, domain.StartupOutcomePivot, now)

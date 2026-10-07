@@ -89,6 +89,9 @@ func UpgradeDesk(run *domain.StartupRun, index int) error {
 		return domain.ErrStartupWrongStage
 	}
 	ensureDesks(run)
+	if err := noDebt(run); err != nil {
+		return err
+	}
 	if index < 0 || index >= len(run.Desks) || run.Desks[index] >= MaxDeskTier {
 		return domain.ErrStartupInvalidChoice
 	}

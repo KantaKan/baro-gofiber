@@ -20,6 +20,8 @@ type Store interface {
 	SaveRun(ctx context.Context, run *domain.StartupRun, expectedVersion int) error
 	AddDiscoveredCombo(ctx context.Context, ownerID primitive.ObjectID, key string) error
 	SettleRun(ctx context.Context, ownerID primitive.ObjectID, entry domain.StartupHallEntry, fameGain int, founders, items []string, skin string) error
+	AddFame(ctx context.Context, ownerID primitive.ObjectID, fameGain int, founders, items []string, skin string) error
+	LeaderboardValue(ctx context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error)
 	CountRankedRuns(ctx context.Context, ownerID primitive.ObjectID, weekKey string) (int, error)
 	LeaderboardWeekly(ctx context.Context, cohort int, weekKey string, limit int) ([]domain.StartupLeaderboardEntry, error)
 	LeaderboardFame(ctx context.Context, cohort int, limit int) ([]domain.StartupLeaderboardEntry, error)
@@ -215,6 +217,15 @@ func hallEntryFor(run *domain.StartupRun) domain.StartupHallEntry {
 	}
 }
 
+func (s *Service) awardFame(ctx context.Context, run *domain.StartupRun, gain int) error {
+	studio, err := s.ensureStudio(ctx, run.OwnerID, run.Cohort)
+	if err != nil {
+		return err
+	}
+	founders, items, skin := unlocksFor(studio.Fame + gain)
+	return s.store.AddFame(ctx, run.OwnerID, gain, founders, items, skin)
+}
+
 func (s *Service) settleIfEnded(ctx context.Context, owner primitive.ObjectID, run *domain.StartupRun) error {
 	if run.Status != domain.StartupStatusEnded {
 		return nil
@@ -229,7 +240,17 @@ func (s *Service) settleIfEnded(ctx context.Context, owner primitive.ObjectID, r
 }
 
 func (s *Service) Ship(ctx context.Context, player Player) (*domain.StartupRun, error) {
-	run, err := s.mutate(ctx, player, Ship)
+	gain := 0
+	run, err := s.mutate(ctx, player, func(run *domain.StartupRun, now time.Time) error {
+		if err := Ship(run, now); err != nil {
+			return err
+		}
+		gain, run.PendingFame = run.PendingFame, 0
+		return nil
+	})
+	if err == nil && gain > 0 {
+		err = s.awardFame(ctx, run, gain)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -313,6 +334,8 @@ func (s *Service) Leaderboard(ctx context.Context, player Player, tab string) ([
 	switch tab {
 	case domain.StartupBoardDeepest:
 		return s.store.LeaderboardDeepest(ctx, player.Cohort, weekKeyFor(s.now()), domain.StartupLeaderboardLimit)
+	case domain.StartupBoardValue:
+		return s.store.LeaderboardValue(ctx, player.Cohort, domain.StartupLeaderboardLimit)
 	case domain.StartupBoardFame:
 		return s.store.LeaderboardFame(ctx, player.Cohort, domain.StartupLeaderboardLimit)
 	case domain.StartupBoardWeekly:

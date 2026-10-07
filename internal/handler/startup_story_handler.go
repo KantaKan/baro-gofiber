@@ -39,7 +39,7 @@ func startupError(c *fiber.Ctx, err error) error {
 		status = fiber.StatusNotFound
 	case errors.Is(err, domain.ErrStartupNoAttempts):
 		status = fiber.StatusForbidden
-	case errors.Is(err, domain.ErrStartupWrongStage), errors.Is(err, domain.ErrStartupInvalidChoice), errors.Is(err, domain.ErrStartupTeamFull), errors.Is(err, domain.ErrStartupDeskLimit), errors.Is(err, domain.ErrStartupCantExit), errors.Is(err, domain.ErrStartupNoFunds):
+	case errors.Is(err, domain.ErrStartupWrongStage), errors.Is(err, domain.ErrStartupInvalidChoice), errors.Is(err, domain.ErrStartupTeamFull), errors.Is(err, domain.ErrStartupDeskLimit), errors.Is(err, domain.ErrStartupCantExit), errors.Is(err, domain.ErrStartupInDebt), errors.Is(err, domain.ErrStartupNoFunds):
 		status = fiber.StatusBadRequest
 	default:
 		log.Printf("startup story: %v", err)
