@@ -213,6 +213,26 @@ func (h *StartupStoryHandler) UpgradeDesk(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Desk upgraded", run)
 }
 
+func (h *StartupStoryHandler) Infra(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		Action string `json:"action"`
+		Index  int    `json:"index"`
+		ID     string `json:"id"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.Infra(c.UserContext(), player, body.Action, body.Index, body.ID)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Infra updated", run)
+}
+
 func (h *StartupStoryHandler) PickItem(c *fiber.Ctx) error {
 	player, ok := startupPlayer(c)
 	if !ok {

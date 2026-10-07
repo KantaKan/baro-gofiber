@@ -25,7 +25,7 @@ func newRunWithPool(ownerID primitive.ObjectID, cohort int, role, mode string, s
 	run := &domain.StartupRun{
 		OwnerID: ownerID, Cohort: cohort, Role: role, Mode: mode, Seed: int64(seed),
 		Status: domain.StartupStatusActive, Stage: domain.StartupStageFounder, Act: 1,
-		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, UnlockedItems: itemExtras,
+		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, Infra: newInfra(), UnlockedItems: itemExtras,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	m := rngFor(run)
@@ -257,7 +257,7 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	run.NextBugs, run.NextPower = 0, 0
+	run.NextBugs, run.NextPower, run.NextTraffic = 0, 0, 0
 	run.Money += result.MoneyDelta
 	run.Fans += result.FansDelta
 	run.LastResult = result
@@ -563,7 +563,12 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	power *= fx.powerMult
 	power *= sc.powerMult
 	power *= max(0.5, 1+run.NextPower)
-	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd+sc.bugs+run.NextBugs-int(math.Round(jobs.bugCut)))
+	infra := infraEffects(run)
+	power *= infra.powerMult
+	if p.Boss == BossOutage {
+		power *= 1 + OutageHeadroomBoost*infra.headroom
+	}
+	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd+sc.bugs+run.NextBugs+infra.bugs-int(math.Round(jobs.bugCut)))
 
 	r := rngFor(run)
 	quality := (power - BugPenalty*float64(bugs)) / actScale(run.Act) * (0.9 + 0.2*r.Float64())
@@ -606,8 +611,14 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 			result.Total += score
 		}
 	}
-	result.MoneyDelta = int(math.Round(float64(result.Total*result.Total*MoneyPerPoint)*sc.moneyMult)) - salaries
+	result.CloudBill = cloudBill(run)
+	result.MoneyDelta = int(math.Round(float64(result.Total*result.Total*MoneyPerPoint)*sc.moneyMult)) - salaries - result.CloudBill
 	result.FansDelta = int(math.Round(float64(result.Total*result.Total*FansPerPoint) * sc.fansMult))
+	if infra.ratio > 1 {
+		result.Overload = math.Round(infra.ratio*100) / 100
+		result.Postmortem = infra.postmortem
+		result.FansDelta = int(float64(result.FansDelta) / infra.ratio)
+	}
 	return result, nil
 }
 

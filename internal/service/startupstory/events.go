@@ -44,6 +44,7 @@ type eventEffect struct {
 	Burnout   int
 	NextBugs  int
 	NextPower float64
+	Traffic   float64
 }
 
 type choiceOption struct {
@@ -149,6 +150,14 @@ var memeEvents = []ChoiceEventInfo{
 		{Label: "npm audit fix --force (50%: chaos)", Effect: eventEffect{Fans: 100}, Odds: 50, Risk: eventEffect{NextBugs: 4}, RiskNote: "npm audit fix --force upgraded React three majors. +4 bugs next project.", SafeNote: "npm audit fix --force actually fixed things."},
 		{Label: "Close the terminal", Effect: eventEffect{}},
 	}},
+	{ID: "front-page", Title: "You're on the Front Page of a Big Tech News Site", Options: [2]choiceOption{
+		{Label: "Reply to every comment (3x traffic next ship)", Effect: eventEffect{Fans: 600, Traffic: 2}},
+		{Label: "Stay quiet", Effect: eventEffect{Fans: 150}},
+	}},
+	{ID: "viral-video", Title: "A Short Video About Your App Went Viral", Options: [2]choiceOption{
+		{Label: "Ride the wave (2.5x traffic next ship)", Effect: eventEffect{Fans: 800, Traffic: 1.5}},
+		{Label: "Turn off notifications", Effect: eventEffect{Burnout: -5}},
+	}},
 	{ID: "recruiter", Title: "Recruiters Are Messaging Your Team", Options: [2]choiceOption{
 		{Label: "Counter-offer bonuses", Effect: eventEffect{Money: -1000, Burnout: -10}},
 		{Label: "Ignore it", Effect: eventEffect{Burnout: 6}},
@@ -159,7 +168,7 @@ var choiceEventPool = []string{
 	"blockchain", "friday-deploy", "code-review", "intern-db", "youtuber",
 	"team-lunch", "grant", "ads", "oss-pr", "office-dog",
 	"dns", "leaked-env", "rust-rewrite", "gpu-bill", "left-pad", "dst-bug",
-	"so-down", "copilot-api", "merge-marathon", "center-div", "npm-audit", "recruiter",
+	"so-down", "copilot-api", "merge-marathon", "center-div", "npm-audit", "recruiter", "front-page", "viral-video",
 }
 
 func findWorldEvent(id string) (WorldEventInfo, bool) {
@@ -254,6 +263,10 @@ func PickEvent(run *domain.StartupRun, index int) error {
 	}
 	if ev, ok := findChoiceEvent(run.PendingEvent.ID); ok && index < len(ev.Options) {
 		opt := ev.Options[index]
+		if ev.ID == "intern-db" && hasPart(run.Infra, "backups") {
+			opt.Effect = eventEffect{}
+			addLog(run, "Backups saved the day. The prod DB was back in five minutes.")
+		}
 		applyEventEffect(run, opt.Effect)
 		if opt.Odds > 0 {
 			if rngFor(run).IntN(100) < opt.Odds {
@@ -292,6 +305,7 @@ func applyEventEffect(run *domain.StartupRun, fx eventEffect) {
 	run.Fans = max(0, run.Fans+fx.Fans)
 	run.NextBugs += fx.NextBugs
 	run.NextPower += fx.NextPower
+	run.NextTraffic += fx.Traffic
 	if fx.Burnout == 0 {
 		return
 	}

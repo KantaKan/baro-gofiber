@@ -151,7 +151,28 @@ type StartupResult struct {
 	Total      int             `bson:"total" json:"total"`
 	Bugs       int             `bson:"bugs" json:"bugs"`
 	MoneyDelta int             `bson:"money_delta" json:"money_delta"`
+	CloudBill  int             `bson:"cloud_bill,omitempty" json:"cloud_bill,omitempty"`
+	Overload   float64         `bson:"overload,omitempty" json:"overload,omitempty"`
+	Postmortem string          `bson:"postmortem,omitempty" json:"postmortem,omitempty"`
 	FansDelta  int             `bson:"fans_delta" json:"fans_delta"`
+}
+
+type StartupServer struct {
+	CPU int `bson:"cpu" json:"cpu"`
+	RAM int `bson:"ram" json:"ram"`
+}
+
+type StartupInfra struct {
+	Servers []StartupServer `bson:"servers" json:"servers"`
+	DB      string          `bson:"db" json:"db"`
+	Parts   []string        `bson:"parts,omitempty" json:"parts"`
+}
+
+type StartupLoad struct {
+	App    int `json:"app"`
+	AppCap int `json:"app_cap"`
+	DB     int `json:"db"`
+	DBCap  int `json:"db_cap"`
 }
 
 type StartupRun struct {
@@ -181,6 +202,9 @@ type StartupRun struct {
 	SeenEvents    []string             `bson:"seen_events,omitempty" json:"-"`
 	NextBugs      int                  `bson:"next_bugs,omitempty" json:"next_bugs,omitempty"`
 	NextPower     float64              `bson:"next_power,omitempty" json:"next_power,omitempty"`
+	NextTraffic   float64              `bson:"next_traffic,omitempty" json:"next_traffic,omitempty"`
+	Infra         *StartupInfra        `bson:"infra,omitempty" json:"infra,omitempty"`
+	Load          *StartupLoad         `bson:"-" json:"load,omitempty"`
 	DeskLimit     int                  `bson:"-" json:"desk_limit"`
 	Candidates    []StartupDev         `bson:"candidates,omitempty" json:"candidates,omitempty"`
 	Items         []string             `bson:"items,omitempty" json:"items,omitempty"`

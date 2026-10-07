@@ -34,6 +34,7 @@ func prepareRun(run *domain.StartupRun) {
 	}
 	ensureDesks(run)
 	run.DeskLimit = TeamCap(run.Act)
+	run.Load = currentLoad(run)
 }
 
 func ensureDesks(run *domain.StartupRun) {

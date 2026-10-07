@@ -52,6 +52,7 @@ type Overview struct {
 	OptOut     bool                  `json:"opt_out"`
 	ComboRatings map[string]string     `json:"combo_ratings,omitempty"`
 	DeskPrices   DeskPrices            `json:"desk_prices"`
+	Infra        InfraPrices           `json:"infra"`
 }
 
 type Service struct {
@@ -130,7 +131,7 @@ func (s *Service) Overview(ctx context.Context, player Player) (*Overview, error
 		}
 	}
 	prepareRun(run)
-	return &Overview{DeskPrices: deskPrices, Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OSSUnlocked: ossFounderUnlocked(studio), OptOut: optOut, ComboRatings: ratings}, nil
+	return &Overview{Infra: infraPrices, DeskPrices: deskPrices, Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OSSUnlocked: ossFounderUnlocked(studio), OptOut: optOut, ComboRatings: ratings}, nil
 }
 
 func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*domain.StartupRun, error) {
@@ -265,6 +266,12 @@ func (s *Service) BuyDesk(ctx context.Context, player Player) (*domain.StartupRu
 func (s *Service) UpgradeDesk(ctx context.Context, player Player, index int) (*domain.StartupRun, error) {
 	return s.mutate(ctx, player, func(run *domain.StartupRun, _ time.Time) error {
 		return UpgradeDesk(run, index)
+	})
+}
+
+func (s *Service) Infra(ctx context.Context, player Player, action string, index int, id string) (*domain.StartupRun, error) {
+	return s.mutate(ctx, player, func(run *domain.StartupRun, _ time.Time) error {
+		return InfraAction(run, action, index, id)
 	})
 }
 

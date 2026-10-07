@@ -114,7 +114,53 @@ func smartUpgrade(run *domain.StartupRun) {
 	}
 }
 
+func smartInfra(run *domain.StartupRun) {
+	for range 8 {
+		l := currentLoad(run)
+		if l == nil {
+			return
+		}
+		inf := run.Infra
+		app, db := l.App*13/10, l.DB*13/10
+		var err error
+		switch {
+		case db > l.DBCap && !hasPart(inf, "index"):
+			err = InfraAction(run, "part", 0, "index")
+		case db > l.DBCap && inf.DB == "sqlite":
+			err = InfraAction(run, "db", 0, "postgres")
+		case app > l.AppCap:
+			weak := 0
+			for i, s := range inf.Servers {
+				if min(s.CPU, s.RAM) < min(inf.Servers[weak].CPU, inf.Servers[weak].RAM) {
+					weak = i
+				}
+			}
+			s := inf.Servers[weak]
+			switch {
+			case min(s.CPU, s.RAM) < 3 && s.CPU <= s.RAM:
+				err = InfraAction(run, "cpu", weak, "")
+			case min(s.CPU, s.RAM) < 3:
+				err = InfraAction(run, "ram", weak, "")
+			case !hasPart(inf, "lb"):
+				err = InfraAction(run, "part", 0, "lb")
+			default:
+				err = InfraAction(run, "server", 0, "")
+			}
+		default:
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct int, bosses int, totals []int) {
+	reachedIPO, deathAct, bosses, totals, _ = playBotInfra(t, seed, smart, smart)
+	return
+}
+
+func playBotInfra(t *testing.T, seed uint64, smart, buyInfra bool) (reachedIPO bool, deathAct int, bosses int, totals []int, overloadAct int) {
 	run := NewRun(primitive.NewObjectID(), 12, "learner", domain.StartupModeFree, seed, t0)
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
@@ -144,6 +190,9 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 			}
 		case domain.StartupStageHub:
 			typ, theme := "Web App", "Education"
+			if buyInfra {
+				smartInfra(run)
+			}
 			if smart {
 				smartHire(run)
 				best := -1.0
@@ -176,6 +225,9 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 			if act <= 3 {
 				totals = append(totals, run.LastResult.Total*40/outOf)
 			}
+			if run.LastResult.Overload > 1 && overloadAct == 0 {
+				overloadAct = act
+			}
 		default:
 			t.Fatalf("unexpected stage %s", run.Stage)
 		}
@@ -183,7 +235,7 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 	if run.Outcome == domain.StartupOutcomeIPO {
 		reachedIPO = true
 	}
-	return reachedIPO, run.MaxAct, run.BossesPassed, totals
+	return reachedIPO, run.MaxAct, run.BossesPassed, totals, overloadAct
 }
 
 func simulate(t *testing.T, smart bool) botStats {
