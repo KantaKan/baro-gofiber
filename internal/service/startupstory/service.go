@@ -167,6 +167,7 @@ func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*do
 	}
 	run := newRunWithPool(owner, player.Cohort, player.Role, mode, seedValue, s.now(), founderPoolFor(studio), studio.UnlockedItems)
 	run.WeekKey = weekKey
+	run.UnlockedWildcards = wildcardsFor(studio.Fame)
 	genmates, err := s.store.ListGenmates(ctx, player.Cohort, owner)
 	if err != nil {
 		return nil, err

@@ -15,6 +15,7 @@ var ErrStartupTooEarly = errors.New("your team is still building")
 var ErrStartupInvalidChoice = errors.New("invalid choice")
 var ErrStartupTeamFull = errors.New("no free desk: buy one in the Office tab")
 var ErrStartupDeskLimit = errors.New("no room for another desk this act")
+var ErrStartupCantExit = errors.New("the Vim Wizard can't exit")
 var ErrStartupNoFunds = errors.New("not enough money to hire")
 var ErrStartupNoAttempts = errors.New("no ranked attempts left this week")
 
@@ -107,6 +108,8 @@ type StartupDev struct {
 	XP        int      `bson:"xp,omitempty" json:"xp,omitempty"`
 	Burnout   int      `bson:"burnout,omitempty" json:"burnout,omitempty"`
 	QuestAct  int      `bson:"quest_act,omitempty" json:"-"`
+	Wildcard  string   `bson:"wildcard,omitempty" json:"wildcard,omitempty"`
+	WildDesc  string   `bson:"wild_desc,omitempty" json:"wildcard_desc,omitempty"`
 	Perks     []string `bson:"perks,omitempty" json:"perks,omitempty"`
 	XPNext    int      `bson:"xp_next,omitempty" json:"xp_next,omitempty"`
 }
@@ -214,6 +217,7 @@ type StartupRun struct {
 	Items         []string             `bson:"items,omitempty" json:"items,omitempty"`
 	ItemOffer     []string             `bson:"item_offer,omitempty" json:"item_offer,omitempty"`
 	UnlockedItems []string             `bson:"unlocked_items,omitempty" json:"-"`
+	UnlockedWildcards []string         `bson:"unlocked_wildcards,omitempty" json:"-"`
 	Project       *StartupProject      `bson:"project,omitempty" json:"project,omitempty"`
 	LastResult    *StartupResult       `bson:"last_result,omitempty" json:"last_result,omitempty"`
 	Score         int                  `bson:"score" json:"score"`

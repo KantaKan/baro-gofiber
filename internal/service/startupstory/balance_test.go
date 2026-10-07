@@ -172,6 +172,7 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 
 func playBotInfra(t *testing.T, seed uint64, smart, buyInfra bool) (reachedIPO bool, deathAct int, bosses int, totals []int, overloadAct int) {
 	run := NewRun(primitive.NewObjectID(), 12, "learner", domain.StartupModeFree, seed, t0)
+	run.UnlockedWildcards = botWildcards
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
 	}
