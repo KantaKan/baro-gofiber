@@ -16,6 +16,7 @@ var ErrStartupInvalidChoice = errors.New("invalid choice")
 var ErrStartupTeamFull = errors.New("no free desk: buy one in the Office tab")
 var ErrStartupDeskLimit = errors.New("no room for another desk this act")
 var ErrStartupCantExit = errors.New("the Vim Wizard can't exit")
+var ErrStartupInDebt = errors.New("pay off the bank loan first")
 var ErrStartupNoFunds = errors.New("not enough money to hire")
 var ErrStartupNoAttempts = errors.New("no ranked attempts left this week")
 
@@ -41,6 +42,7 @@ const (
 	StartupBoardWeekly  = "weekly"
 	StartupBoardDeepest = "deepest"
 	StartupBoardFame    = "fame"
+	StartupBoardValue   = "value"
 
 	StartupLeaderboardLimit = 100
 )
@@ -206,6 +208,9 @@ type StartupRun struct {
 	FounderOffer  []StartupDev         `bson:"founder_offer,omitempty" json:"founder_offer,omitempty"`
 	Staff         []StartupDev         `bson:"staff" json:"staff"`
 	Desks         []int                `bson:"desks,omitempty" json:"desks"`
+	Office        string               `bson:"office,omitempty" json:"office"`
+	Debt          int                  `bson:"debt,omitempty" json:"debt,omitempty"`
+	PendingFame   int                  `bson:"pending_fame,omitempty" json:"-"`
 	SeenEvents    []string             `bson:"seen_events,omitempty" json:"-"`
 	NextBugs      int                  `bson:"next_bugs,omitempty" json:"next_bugs,omitempty"`
 	NextPower     float64              `bson:"next_power,omitempty" json:"next_power,omitempty"`

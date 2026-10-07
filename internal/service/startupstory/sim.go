@@ -25,7 +25,7 @@ func newRunWithPool(ownerID primitive.ObjectID, cohort int, role, mode string, s
 	run := &domain.StartupRun{
 		OwnerID: ownerID, Cohort: cohort, Role: role, Mode: mode, Seed: int64(seed),
 		Status: domain.StartupStatusActive, Stage: domain.StartupStageFounder, Act: 1,
-		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, Infra: newInfra(), UnlockedItems: itemExtras,
+		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, Office: "garage", Infra: newInfra(), UnlockedItems: itemExtras,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	m := rngFor(run)
@@ -270,24 +270,32 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	run.NextBugs, run.NextPower, run.NextTraffic = 0, 0, 0
 	run.Money += result.MoneyDelta
 	run.Fans += result.FansDelta
+	repayDebt(run, result.MoneyDelta)
 	run.LastResult = result
 	run.Project = nil
 	run.ProjectIndex++
 	afterShipLevels(run, team, result)
-	if boss != "" {
-		if result.Total < bossPassMark(run.Act, boss) {
-			endRun(run, domain.StartupOutcomePivot, now)
-			return nil
-		}
+	bossFailed := boss != "" && result.Total < bossPassMark(run.Act, boss)
+	if bossFailed && !isCompany(run) {
+		endRun(run, domain.StartupOutcomePivot, now)
+		return nil
+	}
+	if bossFailed {
+		bossSetback(run)
+	} else if boss != "" {
 		run.BossesPassed++
+		run.PendingFame += FameBossBeaten
 		run.Money += BossBonusMoney
 		run.Fans += BossBonusFans
 		result.MoneyDelta += BossBonusMoney
 		result.FansDelta += BossBonusFans
 	}
-	if run.Money < 0 {
+	if run.Money < 0 && !isCompany(run) {
 		endRun(run, domain.StartupOutcomePivot, now)
 		return nil
+	}
+	if run.Money < 0 {
+		emergencyLoan(run)
 	}
 	if afterShipBurnout(run, team, now) {
 		return nil
@@ -300,6 +308,9 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	}
 	prevAct := run.Act
 	run.Act = actForRun(run)
+	if isCompany(run) && run.Act > max(run.MaxAct, 1) {
+		run.PendingFame += FameNewStage
+	}
 	run.MaxAct = max(run.MaxAct, run.Act)
 	if run.Act != prevAct {
 		onNewAct(run)

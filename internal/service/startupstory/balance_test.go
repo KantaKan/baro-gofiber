@@ -63,9 +63,31 @@ func restedStaff(run *domain.StartupRun) []string {
 	return ids
 }
 
+var (
+	botMode   = domain.StartupModeRanked
+	botMaxAct = 60
+	botLast   *domain.StartupRun
+)
+
+func smartMove(run *domain.StartupRun) {
+	ensureOffice(run)
+	next := officeIndex(run.Office) + 1
+	if next >= len(offices) || len(run.Desks) < officeDesks(run) {
+		return
+	}
+	payroll := 0
+	for _, d := range run.Staff {
+		payroll += d.Salary
+	}
+	if run.Money-offices[next].Price >= payroll {
+		_ = MoveOffice(run, offices[next].ID)
+	}
+}
+
 func smartHire(run *domain.StartupRun) {
 	defer smartUpgrade(run)
-	for len(run.Staff) < TeamCap(run.Act) && len(run.Candidates) > 0 {
+	smartMove(run)
+	for len(run.Staff) < officeDesks(run) && len(run.Candidates) > 0 {
 		have := map[string]bool{}
 		payroll := 0
 		for _, d := range run.Staff {
@@ -171,12 +193,12 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 }
 
 func playBotInfra(t *testing.T, seed uint64, smart, buyInfra bool) (reachedIPO bool, deathAct int, bosses int, totals []int, overloadAct int) {
-	run := NewRun(primitive.NewObjectID(), 12, "learner", domain.StartupModeFree, seed, t0)
+	run := NewRun(primitive.NewObjectID(), 12, "learner", botMode, seed, t0)
 	run.UnlockedWildcards = botWildcards
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
 	}
-	for run.Status == domain.StartupStatusActive && run.Act < 60 {
+	for run.Status == domain.StartupStatusActive && run.Act < botMaxAct {
 		switch run.Stage {
 		case domain.StartupStagePerk:
 			if err := PickPerk(run, 0); err != nil {
@@ -246,6 +268,7 @@ func playBotInfra(t *testing.T, seed uint64, smart, buyInfra bool) (reachedIPO b
 	if run.Outcome == domain.StartupOutcomeIPO {
 		reachedIPO = true
 	}
+	botLast = run
 	return reachedIPO, run.MaxAct, run.BossesPassed, totals, overloadAct
 }
 

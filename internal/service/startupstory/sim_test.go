@@ -201,6 +201,18 @@ func (f *fakeStore) AddDiscoveredCombo(_ context.Context, _ primitive.ObjectID, 
 	f.studio.DiscoveredCombos = append(f.studio.DiscoveredCombos, key)
 	return nil
 }
+func (f *fakeStore) AddFame(_ context.Context, ownerID primitive.ObjectID, fameGain int, _, _ []string, _ string) error {
+	if f.studio == nil {
+		f.studio = &domain.StartupStudio{OwnerID: ownerID}
+	}
+	f.studio.Fame += fameGain
+	return nil
+}
+
+func (f *fakeStore) LeaderboardValue(context.Context, int, int) ([]domain.StartupLeaderboardEntry, error) {
+	return nil, nil
+}
+
 func (f *fakeStore) SettleRun(_ context.Context, ownerID primitive.ObjectID, entry domain.StartupHallEntry, fameGain int, founders, items []string, skin string) error {
 	if f.studio == nil {
 		f.studio = &domain.StartupStudio{OwnerID: ownerID}
