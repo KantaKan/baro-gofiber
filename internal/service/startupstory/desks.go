@@ -45,7 +45,7 @@ func prepareRun(run *domain.StartupRun) {
 		return
 	}
 	ensureDesks(run)
-	run.DeskLimit = TeamCap(run.Act)
+	run.DeskLimit = officeDesks(run)
 	run.Load = currentLoad(run)
 }
 
@@ -72,7 +72,7 @@ func BuyDesk(run *domain.StartupRun) error {
 		return domain.ErrStartupWrongStage
 	}
 	ensureDesks(run)
-	if len(run.Desks) >= TeamCap(run.Act) {
+	if len(run.Desks) >= officeDesks(run) {
 		return domain.ErrStartupDeskLimit
 	}
 	price := NextDeskPrice(run)

@@ -63,9 +63,25 @@ func restedStaff(run *domain.StartupRun) []string {
 	return ids
 }
 
+func smartMove(run *domain.StartupRun) {
+	ensureOffice(run)
+	next := officeIndex(run.Office) + 1
+	if next >= len(offices) || len(run.Desks) < officeDesks(run) {
+		return
+	}
+	payroll := 0
+	for _, d := range run.Staff {
+		payroll += d.Salary
+	}
+	if run.Money-offices[next].Price >= payroll {
+		_ = MoveOffice(run, offices[next].ID)
+	}
+}
+
 func smartHire(run *domain.StartupRun) {
 	defer smartUpgrade(run)
-	for len(run.Staff) < TeamCap(run.Act) && len(run.Candidates) > 0 {
+	smartMove(run)
+	for len(run.Staff) < officeDesks(run) && len(run.Candidates) > 0 {
 		have := map[string]bool{}
 		payroll := 0
 		for _, d := range run.Staff {

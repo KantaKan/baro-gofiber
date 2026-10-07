@@ -25,7 +25,7 @@ func newRunWithPool(ownerID primitive.ObjectID, cohort int, role, mode string, s
 	run := &domain.StartupRun{
 		OwnerID: ownerID, Cohort: cohort, Role: role, Mode: mode, Seed: int64(seed),
 		Status: domain.StartupStatusActive, Stage: domain.StartupStageFounder, Act: 1,
-		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, Infra: newInfra(), UnlockedItems: itemExtras,
+		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, Office: "garage", Infra: newInfra(), UnlockedItems: itemExtras,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	m := rngFor(run)

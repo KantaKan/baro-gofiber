@@ -8,16 +8,20 @@ import (
 	"gofiber-baro/internal/domain"
 )
 
-func TestRunStartsWithTwoDesksAndActLimitsBuying(t *testing.T) {
+func TestRunStartsWithTwoDesksAndOfficeLimitsBuying(t *testing.T) {
 	run := newHubRun(t, 31)
 	if !reflect.DeepEqual(run.Desks, []int{1, 1}) {
 		t.Fatalf("a run should start with two tier-1 desks, got %v", run.Desks)
 	}
 	if err := BuyDesk(run); !errors.Is(err, domain.ErrStartupDeskLimit) {
-		t.Fatalf("act 1 allows only 2 desks, got %v", err)
+		t.Fatalf("the garage holds only 2 desks, got %v", err)
 	}
 
 	run.Act = 2
+	run.Money = 100000
+	if err := MoveOffice(run, "shophouse"); err != nil {
+		t.Fatal(err)
+	}
 	before := run.Money
 	if err := BuyDesk(run); err != nil {
 		t.Fatal(err)
@@ -29,13 +33,16 @@ func TestRunStartsWithTwoDesksAndActLimitsBuying(t *testing.T) {
 		t.Fatalf("3rd desk 1500 + 4th desk 2000 should cost 3500, spent %d", spent)
 	}
 	if err := BuyDesk(run); !errors.Is(err, domain.ErrStartupDeskLimit) {
-		t.Fatalf("act 2 allows only 4 desks, got %v", err)
+		t.Fatalf("the shophouse holds only 4 desks, got %v", err)
 	}
 }
 
 func TestHiringNeedsAFreeDesk(t *testing.T) {
 	run := newHubRun(t, 32)
 	run.Act = 2
+	if err := MoveOffice(run, "shophouse"); err != nil {
+		t.Fatal(err)
+	}
 	if err := Hire(run, run.Candidates[0].ID); err != nil {
 		t.Fatal(err)
 	}

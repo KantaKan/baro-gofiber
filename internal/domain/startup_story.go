@@ -206,6 +206,7 @@ type StartupRun struct {
 	FounderOffer  []StartupDev         `bson:"founder_offer,omitempty" json:"founder_offer,omitempty"`
 	Staff         []StartupDev         `bson:"staff" json:"staff"`
 	Desks         []int                `bson:"desks,omitempty" json:"desks"`
+	Office        string               `bson:"office,omitempty" json:"office"`
 	SeenEvents    []string             `bson:"seen_events,omitempty" json:"-"`
 	NextBugs      int                  `bson:"next_bugs,omitempty" json:"next_bugs,omitempty"`
 	NextPower     float64              `bson:"next_power,omitempty" json:"next_power,omitempty"`

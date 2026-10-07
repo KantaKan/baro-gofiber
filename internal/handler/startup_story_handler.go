@@ -233,6 +233,24 @@ func (h *StartupStoryHandler) Infra(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Infra updated", run)
 }
 
+func (h *StartupStoryHandler) MoveOffice(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.MoveOffice(c.UserContext(), player, body.ID)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Moved office", run)
+}
+
 func (h *StartupStoryHandler) PickItem(c *fiber.Ctx) error {
 	player, ok := startupPlayer(c)
 	if !ok {
