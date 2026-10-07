@@ -41,7 +41,7 @@ func TestFullFreePlayJourney(t *testing.T) {
 		}
 		switch active.Stage {
 		case domain.StartupStageHub:
-			if len(active.Candidates) > 0 && len(active.Staff) < TeamCap(active.Act) && active.Money >= active.Candidates[0].Salary {
+			if len(active.Candidates) > 0 && len(active.Staff) < len(active.Desks) && active.Money >= active.Candidates[0].Salary {
 				if _, err := svc.Hire(ctx, player, active.Candidates[0].ID); err != nil {
 					t.Fatal(err)
 				}

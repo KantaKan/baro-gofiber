@@ -25,7 +25,7 @@ func newRunWithPool(ownerID primitive.ObjectID, cohort int, role, mode string, s
 	run := &domain.StartupRun{
 		OwnerID: ownerID, Cohort: cohort, Role: role, Mode: mode, Seed: int64(seed),
 		Status: domain.StartupStatusActive, Stage: domain.StartupStageFounder, Act: 1,
-		Money: StartingMoney, Staff: []domain.StartupDev{}, UnlockedItems: itemExtras,
+		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, Infra: newInfra(), UnlockedItems: itemExtras,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	m := rngFor(run)
@@ -124,6 +124,7 @@ func rollCandidates(run *domain.StartupRun, count int) []domain.StartupDev {
 			Salary:    salaryFor(fe, be, design, debug, trait),
 		})
 	}
+	rollWildcards(run, r, out)
 	return out
 }
 
@@ -141,10 +142,14 @@ func Hire(run *domain.StartupRun, candidateID string) error {
 	if idx < 0 {
 		return domain.ErrStartupInvalidChoice
 	}
-	if len(run.Staff) >= TeamCap(run.Act) {
+	ensureDesks(run)
+	if len(run.Staff) >= len(run.Desks) {
 		return domain.ErrStartupTeamFull
 	}
 	cand := run.Candidates[idx]
+	if cand.Wildcard != "" && hasWildcard(run.Staff) {
+		return domain.ErrStartupInvalidChoice
+	}
 	cost := hireCost(run, cand.Salary)
 	if run.Money < cost {
 		return domain.ErrStartupNoFunds
@@ -171,6 +176,9 @@ func Dismiss(run *domain.StartupRun, staffID string) error {
 	}
 	if idx < 0 {
 		return domain.ErrStartupInvalidChoice
+	}
+	if run.Staff[idx].Wildcard == WildVim {
+		return domain.ErrStartupCantExit
 	}
 	run.Staff = append(run.Staff[:idx], run.Staff[idx+1:]...)
 	return nil
@@ -225,6 +233,9 @@ func projectDurationSecs(run *domain.StartupRun, team []domain.StartupDev, boss 
 		case TraitPixelPerf:
 			mult *= 1.15
 		}
+		if d.Wildcard == WildGreybeard {
+			mult *= GreybeardSlowdown
+		}
 	}
 	mult *= effectsOf(run.Items).durMult
 	mult *= jobsFor(team).durMult
@@ -256,6 +267,7 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	run.NextBugs, run.NextPower, run.NextTraffic = 0, 0, 0
 	run.Money += result.MoneyDelta
 	run.Fans += result.FansDelta
 	run.LastResult = result
@@ -280,6 +292,8 @@ func Ship(run *domain.StartupRun, now time.Time) error {
 	if afterShipBurnout(run, team, now) {
 		return nil
 	}
+	wildcardBurnout(run)
+	sideQuests(run, team)
 	if endlessCheckpoint(run, boss, now) {
 		return nil
 	}
@@ -492,6 +506,7 @@ func effectiveStats(d domain.StartupDev) [4]int {
 			s[i] += 2
 		}
 	}
+	wildcardStats(d, &s)
 	for i := range s {
 		if s[i] < 0 {
 			s[i] = 0
@@ -522,8 +537,15 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	var sums [4]int
 	var power float64
 	debug, salaries, traitBugs, investorBonus := 0, 0, 0, 0
+	desk := deskBonus(run)
+	wild := wildcardEffects(run, team)
+	for role, bias := range wild.reviewer {
+		sc.reviewer[role] += bias
+	}
 	for _, d := range team {
 		s := stats(d)
+		ghostBossBonus(d, p.Boss, &s)
+		s[bestStat(s)] += desk[d.ID]
 		share := 1.0
 		if !isBuilder(d) {
 			share = SupportBuildShare
@@ -557,7 +579,14 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	power *= marketMult(run.Market, p.Theme)
 	power *= fx.powerMult
 	power *= sc.powerMult
-	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd+sc.bugs-int(math.Round(jobs.bugCut)))
+	power *= max(0.5, 1+run.NextPower)
+	infra := infraEffects(run)
+	sc.reviewer["Users"] += infra.usersBias
+	power *= infra.powerMult * wild.powerMult
+	if p.Boss == BossOutage {
+		power *= 1 + OutageHeadroomBoost*infra.headroom
+	}
+	bugs := max(0, 2*len(team)-debug/2+traitBugs+fx.bugs+jobs.bugAdd+sc.bugs+run.NextBugs+infra.bugs+wild.bugs-int(math.Round(jobs.bugCut)))
 
 	r := rngFor(run)
 	quality := (power - BugPenalty*float64(bugs)) / actScale(run.Act) * (0.9 + 0.2*r.Float64())
@@ -600,8 +629,14 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 			result.Total += score
 		}
 	}
-	result.MoneyDelta = int(math.Round(float64(result.Total*result.Total*MoneyPerPoint)*sc.moneyMult)) - salaries
+	result.CloudBill = cloudBill(run) + infra.scaleBill
+	result.MoneyDelta = int(math.Round(float64(result.Total*result.Total*MoneyPerPoint)*sc.moneyMult)) - salaries - result.CloudBill
 	result.FansDelta = int(math.Round(float64(result.Total*result.Total*FansPerPoint) * sc.fansMult))
+	if infra.ratio > 1 {
+		result.Overload = math.Round(infra.ratio*100) / 100
+		result.Postmortem = infra.postmortem
+		result.FansDelta = int(float64(result.FansDelta) / infra.ratio)
+	}
 	return result, nil
 }
 

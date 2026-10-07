@@ -52,6 +52,9 @@ func roleInfo(id string) (RoleInfo, bool) {
 }
 
 func isBuilder(d domain.StartupDev) bool {
+	if d.Wildcard == WildDuck {
+		return false
+	}
 	if strings.HasPrefix(d.ID, "founder-") {
 		return true
 	}

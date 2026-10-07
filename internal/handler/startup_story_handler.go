@@ -39,7 +39,7 @@ func startupError(c *fiber.Ctx, err error) error {
 		status = fiber.StatusNotFound
 	case errors.Is(err, domain.ErrStartupNoAttempts):
 		status = fiber.StatusForbidden
-	case errors.Is(err, domain.ErrStartupWrongStage), errors.Is(err, domain.ErrStartupInvalidChoice), errors.Is(err, domain.ErrStartupTeamFull), errors.Is(err, domain.ErrStartupNoFunds):
+	case errors.Is(err, domain.ErrStartupWrongStage), errors.Is(err, domain.ErrStartupInvalidChoice), errors.Is(err, domain.ErrStartupTeamFull), errors.Is(err, domain.ErrStartupDeskLimit), errors.Is(err, domain.ErrStartupCantExit), errors.Is(err, domain.ErrStartupNoFunds):
 		status = fiber.StatusBadRequest
 	default:
 		log.Printf("startup story: %v", err)
@@ -181,6 +181,56 @@ func (h *StartupStoryHandler) Hire(c *fiber.Ctx) error {
 		return startupError(c, err)
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Hired", run)
+}
+
+func (h *StartupStoryHandler) BuyDesk(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	run, err := h.service.BuyDesk(c.UserContext(), player)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Desk bought", run)
+}
+
+func (h *StartupStoryHandler) UpgradeDesk(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		Index int `json:"index"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.UpgradeDesk(c.UserContext(), player, body.Index)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Desk upgraded", run)
+}
+
+func (h *StartupStoryHandler) Infra(c *fiber.Ctx) error {
+	player, ok := startupPlayer(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	var body struct {
+		Action string `json:"action"`
+		Index  int    `json:"index"`
+		ID     string `json:"id"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	run, err := h.service.Infra(c.UserContext(), player, body.Action, body.Index, body.ID)
+	if err != nil {
+		return startupError(c, err)
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Infra updated", run)
 }
 
 func (h *StartupStoryHandler) PickItem(c *fiber.Ctx) error {

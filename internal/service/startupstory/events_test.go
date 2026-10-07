@@ -221,7 +221,7 @@ func TestPickEventAppliesEffectAndResumes(t *testing.T) {
 		run.ResumeStage = domain.StartupStageHub
 		run.PendingEvent = &domain.StartupPendingEvent{
 			ID:      "friday-deploy",
-			Options: []string{"Do it. YOLO 😈", "Wait for Monday"},
+			Options: []string{"Do it. YOLO", "Wait for Monday"},
 		}
 		return run
 	}
