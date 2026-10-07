@@ -11,29 +11,29 @@ import (
 const PitchCount = 3
 
 var themeEmoji = map[string]string{
-	"Food Delivery":  "🛵",
-	"Fintech":        "💸",
-	"Education":      "🎓",
-	"Health":         "💊",
-	"Thai Culture":   "🛕",
-	"Social":         "💬",
-	"Productivity":   "📈",
-	"Travel":         "✈️",
-	"Crypto":         "🪙",
-	"K-pop/Idols":    "🎤",
-	"Street Food":    "🍜",
-	"Dating":         "💘",
-	"Pets":           "🐶",
-	"Esports":        "🎮",
-	"Government/Tax": "🧾",
+	"Food Delivery":  "",
+	"Fintech":        "",
+	"Education":      "",
+	"Health":         "",
+	"Thai Culture":   "",
+	"Social":         "",
+	"Productivity":   "",
+	"Travel":         "",
+	"Crypto":         "",
+	"K-pop/Idols":    "",
+	"Street Food":    "",
+	"Dating":         "",
+	"Pets":           "",
+	"Esports":        "",
+	"Government/Tax": "",
 }
 
 var memePitchTitles = map[string]string{
-	ComboKey("LINE Bot", "Street Food"):           "🍜 Street-food LINE bot",
-	ComboKey("Dev Tool/CLI", "Government/Tax"):     "🧾 Tax calculator nobody asked for",
-	ComboKey("Mobile App", "Pets"):                 "🐶 Tinder for dogs",
-	ComboKey("Web3 dApp", "Crypto"):                "🪙 DAO that does nothing",
-	ComboKey("VR Game", "K-pop/Idols"):             "🎤 Front-row idol concert in VR",
+	ComboKey("LINE Bot", "Street Food"):           "Street-food LINE bot",
+	ComboKey("Dev Tool/CLI", "Government/Tax"):     "Tax calculator nobody asked for",
+	ComboKey("Mobile App", "Pets"):                 "Tinder for dogs",
+	ComboKey("Web3 dApp", "Crypto"):                "DAO that does nothing",
+	ComboKey("VR Game", "K-pop/Idols"):             "Front-row idol concert in VR",
 }
 
 var pitchTitleTemplates = []string{
@@ -64,7 +64,7 @@ func pitchTitle(r *rand.Rand, typeName, theme string) string {
 	}
 	emoji := themeEmoji[theme]
 	if emoji == "" {
-		emoji = "💡"
+		emoji = ""
 	}
 	tpl := pitchTitleTemplates[r.IntN(len(pitchTitleTemplates))]
 	return strings.NewReplacer(

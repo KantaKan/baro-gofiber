@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-func TestFullFreePlayJourney(t *testing.T) {
+func TestFullWeeklySeedJourney(t *testing.T) {
 	ctx := context.Background()
 	pool := []domain.StartupGenmate{}
 	for _, name := range []string{"Ploy", "Nat", "Kan"} {
@@ -23,7 +23,7 @@ func TestFullFreePlayJourney(t *testing.T) {
 	if _, err := svc.Overview(ctx, player); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.StartRun(ctx, player, domain.StartupModeFree); err != nil {
+	if _, err := svc.StartRun(ctx, player, domain.StartupModeRanked); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.PickFounder(ctx, player, 0); err != nil {
@@ -41,7 +41,7 @@ func TestFullFreePlayJourney(t *testing.T) {
 		}
 		switch active.Stage {
 		case domain.StartupStageHub:
-			if len(active.Candidates) > 0 && len(active.Staff) < TeamCap(active.Act) && active.Money >= active.Candidates[0].Salary {
+			if len(active.Candidates) > 0 && len(active.Staff) < len(active.Desks) && active.Money >= active.Candidates[0].Salary {
 				if _, err := svc.Hire(ctx, player, active.Candidates[0].ID); err != nil {
 					t.Fatal(err)
 				}

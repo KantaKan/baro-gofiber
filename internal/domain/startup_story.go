@@ -13,7 +13,10 @@ var ErrStartupRunConflict = errors.New("your startup changed in another tab, ple
 var ErrStartupWrongStage = errors.New("that action isn't available right now")
 var ErrStartupTooEarly = errors.New("your team is still building")
 var ErrStartupInvalidChoice = errors.New("invalid choice")
-var ErrStartupTeamFull = errors.New("your team is full for this act")
+var ErrStartupTeamFull = errors.New("no free desk: buy one in the Office tab")
+var ErrStartupDeskLimit = errors.New("no room for another desk this act")
+var ErrStartupCantExit = errors.New("the Vim Wizard can't exit")
+var ErrStartupInDebt = errors.New("pay off the bank loan first")
 var ErrStartupNoFunds = errors.New("not enough money to hire")
 var ErrStartupNoAttempts = errors.New("no ranked attempts left this week")
 
@@ -39,6 +42,7 @@ const (
 	StartupBoardWeekly  = "weekly"
 	StartupBoardDeepest = "deepest"
 	StartupBoardFame    = "fame"
+	StartupBoardValue   = "value"
 
 	StartupLeaderboardLimit = 100
 )
@@ -105,6 +109,9 @@ type StartupDev struct {
 	Level     int      `bson:"level,omitempty" json:"level,omitempty"`
 	XP        int      `bson:"xp,omitempty" json:"xp,omitempty"`
 	Burnout   int      `bson:"burnout,omitempty" json:"burnout,omitempty"`
+	QuestAct  int      `bson:"quest_act,omitempty" json:"-"`
+	Wildcard  string   `bson:"wildcard,omitempty" json:"wildcard,omitempty"`
+	WildDesc  string   `bson:"wild_desc,omitempty" json:"wildcard_desc,omitempty"`
 	Perks     []string `bson:"perks,omitempty" json:"perks,omitempty"`
 	XPNext    int      `bson:"xp_next,omitempty" json:"xp_next,omitempty"`
 }
@@ -122,6 +129,7 @@ type StartupPendingPerk struct {
 
 type StartupPendingEvent struct {
 	ID      string   `bson:"id" json:"id"`
+	Title   string   `bson:"title,omitempty" json:"title,omitempty"`
 	Options []string `bson:"options" json:"options"`
 }
 
@@ -148,7 +156,32 @@ type StartupResult struct {
 	Total      int             `bson:"total" json:"total"`
 	Bugs       int             `bson:"bugs" json:"bugs"`
 	MoneyDelta int             `bson:"money_delta" json:"money_delta"`
+	CloudBill  int             `bson:"cloud_bill,omitempty" json:"cloud_bill,omitempty"`
+	Overload   float64         `bson:"overload,omitempty" json:"overload,omitempty"`
+	Postmortem string          `bson:"postmortem,omitempty" json:"postmortem,omitempty"`
 	FansDelta  int             `bson:"fans_delta" json:"fans_delta"`
+}
+
+type StartupServer struct {
+	CPU int `bson:"cpu" json:"cpu"`
+	RAM int `bson:"ram" json:"ram"`
+}
+
+type StartupInfra struct {
+	Servers []StartupServer `bson:"servers" json:"servers"`
+	DB      string          `bson:"db" json:"db"`
+	Parts    []string        `bson:"parts,omitempty" json:"parts"`
+	Replicas int             `bson:"replicas,omitempty" json:"replicas,omitempty"`
+}
+
+type StartupLoad struct {
+	App    int `json:"app"`
+	AppCap int `json:"app_cap"`
+	DB     int `json:"db"`
+	DBCap  int `json:"db_cap"`
+
+	NextServer  int `json:"next_server"`
+	NextReplica int `json:"next_replica"`
 }
 
 type StartupRun struct {
@@ -174,10 +207,24 @@ type StartupRun struct {
 	Fans          int                  `bson:"fans" json:"fans"`
 	FounderOffer  []StartupDev         `bson:"founder_offer,omitempty" json:"founder_offer,omitempty"`
 	Staff         []StartupDev         `bson:"staff" json:"staff"`
+	Desks         []int                `bson:"desks,omitempty" json:"desks"`
+	Office        string               `bson:"office,omitempty" json:"office"`
+	Debt          int                  `bson:"debt,omitempty" json:"debt,omitempty"`
+	PendingFame   int                  `bson:"pending_fame,omitempty" json:"-"`
+	SeenEvents    []string             `bson:"seen_events,omitempty" json:"-"`
+	NextBugs      int                  `bson:"next_bugs,omitempty" json:"next_bugs,omitempty"`
+	NextPower     float64              `bson:"next_power,omitempty" json:"next_power,omitempty"`
+	NextTraffic   float64              `bson:"next_traffic,omitempty" json:"next_traffic,omitempty"`
+	BossVisits    int                  `bson:"boss_visits,omitempty" json:"boss_visits,omitempty"`
+	BossVisiting  bool                 `bson:"boss_visiting,omitempty" json:"boss_visiting,omitempty"`
+	Infra         *StartupInfra        `bson:"infra,omitempty" json:"infra,omitempty"`
+	Load          *StartupLoad         `bson:"-" json:"load,omitempty"`
+	DeskLimit     int                  `bson:"-" json:"desk_limit"`
 	Candidates    []StartupDev         `bson:"candidates,omitempty" json:"candidates,omitempty"`
 	Items         []string             `bson:"items,omitempty" json:"items,omitempty"`
 	ItemOffer     []string             `bson:"item_offer,omitempty" json:"item_offer,omitempty"`
 	UnlockedItems []string             `bson:"unlocked_items,omitempty" json:"-"`
+	UnlockedWildcards []string         `bson:"unlocked_wildcards,omitempty" json:"-"`
 	Project       *StartupProject      `bson:"project,omitempty" json:"project,omitempty"`
 	LastResult    *StartupResult       `bson:"last_result,omitempty" json:"last_result,omitempty"`
 	Score         int                  `bson:"score" json:"score"`

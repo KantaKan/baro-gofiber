@@ -30,19 +30,19 @@ type PerkInfo struct {
 
 var perkCatalog = []PerkInfo{
 	{ID: "clean-code", Name: "Clean-code Zealot", Desc: "−1 bug per project. Will lecture you about SOLID.", Bugs: -1},
-	{ID: "night-shift", Name: "Night-shift Coder 🌙", Desc: "Builds 8% faster. Sleeps at 5am, proudly.", DurMult: 0.92},
-	{ID: "demo-whisperer", Name: "Demo Whisperer 🎤", Desc: "+1 Investor. Somehow the demo never crashes.", Reviewer: map[string]float64{"Investor": 1}},
+	{ID: "night-shift", Name: "Night-shift Coder", Desc: "Builds 8% faster. Sleeps at 5am, proudly.", DurMult: 0.92},
+	{ID: "demo-whisperer", Name: "Demo Whisperer", Desc: "+1 Investor. Somehow the demo never crashes.", Reviewer: map[string]float64{"Investor": 1}},
 	{ID: "so-legend", Name: "Stack Overflow Legend", Desc: "+6% build power. 100k rep, zero friends.", PowerMult: 1.06},
 	{ID: "git-blame", Name: "Git Blame Survivor", Desc: "−1 bug, +0.5 Tech Lead. Has seen things.", Bugs: -1, Reviewer: map[string]float64{"Tech Lead": 0.5}},
-	{ID: "pixel-wizard", Name: "Pixel Wizard 🎨", Desc: "+1 Users. Moves things 1px until it's art.", Reviewer: map[string]float64{"Users": 1}},
-	{ID: "arch-btw", Name: "I Use Arch btw 🐧", Desc: "+1 Dev Community, −0.5 Users. Will mention it.", Reviewer: map[string]float64{"Dev Community": 1, "Users": -0.5}},
-	{ID: "rubber-duck-whisperer", Name: "Rubber Duck Whisperer 🦆", Desc: "−2 bugs. The duck does the debugging.", Bugs: -2},
-	{ID: "coffee-powered", Name: "Coffee-powered ☕", Desc: "+4% build power. Blood type: Americano.", PowerMult: 1.04},
-	{ID: "meeting-ninja", Name: "Meeting Ninja 🥷", Desc: "+0.5 Investor, +0.5 Users. Ends meetings early.", Reviewer: map[string]float64{"Investor": 0.5, "Users": 0.5}},
-	{ID: "rust-evangelist", Name: "Rust Evangelist 🦀", Desc: "+1 Tech Lead, +0.5 Dev Community. Rewrites everything.", Reviewer: map[string]float64{"Tech Lead": 1, "Dev Community": 0.5}},
-	{ID: "prod-hotfixer", Name: "3AM Hotfixer 🚒", Desc: "+20% power in the 3AM Outage. Lives for it.", OutagePower: 1.2},
-	{ID: "ship-it", Name: "Ship-It Energy 🚀", Desc: "Builds 10% faster. Tests are optional (they're not).", DurMult: 0.9},
-	{ID: "legacy-tamer", Name: "Legacy Tamer 🐉", Desc: "−1 bug, +0.3 Tech Lead. Reads COBOL for fun.", Bugs: -1, Reviewer: map[string]float64{"Tech Lead": 0.3}},
+	{ID: "pixel-wizard", Name: "Pixel Wizard", Desc: "+1 Users. Moves things 1px until it's art.", Reviewer: map[string]float64{"Users": 1}},
+	{ID: "arch-btw", Name: "I Use Arch btw", Desc: "+1 Dev Community, −0.5 Users. Will mention it.", Reviewer: map[string]float64{"Dev Community": 1, "Users": -0.5}},
+	{ID: "rubber-duck-whisperer", Name: "Rubber Duck Whisperer", Desc: "−2 bugs. The duck does the debugging.", Bugs: -2},
+	{ID: "coffee-powered", Name: "Coffee-powered", Desc: "+4% build power. Blood type: Americano.", PowerMult: 1.04},
+	{ID: "meeting-ninja", Name: "Meeting Ninja", Desc: "+0.5 Investor, +0.5 Users. Ends meetings early.", Reviewer: map[string]float64{"Investor": 0.5, "Users": 0.5}},
+	{ID: "rust-evangelist", Name: "Rust Evangelist", Desc: "+1 Tech Lead, +0.5 Dev Community. Rewrites everything.", Reviewer: map[string]float64{"Tech Lead": 1, "Dev Community": 0.5}},
+	{ID: "prod-hotfixer", Name: "3AM Hotfixer", Desc: "+20% power in the 3AM Outage. Lives for it.", OutagePower: 1.2},
+	{ID: "ship-it", Name: "Ship-It Energy", Desc: "Builds 10% faster. Tests are optional (they're not).", DurMult: 0.9},
+	{ID: "legacy-tamer", Name: "Legacy Tamer", Desc: "−1 bug, +0.3 Tech Lead. Reads COBOL for fun.", Bugs: -1, Reviewer: map[string]float64{"Tech Lead": 0.3}},
 }
 
 func nonZero(mult float64) float64 {

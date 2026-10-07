@@ -77,9 +77,10 @@ func TestBurnedOutPeopleQuitWithAMessage(t *testing.T) {
 	}
 }
 
-func TestFounderBurnoutEndsTheRun(t *testing.T) {
+func TestFounderBurnoutEndsWeeklySeedRun(t *testing.T) {
 	founder := person("founder-0", RolePM, 99)
 	run := burnoutRun(founder, person("cand-1", RoleFE, 0))
+	run.Mode = domain.StartupModeRanked
 	if !afterShipBurnout(run, []domain.StartupDev{founder}, t0) {
 		t.Fatal("founder burnout should end the run")
 	}

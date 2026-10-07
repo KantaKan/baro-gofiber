@@ -161,8 +161,8 @@ var unlockableFounders = []domain.StartupDev{
 }
 
 var unlockableItems = []StartupItem{
-	{ID: "copilot-subscription", Name: "Copilot Subscription", Icon: "🤖", Rarity: ItemRarityRare, Desc: "+2 team Backend, +1 Debug", BE: 2, Debug: 1, PowerMult: 1, DurationMult: 1},
-	{ID: "standing-desk", Name: "Standing Desk", Icon: "🪑", Rarity: ItemRarityCommon, Desc: "+1 Frontend, +1 Design", FE: 1, Design: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "copilot-subscription", Name: "Copilot Subscription", Icon: "robot", Rarity: ItemRarityRare, Desc: "+2 team Backend, +1 Debug", BE: 2, Debug: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "standing-desk", Name: "Standing Desk", Icon: "desk", Rarity: ItemRarityCommon, Desc: "+1 Frontend, +1 Design", FE: 1, Design: 1, PowerMult: 1, DurationMult: 1},
 }
 
 type UnlockInfo struct {
@@ -299,28 +299,28 @@ type StartupItem struct {
 }
 
 var itemCatalog = []StartupItem{
-	{ID: "keyboard", Name: "Mechanical Keyboard", Icon: "⌨️", Rarity: ItemRarityCommon, Desc: "+2 team Frontend", FE: 2, PowerMult: 1, DurationMult: 1},
-	{ID: "rubber-duck", Name: "Rubber Duck", Icon: "🦆", Rarity: ItemRarityCommon, Desc: "−2 bugs per ship", Bugs: -2, PowerMult: 1, DurationMult: 1},
-	{ID: "so-tab", Name: "Stack Overflow Tab", Icon: "📑", Rarity: ItemRarityCommon, Desc: "+2 team Backend", BE: 2, PowerMult: 1, DurationMult: 1},
-	{ID: "figma-pro", Name: "Figma Pro", Icon: "🎨", Rarity: ItemRarityCommon, Desc: "+2 team Design", Design: 2, PowerMult: 1, DurationMult: 1},
-	{ID: "energy-drink", Name: "Energy Drink", Icon: "⚡", Rarity: ItemRarityRare, Desc: "−20% duration, +1 bug", Bugs: 1, PowerMult: 1, DurationMult: 0.8},
-	{ID: "dark-mode", Name: "Dark Mode", Icon: "🌙", Rarity: ItemRarityRare, Desc: "+1 Dev Community review", DevCommunity: 1, PowerMult: 1, DurationMult: 1},
-	{ID: "pitch-deck", Name: "Pitch Deck", Icon: "📊", Rarity: ItemRarityLegendary, Desc: "+2 Investor review", Investor: 2, PowerMult: 1, DurationMult: 1},
-	{ID: "legacy-codebase", Name: "Legacy Codebase", Icon: "☠️", Rarity: ItemRarityCursed, Desc: "×1.3 power, +6 bugs", Bugs: 6, PowerMult: 1.3, DurationMult: 1},
-	{ID: "crunch-culture", Name: "Crunch Culture", Icon: "☠️", Rarity: ItemRarityCursed, Desc: "−40% duration, −1 all stats, much more burnout", AllStats: -1, PowerMult: 1, DurationMult: 0.6},
-	{ID: "udemy-course", Name: "Udemy Course (on sale)", Icon: "📚", Rarity: ItemRarityCommon, Desc: "Level-ups give +1 extra stat", PowerMult: 1, DurationMult: 1, LevelStats: 1},
-	{ID: "senior-mentor", Name: "Senior Mentor", Icon: "🧑‍🏫", Rarity: ItemRarityRare, Desc: "+50% XP for everyone", PowerMult: 1, DurationMult: 1, XPPct: 50},
-	{ID: "kopi-addiction", Name: "Kopi Addiction", Icon: "☕", Rarity: ItemRarityCommon, Desc: "+30% XP, +3 burnout per project", PowerMult: 1, DurationMult: 1, XPPct: 30, Burnout: 3},
-	{ID: "team-retreat", Name: "Team Retreat Fund", Icon: "🏖️", Rarity: ItemRarityRare, Desc: "−5 burnout gain per project for everyone", PowerMult: 1, DurationMult: 1, Burnout: -5},
-	{ID: "works-on-my-machine", Name: "Works on My Machine 💻", Icon: "💻", Rarity: ItemRarityRare, Desc: "×1.15 power, +4 bugs", Bugs: 4, PowerMult: 1.15, DurationMult: 1},
-	{ID: "vibe-coding", Name: "Vibe Coding ✨", Icon: "✨", Rarity: ItemRarityLegendary, Desc: "×1.3 power, +8 bugs. No plan, just vibes", Bugs: 8, PowerMult: 1.3, DurationMult: 1},
-	{ID: "blame-the-intern", Name: "Blame the Intern ☝️", Icon: "☝️", Rarity: ItemRarityCursed, Desc: "−4 bugs, +4 burnout. Someone had to take the fall", Bugs: -4, Burnout: 4, PowerMult: 1, DurationMult: 1},
-	{ID: "its-a-feature", Name: "It's Not a Bug, It's a Feature 🐛", Icon: "🐛", Rarity: ItemRarityCommon, Desc: "+1 Dev Community, +2 bugs", Bugs: 2, DevCommunity: 1, PowerMult: 1, DurationMult: 1},
-	{ID: "chatgpt-paste", Name: "Copy-Paste from ChatGPT 📋", Icon: "📋", Rarity: ItemRarityCommon, Desc: "×1.1 power, −1 Design. It all looks the same", Design: -1, Bugs: 2, PowerMult: 1.1, DurationMult: 1},
-	{ID: "dark-mode-only", Name: "Dark Mode Only 🌚", Icon: "🌚", Rarity: ItemRarityRare, Desc: "+1 Design, +1 Dev Community", Design: 1, DevCommunity: 1, PowerMult: 1, DurationMult: 1},
-	{ID: "rubber-duck-ceo", Name: "Rubber Duck CEO 🦆", Icon: "🦆", Rarity: ItemRarityLegendary, Desc: "+1 all stats. The duck approves all decisions", AllStats: 1, PowerMult: 1, DurationMult: 1},
-	{ID: "paper-prototype", Name: "Paper Prototype First 📄", Icon: "📄", Rarity: ItemRarityCommon, Desc: "−2 bugs, +1 Design", Bugs: -2, Design: 1, PowerMult: 1, DurationMult: 1},
-	{ID: "nft-roadmap", Name: "NFT Roadmap 🗺️", Icon: "🗺️", Rarity: ItemRarityCursed, Desc: "×1.2 power, +5 burnout. The roadmap is a jpeg", Bugs: 3, Burnout: 5, PowerMult: 1.2, DurationMult: 1},
+	{ID: "keyboard", Name: "Mechanical Keyboard", Icon: "keyboard", Rarity: ItemRarityCommon, Desc: "+2 team Frontend", FE: 2, PowerMult: 1, DurationMult: 1},
+	{ID: "rubber-duck", Name: "Rubber Duck", Icon: "duck", Rarity: ItemRarityCommon, Desc: "−2 bugs per ship", Bugs: -2, PowerMult: 1, DurationMult: 1},
+	{ID: "so-tab", Name: "Stack Overflow Tab", Icon: "paper", Rarity: ItemRarityCommon, Desc: "+2 team Backend", BE: 2, PowerMult: 1, DurationMult: 1},
+	{ID: "figma-pro", Name: "Figma Pro", Icon: "palette", Rarity: ItemRarityCommon, Desc: "+2 team Design", Design: 2, PowerMult: 1, DurationMult: 1},
+	{ID: "energy-drink", Name: "Energy Drink", Icon: "bolt", Rarity: ItemRarityRare, Desc: "−20% duration, +1 bug", Bugs: 1, PowerMult: 1, DurationMult: 0.8},
+	{ID: "dark-mode", Name: "Dark Mode", Icon: "moon", Rarity: ItemRarityRare, Desc: "+1 Dev Community review", DevCommunity: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "pitch-deck", Name: "Pitch Deck", Icon: "chart", Rarity: ItemRarityLegendary, Desc: "+2 Investor review", Investor: 2, PowerMult: 1, DurationMult: 1},
+	{ID: "legacy-codebase", Name: "Legacy Codebase", Icon: "skull", Rarity: ItemRarityCursed, Desc: "×1.3 power, +6 bugs", Bugs: 6, PowerMult: 1.3, DurationMult: 1},
+	{ID: "crunch-culture", Name: "Crunch Culture", Icon: "skull", Rarity: ItemRarityCursed, Desc: "−40% duration, −1 all stats, much more burnout", AllStats: -1, PowerMult: 1, DurationMult: 0.6},
+	{ID: "udemy-course", Name: "Udemy Course (on sale)", Icon: "book", Rarity: ItemRarityCommon, Desc: "Level-ups give +1 extra stat", PowerMult: 1, DurationMult: 1, LevelStats: 1},
+	{ID: "senior-mentor", Name: "Senior Mentor", Icon: "team", Rarity: ItemRarityRare, Desc: "+50% XP for everyone", PowerMult: 1, DurationMult: 1, XPPct: 50},
+	{ID: "kopi-addiction", Name: "Kopi Addiction", Icon: "cup", Rarity: ItemRarityCommon, Desc: "+30% XP, +3 burnout per project", PowerMult: 1, DurationMult: 1, XPPct: 30, Burnout: 3},
+	{ID: "team-retreat", Name: "Team Retreat Fund", Icon: "palm", Rarity: ItemRarityRare, Desc: "−5 burnout gain per project for everyone", PowerMult: 1, DurationMult: 1, Burnout: -5},
+	{ID: "works-on-my-machine", Name: "Works on My Machine", Icon: "laptop", Rarity: ItemRarityRare, Desc: "×1.15 power, +4 bugs", Bugs: 4, PowerMult: 1.15, DurationMult: 1},
+	{ID: "vibe-coding", Name: "Vibe Coding", Icon: "sparkle", Rarity: ItemRarityLegendary, Desc: "×1.3 power, +8 bugs. No plan, just vibes", Bugs: 8, PowerMult: 1.3, DurationMult: 1},
+	{ID: "blame-the-intern", Name: "Blame the Intern", Icon: "finger", Rarity: ItemRarityCursed, Desc: "−4 bugs, +4 burnout. Someone had to take the fall", Bugs: -4, Burnout: 4, PowerMult: 1, DurationMult: 1},
+	{ID: "its-a-feature", Name: "It's Not a Bug, It's a Feature", Icon: "bug", Rarity: ItemRarityCommon, Desc: "+1 Dev Community, +2 bugs", Bugs: 2, DevCommunity: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "chatgpt-paste", Name: "Copy-Paste from ChatGPT", Icon: "clipboard", Rarity: ItemRarityCommon, Desc: "×1.1 power, −1 Design. It all looks the same", Design: -1, Bugs: 2, PowerMult: 1.1, DurationMult: 1},
+	{ID: "dark-mode-only", Name: "Dark Mode Only", Icon: "moon", Rarity: ItemRarityRare, Desc: "+1 Design, +1 Dev Community", Design: 1, DevCommunity: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "rubber-duck-ceo", Name: "Rubber Duck CEO", Icon: "duck", Rarity: ItemRarityLegendary, Desc: "+1 all stats. The duck approves all decisions", AllStats: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "paper-prototype", Name: "Paper Prototype First", Icon: "paper", Rarity: ItemRarityCommon, Desc: "−2 bugs, +1 Design", Bugs: -2, Design: 1, PowerMult: 1, DurationMult: 1},
+	{ID: "nft-roadmap", Name: "NFT Roadmap", Icon: "map", Rarity: ItemRarityCursed, Desc: "×1.2 power, +5 burnout. The roadmap is a jpeg", Bugs: 3, Burnout: 5, PowerMult: 1.2, DurationMult: 1},
 }
 
 var rarityWeights = []struct {
@@ -389,12 +389,12 @@ var reviewers = []reviewer{
 	{Name: "Investor", Favor: -1, Lines: [3][]string{
 		{"Interesting... (checks phone)", "Have you considered pivoting to crypto?"},
 		{"Promising traction. Let's circle back.", "I see a path to profitability. Maybe."},
-		{"Take my money. All of it.", "This is the next unicorn 🦄"},
+		{"Take my money. All of it.", "This is the next unicorn"},
 	}},
 	{Name: "Dev Community", Favor: 0, Lines: [3][]string{
 		{"Ratio'd on the forums, sorry.", "Someone already built this in 2012."},
 		{"Decent! Starred on GitHub.", "Cool side project energy."},
-		{"Trending #1 on the dev forums 🔥", "The README alone deserves an award."},
+		{"Trending #1 on the dev forums", "The README alone deserves an award."},
 	}},
 }
 

@@ -81,8 +81,9 @@ func TestBossProjectLasts90s(t *testing.T) {
 	}
 }
 
-func TestDemoDayFailEndsPivot(t *testing.T) {
+func TestDemoDayFailEndsWeeklySeedRun(t *testing.T) {
 	run := hubRunAt(t, 62, 2, []domain.StartupDev{mkDev("d", 2, 2, 2, 2)})
+	run.Mode = domain.StartupModeRanked
 	run.BossOrder = []string{BossDemoDay, BossOutage}
 	shipNow(t, run, "Game", "Fintech")
 	if run.Status != domain.StartupStatusEnded || run.Outcome != domain.StartupOutcomePivot {
@@ -174,10 +175,11 @@ func TestIPOWinDoublesInvestor(t *testing.T) {
 	}
 }
 
-func TestBankruptcyEndsPivot(t *testing.T) {
+func TestBankruptcyEndsWeeklySeedRun(t *testing.T) {
 	dev := mkDev("d", 1, 1, 1, 1)
 	dev.Salary = 5000
 	run := hubRunAt(t, 67, 0, []domain.StartupDev{dev})
+	run.Mode = domain.StartupModeRanked
 	run.Money = 100
 	shipNow(t, run, "Game", "Fintech")
 	if run.Status != domain.StartupStatusEnded || run.Outcome != domain.StartupOutcomePivot {

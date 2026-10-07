@@ -63,8 +63,31 @@ func restedStaff(run *domain.StartupRun) []string {
 	return ids
 }
 
+var (
+	botMode   = domain.StartupModeRanked
+	botMaxAct = 60
+	botLast   *domain.StartupRun
+)
+
+func smartMove(run *domain.StartupRun) {
+	ensureOffice(run)
+	next := officeIndex(run.Office) + 1
+	if next >= len(offices) || len(run.Desks) < officeDesks(run) {
+		return
+	}
+	payroll := 0
+	for _, d := range run.Staff {
+		payroll += d.Salary
+	}
+	if run.Money-offices[next].Price >= payroll {
+		_ = MoveOffice(run, offices[next].ID)
+	}
+}
+
 func smartHire(run *domain.StartupRun) {
-	for len(run.Staff) < TeamCap(run.Act) && len(run.Candidates) > 0 {
+	defer smartUpgrade(run)
+	smartMove(run)
+	for len(run.Staff) < officeDesks(run) && len(run.Candidates) > 0 {
 		have := map[string]bool{}
 		payroll := 0
 		for _, d := range run.Staff {
@@ -85,7 +108,14 @@ func smartHire(run *domain.StartupRun) {
 			}
 		}
 		c := run.Candidates[pick]
-		if run.Money-c.Salary < (payroll+c.Salary)*2 {
+		desk := 0
+		if len(run.Staff) >= len(run.Desks) {
+			desk = NextDeskPrice(run)
+		}
+		if run.Money-desk-c.Salary < (payroll+c.Salary)*2 {
+			return
+		}
+		if desk > 0 && BuyDesk(run) != nil {
 			return
 		}
 		if Hire(run, c.ID) != nil {
@@ -94,12 +124,81 @@ func smartHire(run *domain.StartupRun) {
 	}
 }
 
+func smartUpgrade(run *domain.StartupRun) {
+	payroll := 0
+	for _, d := range run.Staff {
+		payroll += d.Salary
+	}
+	for i := range run.Desks {
+		if run.Desks[i] < MaxDeskTier && run.Money-DeskUpgradePrice(run.Desks[i]) >= payroll*3 {
+			_ = UpgradeDesk(run, i)
+		}
+	}
+}
+
+func smartInfra(run *domain.StartupRun) {
+	for range 8 {
+		l := currentLoad(run)
+		if l == nil {
+			return
+		}
+		inf := run.Infra
+		app, db := l.App*13/10, l.DB*13/10
+		var err error
+		switch {
+		case run.Act >= 3 && !hasPart(inf, "queue") && run.Money > 20000:
+			err = InfraAction(run, "part", 0, "queue")
+		case run.Act >= 3 && !hasPart(inf, "autoscale") && run.Money > 20000:
+			err = InfraAction(run, "part", 0, "autoscale")
+		case db > l.DBCap && !hasPart(inf, "index"):
+			err = InfraAction(run, "part", 0, "index")
+		case db > l.DBCap && inf.DB == "sqlite":
+			err = InfraAction(run, "db", 0, "postgres")
+		case db > l.DBCap && !hasPart(inf, "cache") && run.Act >= 2:
+			err = InfraAction(run, "part", 0, "cache")
+		case db > l.DBCap && run.Act >= 2:
+			err = InfraAction(run, "replica", 0, "")
+		case app > l.AppCap:
+			weak := 0
+			for i, s := range inf.Servers {
+				if min(s.CPU, s.RAM) < min(inf.Servers[weak].CPU, inf.Servers[weak].RAM) {
+					weak = i
+				}
+			}
+			s := inf.Servers[weak]
+			switch {
+			case min(s.CPU, s.RAM) < 3 && s.CPU <= s.RAM:
+				err = InfraAction(run, "cpu", weak, "")
+			case min(s.CPU, s.RAM) < 3:
+				err = InfraAction(run, "ram", weak, "")
+			case !hasPart(inf, "lb"):
+				err = InfraAction(run, "part", 0, "lb")
+			case !hasPart(inf, "cdn") && run.Act >= 2:
+				err = InfraAction(run, "part", 0, "cdn")
+			default:
+				err = InfraAction(run, "server", 0, "")
+			}
+		default:
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct int, bosses int, totals []int) {
-	run := NewRun(primitive.NewObjectID(), 12, "learner", domain.StartupModeFree, seed, t0)
+	reachedIPO, deathAct, bosses, totals, _ = playBotInfra(t, seed, smart, smart)
+	return
+}
+
+func playBotInfra(t *testing.T, seed uint64, smart, buyInfra bool) (reachedIPO bool, deathAct int, bosses int, totals []int, overloadAct int) {
+	run := NewRun(primitive.NewObjectID(), 12, "learner", botMode, seed, t0)
+	run.UnlockedWildcards = botWildcards
 	if err := PickFounder(run, 0); err != nil {
 		t.Fatal(err)
 	}
-	for run.Status == domain.StartupStatusActive && run.Act < 60 {
+	for run.Status == domain.StartupStatusActive && run.Act < botMaxAct {
 		switch run.Stage {
 		case domain.StartupStagePerk:
 			if err := PickPerk(run, 0); err != nil {
@@ -124,6 +223,9 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 			}
 		case domain.StartupStageHub:
 			typ, theme := "Web App", "Education"
+			if buyInfra {
+				smartInfra(run)
+			}
 			if smart {
 				smartHire(run)
 				best := -1.0
@@ -156,6 +258,9 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 			if act <= 3 {
 				totals = append(totals, run.LastResult.Total*40/outOf)
 			}
+			if run.LastResult.Overload > 1 && overloadAct == 0 {
+				overloadAct = act
+			}
 		default:
 			t.Fatalf("unexpected stage %s", run.Stage)
 		}
@@ -163,7 +268,8 @@ func playBot(t *testing.T, seed uint64, smart bool) (reachedIPO bool, deathAct i
 	if run.Outcome == domain.StartupOutcomeIPO {
 		reachedIPO = true
 	}
-	return reachedIPO, run.MaxAct, run.BossesPassed, totals
+	botLast = run
+	return reachedIPO, run.MaxAct, run.BossesPassed, totals, overloadAct
 }
 
 func simulate(t *testing.T, smart bool) botStats {

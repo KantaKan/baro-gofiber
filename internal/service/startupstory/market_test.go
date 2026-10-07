@@ -135,6 +135,15 @@ func TestShipRecordsDiscoveredCombo(t *testing.T) {
 		t.Fatalf("studio missing combo %q: %+v", want, store.studio.DiscoveredCombos)
 	}
 	before := len(store.studio.DiscoveredCombos)
+	for store.run.Stage == domain.StartupStageEvent || store.run.Stage == domain.StartupStagePerk {
+		pick := svc.PickEvent
+		if store.run.Stage == domain.StartupStagePerk {
+			pick = svc.PickPerk
+		}
+		if _, err := pick(ctx, player, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := svc.PickItem(ctx, player, 0); err != nil {
 		t.Fatal(err)
 	}
