@@ -23,14 +23,14 @@ type WorldEventInfo struct {
 }
 
 var worldEventCatalog = []WorldEventInfo{
-	{ID: "ai-hype", Name: "AI Hype Wave 🤖", Desc: "AI Chatbots get +50% power. Investors clapping at autocomplete.", AIProducts: true},
-	{ID: "crypto-winter", Name: "Crypto Winter 🥶", Desc: "Crypto projects earn 40% less. Winter is coming.", CryptoTheme: true},
-	{ID: "layoff-season", Name: "Layoff Season 🧑‍💻", Desc: "Hiring is cheap this act: −40% salary.", HireMult: 0.6},
-	{ID: "hackathon", Name: "Hackathon Week 🏃", Desc: "Ships 25% faster, sloppier: +2 bugs.", DurMult: 0.75, Bugs: 2},
-	{ID: "songkran", Name: "Songkran Holiday 💦", Desc: "Half the team is at the water fight: −25% power.", PowerMult: 0.75},
-	{ID: "rainy-season", Name: "Rainy Season Traffic 🌧️", Desc: "Bangkok traffic: +30% build time.", DurMult: 1.3},
-	{ID: "viral-tiktok", Name: "A TikTok Went Viral 🎵", Desc: "+50% fans this act. The algorithm loves you.", FansMult: 1.5},
-	{ID: "sponsor-week", Name: "Tech Sponsor Week 🎪", Desc: "+25% money this act. Swag budget unlocked.", MoneyMult: 1.25},
+	{ID: "ai-hype", Name: "AI Hype Wave", Desc: "AI Chatbots get +50% power. Investors clapping at autocomplete.", AIProducts: true},
+	{ID: "crypto-winter", Name: "Crypto Winter", Desc: "Crypto projects earn 40% less. Winter is coming.", CryptoTheme: true},
+	{ID: "layoff-season", Name: "Layoff Season", Desc: "Hiring is cheap this act: −40% salary.", HireMult: 0.6},
+	{ID: "hackathon", Name: "Hackathon Week", Desc: "Ships 25% faster, sloppier: +2 bugs.", DurMult: 0.75, Bugs: 2},
+	{ID: "songkran", Name: "Songkran Holiday", Desc: "Half the team is at the water fight: −25% power.", PowerMult: 0.75},
+	{ID: "rainy-season", Name: "Rainy Season Traffic", Desc: "Bangkok traffic: +30% build time.", DurMult: 1.3},
+	{ID: "viral-tiktok", Name: "A TikTok Went Viral", Desc: "+50% fans this act. The algorithm loves you.", FansMult: 1.5},
+	{ID: "sponsor-week", Name: "Tech Sponsor Week", Desc: "+25% money this act. Swag budget unlocked.", MoneyMult: 1.25},
 }
 
 var worldEventPool = []string{
@@ -68,14 +68,14 @@ var choiceEventCatalog = []ChoiceEventInfo{
 		{Label: "Explain why not", Effect: eventEffect{Fans: 150}},
 	}},
 	{ID: "friday-deploy", Title: "Push to Prod on Friday?", Options: [2]choiceOption{
-		{Label: "Do it. YOLO 😈", Effect: eventEffect{Money: 3000, Burnout: 10}},
+		{Label: "Do it. YOLO", Effect: eventEffect{Money: 3000, Burnout: 10}},
 		{Label: "Wait for Monday", Effect: eventEffect{Burnout: -8}},
 	}},
 	{ID: "code-review", Title: "Senior Dev Offers a Code Review", Options: [2]choiceOption{
 		{Label: "Accept, buy them coffee", Effect: eventEffect{Money: -400, Burnout: -12}},
 		{Label: "We're gods, no thanks", Effect: eventEffect{Burnout: 8}},
 	}},
-	{ID: "intern-db", Title: "The Intern Deleted the Prod DB 😱", Options: [2]choiceOption{
+	{ID: "intern-db", Title: "The Intern Deleted the Prod DB", Options: [2]choiceOption{
 		{Label: "Restore from backup", Effect: eventEffect{Money: -800}},
 		{Label: "Blame the intern publicly", Effect: eventEffect{Fans: -300}},
 	}},
@@ -84,7 +84,7 @@ var choiceEventCatalog = []ChoiceEventInfo{
 		{Label: "Too nervous, skip", Effect: eventEffect{Burnout: -8}},
 	}},
 	{ID: "team-lunch", Title: "Team Lunch at the Mall", Options: [2]choiceOption{
-		{Label: "Go all in 🍜", Effect: eventEffect{Money: -900, Burnout: -18}},
+		{Label: "Go all in", Effect: eventEffect{Money: -900, Burnout: -18}},
 		{Label: "Instant noodles", Effect: eventEffect{Money: -100, Burnout: -4}},
 	}},
 	{ID: "grant", Title: "Government Digital Grant", Options: [2]choiceOption{
@@ -92,14 +92,14 @@ var choiceEventCatalog = []ChoiceEventInfo{
 		{Label: "Skip it, ship instead", Effect: eventEffect{Fans: 250}},
 	}},
 	{ID: "ads", Title: "Ad Budget Request", Options: [2]choiceOption{
-		{Label: "Buy the ads 📣", Effect: eventEffect{Money: -1200, Fans: 700}},
+		{Label: "Buy the ads", Effect: eventEffect{Money: -1200, Fans: 700}},
 		{Label: "Organic only", Effect: eventEffect{Fans: 150}},
 	}},
 	{ID: "oss-pr", Title: "A Stranger Sent a Big PR", Options: [2]choiceOption{
-		{Label: "Merge it 🙌", Effect: eventEffect{Money: -300, Fans: 400}},
+		{Label: "Merge it", Effect: eventEffect{Money: -300, Fans: 400}},
 		{Label: "Close it, too risky", Effect: eventEffect{Burnout: 6}},
 	}},
-	{ID: "office-dog", Title: "Office Dog Adoption Day 🐶", Options: [2]choiceOption{
+	{ID: "office-dog", Title: "Office Dog Adoption Day", Options: [2]choiceOption{
 		{Label: "Adopt the good boy", Effect: eventEffect{Money: -700, Fans: 200, Burnout: -15}},
 		{Label: "Not now", Effect: eventEffect{Burnout: -3}},
 	}},

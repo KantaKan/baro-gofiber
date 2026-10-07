@@ -23,40 +23,40 @@ const (
 )
 
 var quitRoasts = []string{
-	"{name} quit to open a café. The café already makes more than your startup ☕",
-	"{name} left for a company that has a PM 🙃",
-	"{name} rage-quit after the 4th 'quick sync' today 📅",
-	"{name} is now a full-time TikTok coding influencer 📱",
-	"{name} uninstalled VS Code and moved to a farm in Chiang Mai 🌾",
-	"{name} saw the codebase one last time and whispered 'nope' 🚪",
-	"{name} rewrote their resume in Rust and left 🦀",
-	"{name} said 'I use Arch btw' and was never seen again 🐧",
-	"{name} left a 3,000-line PR called 'final fix' and vanished 👻",
-	"{name} quit to sell mookata. Honestly? Smart 🔥",
-	"{name} burned out so hard their keyboard is still warm ⌨️",
-	"{name} joined a crypto startup. Pray for them 🙏",
-	"{name} found out the 'unlimited leave' was a lie 🏖️",
-	"{name} pushed to main on Friday and fled the country ✈️",
-	"{name} is 'taking a break' (they are on LinkedIn 'Open to work') 💼",
-	"{name} left a sticky note: 'it works on my machine' and walked out 🗒️",
-	"{name} became a monk. Inner peace > your sprint 🧘",
-	"{name} said ok boomer to the deadline and left 💅",
-	"{name} is now a barista who refuses to talk about JavaScript ☕",
-	"{name} quit. Their last commit message: 'good luck lol' 🫡",
-	"{name} ran out of coffee and willpower at the same time 🫠",
-	"{name} closed 47 Jira tickets as 'won't fix' and left 🎫",
+	"{name} quit to open a café. The café already makes more than your startup",
+	"{name} left for a company that has a PM",
+	"{name} rage-quit after the 4th 'quick sync' today",
+	"{name} is now a full-time TikTok coding influencer",
+	"{name} uninstalled VS Code and moved to a farm in Chiang Mai",
+	"{name} saw the codebase one last time and whispered 'nope'",
+	"{name} rewrote their resume in Rust and left",
+	"{name} said 'I use Arch btw' and was never seen again",
+	"{name} left a 3,000-line PR called 'final fix' and vanished",
+	"{name} quit to sell mookata. Honestly? Smart",
+	"{name} burned out so hard their keyboard is still warm",
+	"{name} joined a crypto startup. Pray for them",
+	"{name} found out the 'unlimited leave' was a lie",
+	"{name} pushed to main on Friday and fled the country",
+	"{name} is 'taking a break' (they are on LinkedIn 'Open to work')",
+	"{name} left a sticky note: 'it works on my machine' and walked out",
+	"{name} became a monk. Inner peace > your sprint",
+	"{name} said ok boomer to the deadline and left",
+	"{name} is now a barista who refuses to talk about JavaScript",
+	"{name} quit. Their last commit message: 'good luck lol'",
+	"{name} ran out of coffee and willpower at the same time",
+	"{name} closed 47 Jira tickets as 'won't fix' and left",
 }
 
 var gentleBreaks = []string{
-	"{name} took a well-deserved break 🐱 Thanks for the ride!",
-	"{name} is recharging for a while 🌿 See you next run!",
-	"{name} stepped away to rest 🛋️ Proud of the work!",
+	"{name} took a well-deserved break. Thanks for the ride!",
+	"{name} is recharging for a while. See you next run!",
+	"{name} stepped away to rest. Proud of the work!",
 }
 
 var founderBurnouts = []string{
-	"{name} the founder burned out and moved to Pai to 'find themselves' 🏔️",
-	"{name} the founder fell asleep on the keyboard and woke up in a different career 😴",
-	"{name} the founder logged off. Forever. The startup pivots 🐱",
+	"{name} the founder burned out and moved to Pai to 'find themselves'",
+	"{name} the founder fell asleep on the keyboard and woke up in a different career",
+	"{name} the founder logged off. Forever. The startup pivots",
 }
 
 func isFounder(d domain.StartupDev) bool {
@@ -137,5 +137,5 @@ func teamRetreat(run *domain.StartupRun) {
 	for i := range run.Staff {
 		run.Staff[i].Burnout = max(0, run.Staff[i].Burnout-BurnoutRetreat)
 	}
-	addLog(run, "🏖️ Team retreat to Hua Hin! Everyone feels human again")
+	addLog(run, "Team retreat to Hua Hin! Everyone feels human again")
 }

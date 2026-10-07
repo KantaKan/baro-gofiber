@@ -16,16 +16,16 @@ type GimmickInfo struct {
 }
 
 var gimmickCatalog = []GimmickInfo{
-	{ID: "readme-only", Name: "Investor Only Reads the README 📄", Desc: "+1.5 Dev Community, −1 Investor. Skimmed it between meetings.", Reviewer: map[string]float64{"Dev Community": 1.5, "Investor": -1}},
-	{ID: "hates-js", Name: "Tech Lead Hates JavaScript Today 🧟", Desc: "Frontend counts half. It's a phase.", WeightMult: &[4]float64{0.5, 1, 1, 1}},
-	{ID: "wifi-down", Name: "Demo Day WiFi Is Down 📶", Desc: "Backend doesn't count. Radio silence on port 8080.", Weights: &[4]float64{0.4, 0, 0.4, 0.2}},
-	{ID: "nephew-joins", Name: "The CEO's Nephew Joins the Demo 👦", Desc: "+1.5 Users, −1 Dev Community. He pressed one button.", Reviewer: map[string]float64{"Users": 1.5, "Dev Community": -1}},
-	{ID: "flaky-ci", Name: "CI Is Flaky Today 🔀", Desc: "+2 bugs. It was green in staging, we promise.", Bugs: 2},
-	{ID: "coffee-budget", Name: "Emergency Coffee Budget Approved ☕", Desc: "+12% build power. Blood type: espresso.", PowerMult: 1.12},
-	{ID: "office-dog", Name: "The Office Dog Stole the Demo 🐕", Desc: "−7% power, +1 Users. Worth it.", PowerMult: 0.93, Reviewer: map[string]float64{"Users": 1}},
-	{ID: "jira-avalanche", Name: "Jira Avalanche 🎫", Desc: "+1 bug, −0.5 Tech Lead. Twelve new tickets, all urgent.", Bugs: 1, Reviewer: map[string]float64{"Tech Lead": -0.5}},
-	{ID: "sponsored-deck", Name: "Investor Forwarded Your Deck 📤", Desc: "+25% money. Someone said yes to a meeting.", MoneyMult: 1.25},
-	{ID: "standup-marathon", Name: "All-Hands Standup Marathon 📅", Desc: "−5% power, +0.5 Investor. Status: also a meeting.", PowerMult: 0.95, Reviewer: map[string]float64{"Investor": 0.5}},
+	{ID: "readme-only", Name: "Investor Only Reads the README", Desc: "+1.5 Dev Community, −1 Investor. Skimmed it between meetings.", Reviewer: map[string]float64{"Dev Community": 1.5, "Investor": -1}},
+	{ID: "hates-js", Name: "Tech Lead Hates JavaScript Today", Desc: "Frontend counts half. It's a phase.", WeightMult: &[4]float64{0.5, 1, 1, 1}},
+	{ID: "wifi-down", Name: "Demo Day WiFi Is Down", Desc: "Backend doesn't count. Radio silence on port 8080.", Weights: &[4]float64{0.4, 0, 0.4, 0.2}},
+	{ID: "nephew-joins", Name: "The CEO's Nephew Joins the Demo", Desc: "+1.5 Users, −1 Dev Community. He pressed one button.", Reviewer: map[string]float64{"Users": 1.5, "Dev Community": -1}},
+	{ID: "flaky-ci", Name: "CI Is Flaky Today", Desc: "+2 bugs. It was green in staging, we promise.", Bugs: 2},
+	{ID: "coffee-budget", Name: "Emergency Coffee Budget Approved", Desc: "+12% build power. Blood type: espresso.", PowerMult: 1.12},
+	{ID: "office-dog", Name: "The Office Dog Stole the Demo", Desc: "−7% power, +1 Users. Worth it.", PowerMult: 0.93, Reviewer: map[string]float64{"Users": 1}},
+	{ID: "jira-avalanche", Name: "Jira Avalanche", Desc: "+1 bug, −0.5 Tech Lead. Twelve new tickets, all urgent.", Bugs: 1, Reviewer: map[string]float64{"Tech Lead": -0.5}},
+	{ID: "sponsored-deck", Name: "Investor Forwarded Your Deck", Desc: "+25% money. Someone said yes to a meeting.", MoneyMult: 1.25},
+	{ID: "standup-marathon", Name: "All-Hands Standup Marathon", Desc: "−5% power, +0.5 Investor. Status: also a meeting.", PowerMult: 0.95, Reviewer: map[string]float64{"Investor": 0.5}},
 }
 
 var gimmickPool = []string{
