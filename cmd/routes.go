@@ -125,6 +125,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	startup.Post("/runs/active/perk", h.StartupStory.PickPerk)
 	startup.Post("/runs/active/event", h.StartupStory.PickEvent)
 	startup.Post("/runs/active/hire", h.StartupStory.Hire)
+	startup.Post("/runs/active/desks", h.StartupStory.BuyDesk)
+	startup.Post("/runs/active/desks/upgrade", h.StartupStory.UpgradeDesk)
 	startup.Delete("/runs/active/staff/:id", h.StartupStory.Dismiss)
 
 	adminLimiter := limiter.New(limiter.Config{

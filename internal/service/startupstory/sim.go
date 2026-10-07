@@ -25,7 +25,7 @@ func newRunWithPool(ownerID primitive.ObjectID, cohort int, role, mode string, s
 	run := &domain.StartupRun{
 		OwnerID: ownerID, Cohort: cohort, Role: role, Mode: mode, Seed: int64(seed),
 		Status: domain.StartupStatusActive, Stage: domain.StartupStageFounder, Act: 1,
-		Money: StartingMoney, Staff: []domain.StartupDev{}, UnlockedItems: itemExtras,
+		Money: StartingMoney, Staff: []domain.StartupDev{}, Desks: []int{startDeskTier, startDeskTier}, UnlockedItems: itemExtras,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	m := rngFor(run)
@@ -141,7 +141,8 @@ func Hire(run *domain.StartupRun, candidateID string) error {
 	if idx < 0 {
 		return domain.ErrStartupInvalidChoice
 	}
-	if len(run.Staff) >= TeamCap(run.Act) {
+	ensureDesks(run)
+	if len(run.Staff) >= len(run.Desks) {
 		return domain.ErrStartupTeamFull
 	}
 	cand := run.Candidates[idx]
@@ -522,8 +523,10 @@ func evaluate(run *domain.StartupRun) (*domain.StartupResult, error) {
 	var sums [4]int
 	var power float64
 	debug, salaries, traitBugs, investorBonus := 0, 0, 0, 0
+	desk := deskBonus(run)
 	for _, d := range team {
 		s := stats(d)
+		s[bestStat(s)] += desk[d.ID]
 		share := 1.0
 		if !isBuilder(d) {
 			share = SupportBuildShare

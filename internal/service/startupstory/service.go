@@ -51,6 +51,7 @@ type Overview struct {
 	OSSUnlocked        bool                  `json:"oss_unlocked"`
 	OptOut     bool                  `json:"opt_out"`
 	ComboRatings map[string]string     `json:"combo_ratings,omitempty"`
+	DeskPrices   DeskPrices            `json:"desk_prices"`
 }
 
 type Service struct {
@@ -128,7 +129,8 @@ func (s *Service) Overview(ctx context.Context, player Player) (*Overview, error
 			ratings[key] = r
 		}
 	}
-	return &Overview{Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OSSUnlocked: ossFounderUnlocked(studio), OptOut: optOut, ComboRatings: ratings}, nil
+	prepareRun(run)
+	return &Overview{DeskPrices: deskPrices, Studio: studio, Run: run, RankedAttemptsLeft: left, WeekKey: weekKey, ServerTime: s.now(), Types: typeNames, Themes: themes, Items: items, Unlocks: unlockTable, Roles: roles, Perks: perkCatalog, OSSUnlocked: ossFounderUnlocked(studio), OptOut: optOut, ComboRatings: ratings}, nil
 }
 
 func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*domain.StartupRun, error) {
@@ -173,6 +175,7 @@ func (s *Service) StartRun(ctx context.Context, player Player, mode string) (*do
 	if err := s.store.InsertRun(ctx, run); err != nil {
 		return nil, err
 	}
+	prepareRun(run)
 	return run, nil
 }
 
@@ -250,6 +253,18 @@ func (s *Service) Ship(ctx context.Context, player Player) (*domain.StartupRun, 
 func (s *Service) Hire(ctx context.Context, player Player, candidateID string) (*domain.StartupRun, error) {
 	return s.mutate(ctx, player, func(run *domain.StartupRun, _ time.Time) error {
 		return Hire(run, candidateID)
+	})
+}
+
+func (s *Service) BuyDesk(ctx context.Context, player Player) (*domain.StartupRun, error) {
+	return s.mutate(ctx, player, func(run *domain.StartupRun, _ time.Time) error {
+		return BuyDesk(run)
+	})
+}
+
+func (s *Service) UpgradeDesk(ctx context.Context, player Player, index int) (*domain.StartupRun, error) {
+	return s.mutate(ctx, player, func(run *domain.StartupRun, _ time.Time) error {
+		return UpgradeDesk(run, index)
 	})
 }
 
@@ -352,9 +367,11 @@ func (s *Service) mutate(ctx context.Context, player Player, apply func(*domain.
 	}
 	now := s.now()
 	expected := run.Version
+	prepareRun(run)
 	if err := apply(run, now); err != nil {
 		return nil, err
 	}
+	prepareRun(run)
 	run.Version = expected + 1
 	run.UpdatedAt = now
 	if err := s.store.SaveRun(ctx, run, expected); err != nil {

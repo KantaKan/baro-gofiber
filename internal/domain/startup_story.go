@@ -13,7 +13,8 @@ var ErrStartupRunConflict = errors.New("your startup changed in another tab, ple
 var ErrStartupWrongStage = errors.New("that action isn't available right now")
 var ErrStartupTooEarly = errors.New("your team is still building")
 var ErrStartupInvalidChoice = errors.New("invalid choice")
-var ErrStartupTeamFull = errors.New("your team is full for this act")
+var ErrStartupTeamFull = errors.New("no free desk: buy one in the Office tab")
+var ErrStartupDeskLimit = errors.New("no room for another desk this act")
 var ErrStartupNoFunds = errors.New("not enough money to hire")
 var ErrStartupNoAttempts = errors.New("no ranked attempts left this week")
 
@@ -174,6 +175,8 @@ type StartupRun struct {
 	Fans          int                  `bson:"fans" json:"fans"`
 	FounderOffer  []StartupDev         `bson:"founder_offer,omitempty" json:"founder_offer,omitempty"`
 	Staff         []StartupDev         `bson:"staff" json:"staff"`
+	Desks         []int                `bson:"desks,omitempty" json:"desks"`
+	DeskLimit     int                  `bson:"-" json:"desk_limit"`
 	Candidates    []StartupDev         `bson:"candidates,omitempty" json:"candidates,omitempty"`
 	Items         []string             `bson:"items,omitempty" json:"items,omitempty"`
 	ItemOffer     []string             `bson:"item_offer,omitempty" json:"item_offer,omitempty"`

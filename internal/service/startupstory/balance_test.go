@@ -64,6 +64,7 @@ func restedStaff(run *domain.StartupRun) []string {
 }
 
 func smartHire(run *domain.StartupRun) {
+	defer smartUpgrade(run)
 	for len(run.Staff) < TeamCap(run.Act) && len(run.Candidates) > 0 {
 		have := map[string]bool{}
 		payroll := 0
@@ -85,11 +86,30 @@ func smartHire(run *domain.StartupRun) {
 			}
 		}
 		c := run.Candidates[pick]
-		if run.Money-c.Salary < (payroll+c.Salary)*2 {
+		desk := 0
+		if len(run.Staff) >= len(run.Desks) {
+			desk = NextDeskPrice(run)
+		}
+		if run.Money-desk-c.Salary < (payroll+c.Salary)*2 {
+			return
+		}
+		if desk > 0 && BuyDesk(run) != nil {
 			return
 		}
 		if Hire(run, c.ID) != nil {
 			return
+		}
+	}
+}
+
+func smartUpgrade(run *domain.StartupRun) {
+	payroll := 0
+	for _, d := range run.Staff {
+		payroll += d.Salary
+	}
+	for i := range run.Desks {
+		if run.Desks[i] < MaxDeskTier && run.Money-DeskUpgradePrice(run.Desks[i]) >= payroll*3 {
+			_ = UpgradeDesk(run, i)
 		}
 	}
 }
