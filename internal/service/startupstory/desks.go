@@ -10,12 +10,14 @@ const (
 	StartingDesks  = 2
 	DeskBasePrice  = 1500
 	DeskStepPrice  = 500
-	MaxDeskTier    = 3
-	DeskUpgradeAct = 2
+	MaxDeskTier    = 5
 	DeskTierBonus  = 1
 	startDeskTier  = 1
-	deskTier2Price = 1000
-	deskTier3Price = 2500
+)
+
+var (
+	deskUpgradePrices = [MaxDeskTier + 1]int{0, 0, 4000, 8000, 12000, 20000}
+	deskTierAct       = [MaxDeskTier + 1]int{0, 1, 1, 1, 3, 4}
 )
 
 type DeskPrices struct {
@@ -23,10 +25,20 @@ type DeskPrices struct {
 	Step    int   `json:"step"`
 	Upgrade []int `json:"upgrade"`
 	MaxTier int   `json:"max_tier"`
-	FromAct int   `json:"upgrade_act"`
+	TierAct []int `json:"tier_act"`
 }
 
-var deskPrices = DeskPrices{Base: DeskBasePrice, Step: DeskStepPrice, Upgrade: []int{deskTier2Price, deskTier3Price}, MaxTier: MaxDeskTier, FromAct: DeskUpgradeAct}
+var deskPrices = DeskPrices{Base: DeskBasePrice, Step: DeskStepPrice, Upgrade: deskUpgradePrices[2:], MaxTier: MaxDeskTier, TierAct: deskTierAct[1:]}
+
+func deskTierCap(act int) int {
+	cap := startDeskTier
+	for tier := startDeskTier; tier <= MaxDeskTier; tier++ {
+		if act >= deskTierAct[tier] {
+			cap = tier
+		}
+	}
+	return cap
+}
 
 func prepareRun(run *domain.StartupRun) {
 	if run == nil {
@@ -52,10 +64,7 @@ func NextDeskPrice(run *domain.StartupRun) int {
 }
 
 func DeskUpgradePrice(tier int) int {
-	if tier == 1 {
-		return deskTier2Price
-	}
-	return deskTier3Price
+	return deskUpgradePrices[min(tier+1, MaxDeskTier)]
 }
 
 func BuyDesk(run *domain.StartupRun) error {
@@ -80,11 +89,11 @@ func UpgradeDesk(run *domain.StartupRun, index int) error {
 		return domain.ErrStartupWrongStage
 	}
 	ensureDesks(run)
-	if run.Act < DeskUpgradeAct {
-		return domain.ErrStartupDeskLimit
-	}
 	if index < 0 || index >= len(run.Desks) || run.Desks[index] >= MaxDeskTier {
 		return domain.ErrStartupInvalidChoice
+	}
+	if run.Desks[index] >= deskTierCap(run.Act) {
+		return domain.ErrStartupDeskLimit
 	}
 	price := DeskUpgradePrice(run.Desks[index])
 	if run.Money < price {

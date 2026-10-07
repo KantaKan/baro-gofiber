@@ -52,32 +52,51 @@ func TestHiringNeedsAFreeDesk(t *testing.T) {
 
 func TestUpgradeDeskTiers(t *testing.T) {
 	run := newHubRun(t, 33)
-	if err := UpgradeDesk(run, 0); !errors.Is(err, domain.ErrStartupDeskLimit) {
-		t.Fatalf("desk upgrades open in act 2, got %v", err)
-	}
-	run.Act = 2
+	run.Money = 100000
 	before := run.Money
 	for range 2 {
 		if err := UpgradeDesk(run, 1); err != nil {
-			t.Fatal(err)
+			t.Fatalf("act 1 upgrades should work: %v", err)
 		}
 	}
-	if run.Desks[1] != MaxDeskTier || before-run.Money != deskTier2Price+deskTier3Price {
-		t.Fatalf("two upgrades should reach tier 3 for 3500: desks %v spent %d", run.Desks, before-run.Money)
+	if run.Desks[1] != 3 || before-run.Money != deskUpgradePrices[2]+deskUpgradePrices[3] {
+		t.Fatalf("two upgrades should reach tier 3: desks %v spent %d", run.Desks, before-run.Money)
+	}
+	if err := UpgradeDesk(run, 1); !errors.Is(err, domain.ErrStartupDeskLimit) {
+		t.Fatalf("tier 4 opens in act 3, got %v", err)
+	}
+	run.Act = 3
+	if err := UpgradeDesk(run, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpgradeDesk(run, 1); !errors.Is(err, domain.ErrStartupDeskLimit) {
+		t.Fatalf("tier 5 opens in act 4, got %v", err)
+	}
+	run.Act = 4
+	if err := UpgradeDesk(run, 1); err != nil {
+		t.Fatal(err)
 	}
 	if err := UpgradeDesk(run, 1); !errors.Is(err, domain.ErrStartupInvalidChoice) {
-		t.Fatalf("tier 3 is the max, got %v", err)
+		t.Fatalf("tier 5 is the max, got %v", err)
 	}
 	if err := UpgradeDesk(run, 5); !errors.Is(err, domain.ErrStartupInvalidChoice) {
 		t.Fatalf("missing desk should be invalid, got %v", err)
 	}
-	run.Money = deskTier2Price - 1
+	run.Money = DeskUpgradePrice(1) - 1
 	if err := UpgradeDesk(run, 0); !errors.Is(err, domain.ErrStartupNoFunds) {
 		t.Fatalf("expected no funds, got %v", err)
 	}
 	run.Stage = domain.StartupStageDeveloping
 	if err := BuyDesk(run); !errors.Is(err, domain.ErrStartupWrongStage) {
 		t.Fatalf("desks are bought in the hub only, got %v", err)
+	}
+}
+
+func TestDeskTierCapByAct(t *testing.T) {
+	for act, want := range map[int]int{1: 3, 2: 3, 3: 4, 4: 5, 9: 5} {
+		if got := deskTierCap(act); got != want {
+			t.Errorf("act %d: tier cap %d, want %d", act, got, want)
+		}
 	}
 }
 
