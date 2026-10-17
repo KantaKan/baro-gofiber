@@ -6,3 +6,4 @@ nul
 .vscode/
 .idea/
 vendor/
+/baro-backend-linux
