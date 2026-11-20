@@ -2,6 +2,8 @@ package main
 
 import (
 	"gofiber-baro/config"
+	"gofiber-baro/internal/service/attendance"
+	"gofiber-baro/pkg/utils"
 	"log"
 	"os"
 	"time"
@@ -65,6 +67,16 @@ func main() {
 	log.Println("Successfully connected to MongoDB")
 
 	container := NewContainer(config.DB)
+
+	// Close check-in sessions: once a minute, mark learners who didn't check in.
+	closer := attendance.NewSessionCloser(container.AttendanceRepo, container.LeaveRepo, container.UserService, container.CohortService, container.HolidayService)
+	go func() {
+		for range time.Tick(time.Minute) {
+			if err := closer.CloseIfDue(utils.GetThailandTime()); err != nil {
+				log.Printf("session closer: %v", err)
+			}
+		}
+	}()
 
 	// Behind a load balancer the client IP arrives in a header (e.g. X-Forwarded-For);
 	// set PROXY_HEADER so the check-in network limit sees the learner's real IP.

@@ -34,6 +34,14 @@ func (r *attendanceRepository) InsertRecord(ctx interface{}, record *domain.Atte
 	return err
 }
 
+func (r *attendanceRepository) UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) error {
+	c := ctx.(context.Context)
+	record.ID = primitive.NewObjectID()
+	filter := bson.M{"user_id": record.UserID, "date": record.Date, "session": record.Session, "deleted": bson.M{"$ne": true}}
+	_, err := r.collection.UpdateOne(c, filter, bson.M{"$setOnInsert": record}, options.Update().SetUpsert(true))
+	return err
+}
+
 func (r *attendanceRepository) FindRecord(ctx interface{}, filter domain.AttendanceRecordFilter) (*domain.AttendanceRecord, error) {
 	c := ctx.(context.Context)
 	bsonFilter := r.buildFilter(filter)

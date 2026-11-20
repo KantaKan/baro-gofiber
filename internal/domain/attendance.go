@@ -117,6 +117,8 @@ type AttendanceCodeFilter struct {
 
 type AttendanceRepository interface {
 	InsertRecord(ctx interface{}, record *AttendanceRecord) error
+	// UpsertRecord inserts record unless one already exists for (user, date, session).
+	UpsertRecord(ctx interface{}, record *AttendanceRecord) error
 	FindRecord(ctx interface{}, filter AttendanceRecordFilter) (*AttendanceRecord, error)
 	FindRecords(ctx interface{}, filter AttendanceRecordFilter, opts interface{}) ([]AttendanceRecord, error)
 	FindRecordsRaw(ctx interface{}, bsonFilter interface{}, opts interface{}) ([]AttendanceRecord, error)
