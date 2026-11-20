@@ -23,6 +23,7 @@ type AttendanceHandler struct {
 	exportService     *attendance.ExportService
 	userService       *user.Service
 	checkinService    *attendance.CheckinService
+	progressService   *attendance.ProgressService
 }
 
 func NewAttendanceHandler(
@@ -33,8 +34,10 @@ func NewAttendanceHandler(
 	exportService *attendance.ExportService,
 	userService *user.Service,
 	checkinService *attendance.CheckinService,
+	progressService *attendance.ProgressService,
 ) *AttendanceHandler {
 	return &AttendanceHandler{
+		progressService:   progressService,
 		checkinService:    checkinService,
 		codeService:       codeService,
 		submissionService: submissionService,
@@ -712,4 +715,21 @@ func (h *AttendanceHandler) CheckIn(c *fiber.Ctx) error {
 	default:
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error checking in")
 	}
+}
+
+// GetMySummary returns the caller's own streak, leave usage and today's check-ins.
+func (h *AttendanceHandler) GetMySummary(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	oid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	sum, err := h.progressService.Summary(oid)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error building summary")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Summary retrieved", sum)
 }
