@@ -680,6 +680,17 @@ func (h *AttendanceHandler) UpdateAttendanceStatus(c *fiber.Ctx) error {
 }
 
 // CheckIn is the learner's code-free self check-in.
+// @Summary      Self check-in (no code)
+// @Tags         attendance
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object  false  "{\"style\": \"slide\"}"
+// @Success      201  {object}  domain.AttendanceRecord
+// @Failure      403  {object}  map[string]string  "network not allowed"
+// @Failure      409  {object}  map[string]string  "already checked in / covered by leave"
+// @Failure      422  {object}  map[string]string  "not open / closed / no class"
+// @Security     BearerAuth
+// @Router       /attendance/check-in [post]
 func (h *AttendanceHandler) CheckIn(c *fiber.Ctx) error {
 	userID, ok := c.Locals("userID").(string)
 	if !ok || userID == "" {
@@ -718,6 +729,12 @@ func (h *AttendanceHandler) CheckIn(c *fiber.Ctx) error {
 }
 
 // GetMySummary returns the caller's own streak, leave usage and today's check-ins.
+// @Summary      My attendance summary
+// @Tags         attendance
+// @Produce      json
+// @Success      200  {object}  attendance.MySummary
+// @Security     BearerAuth
+// @Router       /attendance/me/summary [get]
 func (h *AttendanceHandler) GetMySummary(c *fiber.Ctx) error {
 	userID, ok := c.Locals("userID").(string)
 	if !ok || userID == "" {

@@ -568,6 +568,16 @@ func (h *UserHandler) getReflections(userID primitive.ObjectID) ([]domain.Reflec
 }
 
 // UpdateMyPreferences saves the caller's check-in style, random mode, avatar and skills.
+// @Summary      Update my check-in style, avatar and skills
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object  true  "checkin_style, checkin_random, avatar, skills (all optional)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string  "locked: keep your streak going"
+// @Security     BearerAuth
+// @Router       /users/me/preferences [put]
 func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
 	userID, ok := c.Locals("userID").(string)
 	if !ok || userID == "" {

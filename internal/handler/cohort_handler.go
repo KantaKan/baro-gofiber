@@ -12,6 +12,14 @@ type CohortHandler struct{ svc *cohort.Service }
 
 func NewCohortHandler(svc *cohort.Service) *CohortHandler { return &CohortHandler{svc: svc} }
 
+// GetSettings returns a cohort's check-in rules and allowed networks.
+// @Summary      Get cohort check-in settings
+// @Tags         admin
+// @Produce      json
+// @Param        cohort  path  int  true  "Cohort number"
+// @Success      200  {object}  domain.CohortSettings
+// @Security     BearerAuth
+// @Router       /admin/cohorts/{cohort}/settings [get]
 func (h *CohortHandler) GetSettings(c *fiber.Ctx) error {
 	n, err := c.ParamsInt("cohort")
 	if err != nil || n <= 0 {
@@ -24,6 +32,17 @@ func (h *CohortHandler) GetSettings(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Cohort settings retrieved", s)
 }
 
+// UpdateSettings replaces a cohort's check-in rules and allowed networks.
+// @Summary      Update cohort check-in settings
+// @Tags         admin
+// @Accept       json
+// @Produce      json
+// @Param        cohort  path  int                    true  "Cohort number"
+// @Param        body    body  domain.CohortSettings  true  "Rules and allowed networks (empty list = any network)"
+// @Success      200  {object}  domain.CohortSettings
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /admin/cohorts/{cohort}/settings [put]
 func (h *CohortHandler) UpdateSettings(c *fiber.Ctx) error {
 	n, err := c.ParamsInt("cohort")
 	if err != nil || n <= 0 {
