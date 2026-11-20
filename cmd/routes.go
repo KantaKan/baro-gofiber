@@ -18,6 +18,7 @@ type Handlers struct {
 	Holiday      *handler.HolidayHandler
 	TalkBoard    *handler.TalkBoardHandler
 	Notification *handler.NotificationHandler
+	Cohort       *handler.CohortHandler
 }
 
 func setupRoutes(app *fiber.App, h Handlers) {
@@ -81,6 +82,9 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Get("/attendance/export", h.Attendance.ExportAttendance)
 	admin.Patch("/users/:id/salesforce-id", h.Attendance.UpdateSalesforceID)
 	admin.Patch("/users/:id/attendance-status", h.Attendance.UpdateAttendanceStatus)
+
+	admin.Get("/cohorts/:cohort/settings", h.Cohort.GetSettings)
+	admin.Put("/cohorts/:cohort/settings", h.Cohort.UpdateSettings)
 
 	admin.Post("/holidays", h.Holiday.CreateHoliday)
 	admin.Get("/holidays", h.Holiday.GetHolidays)

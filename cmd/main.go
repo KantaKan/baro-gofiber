@@ -121,6 +121,7 @@ func main() {
 		Holiday:      container.HolidayHandler,
 		TalkBoard:    container.TalkBoardHandler,
 		Notification: container.NotificationHandler,
+		Cohort:       container.CohortHandler,
 	}
 
 	setupRoutes(app, handlers)
