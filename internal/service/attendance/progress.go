@@ -161,6 +161,11 @@ type MySummary struct {
 	AttendanceRate float64             `json:"attendance_rate"`
 	PerfectWeek    bool                `json:"perfect_week"`
 	Rules          domain.CheckinRules `json:"rules"`
+	// The caller's own check-in preferences (never exposed to classmates).
+	Preferences struct {
+		CheckinStyle  string `json:"checkin_style"`
+		CheckinRandom bool   `json:"checkin_random"`
+	} `json:"preferences"`
 }
 
 type progressRecords interface {
@@ -213,5 +218,7 @@ func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) 
 	out.AttendanceRate = AttendanceRate(d)
 	out.PerfectWeek = HasPerfectWeek(d)
 	out.Rules = settings.Rules
+	out.Preferences.CheckinStyle = user.CheckinStyle
+	out.Preferences.CheckinRandom = user.CheckinRandom
 	return out, nil
 }

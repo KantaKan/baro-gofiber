@@ -2,7 +2,9 @@ package attendance
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -31,7 +33,8 @@ func PlanSessionClose(learners []primitive.ObjectID, checkedIn map[primitive.Obj
 
 type closerRecords interface {
 	FindRecords(ctx interface{}, filter domain.AttendanceRecordFilter, opts interface{}) ([]domain.AttendanceRecord, error)
-	UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) error
+	UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) (bool, error)
+	ActiveCohorts(ctx interface{}, since string) ([]int, error)
 }
 
 type closerLeaves interface {
@@ -63,17 +66,31 @@ func (s *SessionCloser) CloseIfDue(now time.Time) error {
 	if err != nil {
 		return err
 	}
+	// Only cohorts with attendance in the last 7 days are running; alumni are left alone.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	active, err := s.records.ActiveCohorts(ctx, utils.FormatDate(now.AddDate(0, 0, -7)))
+	cancel()
+	if err != nil {
+		return err
+	}
+	isActive := map[int]bool{}
+	for _, c := range active {
+		isActive[c] = true
+	}
 	byCohort := map[int][]domain.User{}
 	for _, u := range learners {
-		if u.CohortNumber > 0 {
+		if isActive[u.CohortNumber] {
 			byCohort[u.CohortNumber] = append(byCohort[u.CohortNumber], u)
 		}
 	}
 	date := utils.FormatDate(now)
+	var firstErr error
 	for cohort, users := range byCohort {
 		settings, err := s.settings.Get(cohort)
 		if err != nil {
-			return err
+			log.Printf("session closer: cohort %d settings: %v", cohort, err)
+			firstErr = errors.Join(firstErr, err)
+			continue
 		}
 		for _, session := range []domain.AttendanceSession{domain.SessionMorning, domain.SessionAfternoon} {
 			key := fmt.Sprintf("%d|%s|%s", cohort, date, session)
@@ -84,14 +101,17 @@ func (s *SessionCloser) CloseIfDue(now time.Time) error {
 				continue
 			}
 			if err := s.closeSession(cohort, date, session, users); err != nil {
-				return err
+				// Keep going so one bad row can't stop other sessions or cohorts.
+				log.Printf("session closer: cohort %d %s %s: %v", cohort, date, session, err)
+				firstErr = errors.Join(firstErr, err)
+				continue
 			}
 			s.mu.Lock()
 			s.closed[key] = true
 			s.mu.Unlock()
 		}
 	}
-	return nil
+	return firstErr
 }
 
 func (s *SessionCloser) closeSession(cohort int, date string, session domain.AttendanceSession, users []domain.User) error {
@@ -130,7 +150,7 @@ func (s *SessionCloser) closeSession(cohort int, date string, session domain.Att
 			CohortNumber: cohort, Date: date, Session: session, Status: status,
 			MarkedBy: domain.MarkedByAdmin, MarkedByUser: "system", SubmittedAt: time.Now(),
 		}
-		if err := s.records.UpsertRecord(ctx, rec); err != nil {
+		if _, err := s.records.UpsertRecord(ctx, rec); err != nil {
 			return err
 		}
 	}

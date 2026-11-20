@@ -34,12 +34,59 @@ func (r *attendanceRepository) InsertRecord(ctx interface{}, record *domain.Atte
 	return err
 }
 
-func (r *attendanceRepository) UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) error {
+func (r *attendanceRepository) UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) (bool, error) {
 	c := ctx.(context.Context)
+	key := bson.M{"user_id": record.UserID, "date": record.Date, "session": record.Session}
+
+	// The unique index covers soft-deleted rows too, so revive one if it exists.
+	revive := bson.M{"user_id": record.UserID, "date": record.Date, "session": record.Session, "deleted": true}
+	res, err := r.collection.UpdateOne(c, revive, bson.M{
+		"$set": bson.M{
+			"status": record.Status, "marked_by": record.MarkedBy, "marked_by_user": record.MarkedByUser,
+			"submitted_at": record.SubmittedAt, "ip_address": record.IPAddress, "checkin_style": record.CheckinStyle,
+			"jsd_number": record.JSDNumber, "first_name": record.FirstName, "last_name": record.LastName,
+			"cohort_number": record.CohortNumber, "locked": false, "deleted": false,
+		},
+		"$unset": bson.M{"deleted_at": "", "deleted_by": ""},
+	})
+	if err != nil {
+		return false, err
+	}
+	if res.ModifiedCount > 0 {
+		return true, nil
+	}
+
 	record.ID = primitive.NewObjectID()
-	filter := bson.M{"user_id": record.UserID, "date": record.Date, "session": record.Session, "deleted": bson.M{"$ne": true}}
-	_, err := r.collection.UpdateOne(c, filter, bson.M{"$setOnInsert": record}, options.Update().SetUpsert(true))
-	return err
+	res, err = r.collection.UpdateOne(c, key, bson.M{"$setOnInsert": record}, options.Update().SetUpsert(true))
+	if mongo.IsDuplicateKeyError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return res.UpsertedCount > 0, nil
+}
+
+func (r *attendanceRepository) ActiveCohorts(ctx interface{}, since string) ([]int, error) {
+	c := ctx.(context.Context)
+	vals, err := r.collection.Distinct(c, "cohort_number", bson.M{"date": bson.M{"$gte": since}, "deleted": bson.M{"$ne": true}})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]int, 0, len(vals))
+	for _, v := range vals {
+		switch n := v.(type) {
+		case int32:
+			out = append(out, int(n))
+		case int64:
+			out = append(out, int(n))
+		case int:
+			out = append(out, n)
+		case float64:
+			out = append(out, int(n))
+		}
+	}
+	return out, nil
 }
 
 func (r *attendanceRepository) FindRecord(ctx interface{}, filter domain.AttendanceRecordFilter) (*domain.AttendanceRecord, error) {

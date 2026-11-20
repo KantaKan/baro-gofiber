@@ -117,8 +117,11 @@ type AttendanceCodeFilter struct {
 
 type AttendanceRepository interface {
 	InsertRecord(ctx interface{}, record *AttendanceRecord) error
-	// UpsertRecord inserts record unless one already exists for (user, date, session).
-	UpsertRecord(ctx interface{}, record *AttendanceRecord) error
+	// UpsertRecord writes record for (user, date, session) unless a live record exists:
+	// a soft-deleted row is revived with record's values. inserted reports whether it wrote.
+	UpsertRecord(ctx interface{}, record *AttendanceRecord) (inserted bool, err error)
+	// ActiveCohorts lists cohorts with any live record on or after since (YYYY-MM-DD).
+	ActiveCohorts(ctx interface{}, since string) ([]int, error)
 	FindRecord(ctx interface{}, filter AttendanceRecordFilter) (*AttendanceRecord, error)
 	FindRecords(ctx interface{}, filter AttendanceRecordFilter, opts interface{}) ([]AttendanceRecord, error)
 	FindRecordsRaw(ctx interface{}, bsonFilter interface{}, opts interface{}) ([]AttendanceRecord, error)

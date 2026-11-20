@@ -80,11 +80,7 @@ func main() {
 
 	// Behind a load balancer the client IP arrives in a header (e.g. X-Forwarded-For);
 	// set PROXY_HEADER so the check-in network limit sees the learner's real IP.
-	fiberCfg := fiber.Config{}
-	if h := os.Getenv("PROXY_HEADER"); h != "" {
-		fiberCfg.ProxyHeader = h
-	}
-	app := fiber.New(fiberCfg)
+	app := fiber.New(fiberConfig(os.Getenv("PROXY_HEADER")))
 
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
@@ -152,4 +148,15 @@ func main() {
 	log.Printf("Database Name: %s", dbName)
 	log.Printf("Port: %s", port)
 	log.Fatal(app.Listen(":" + port))
+}
+
+// fiberConfig reads the client IP from proxyHeader when set. EnableIPValidation makes
+// c.IP() return the first valid address of a list like "203.0.113.5, 10.0.0.2".
+func fiberConfig(proxyHeader string) fiber.Config {
+	cfg := fiber.Config{}
+	if proxyHeader != "" {
+		cfg.ProxyHeader = proxyHeader
+		cfg.EnableIPValidation = true
+	}
+	return cfg
 }

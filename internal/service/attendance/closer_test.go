@@ -1,6 +1,7 @@
 package attendance
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -41,16 +42,35 @@ func (f fakeUsers) GetAllUsers(cohort int, role, email, search, sort string, sor
 }
 
 type fakeCloserRecords struct {
-	existing []domain.AttendanceRecord
-	upserts  int
+	existing  []domain.AttendanceRecord
+	upserts   int
+	byCohort  map[int]int
+	bySession map[domain.AttendanceSession]int
+	active    []int
+	failOn    domain.AttendanceSession
 }
 
 func (f *fakeCloserRecords) FindRecords(_ interface{}, _ domain.AttendanceRecordFilter, _ interface{}) ([]domain.AttendanceRecord, error) {
 	return f.existing, nil
 }
-func (f *fakeCloserRecords) UpsertRecord(_ interface{}, r *domain.AttendanceRecord) error {
+func (f *fakeCloserRecords) UpsertRecord(_ interface{}, r *domain.AttendanceRecord) (bool, error) {
+	if f.failOn != "" && r.Session == f.failOn {
+		return false, errors.New("boom")
+	}
 	f.upserts++
-	return nil
+	if f.byCohort == nil {
+		f.byCohort, f.bySession = map[int]int{}, map[domain.AttendanceSession]int{}
+	}
+	f.byCohort[r.CohortNumber]++
+	f.bySession[r.Session]++
+	return true, nil
+}
+
+func (f *fakeCloserRecords) ActiveCohorts(_ interface{}, _ string) ([]int, error) {
+	if f.active == nil {
+		return []int{13}, nil
+	}
+	return f.active, nil
 }
 
 type fakeLeaves struct{}
@@ -105,5 +125,27 @@ func TestCloseIfDue_Holiday(t *testing.T) {
 	_ = c.CloseIfDue(at(10, 31, 0))
 	if recs.upserts != 0 {
 		t.Errorf("holiday should write nothing: %d upserts", recs.upserts)
+	}
+}
+
+func TestCloseIfDue_OnlyActiveCohorts(t *testing.T) {
+	users := fakeUsers{list: []domain.User{
+		{ID: primitive.NewObjectID(), CohortNumber: 12, Role: "learner"}, // alumni
+		{ID: primitive.NewObjectID(), CohortNumber: 13, Role: "learner"},
+	}}
+	recs := &fakeCloserRecords{active: []int{13}}
+	c := NewSessionCloser(recs, fakeLeaves{}, users, fakeSettings{}, fakeHolidays{})
+	_ = c.CloseIfDue(at(10, 31, 0))
+	if recs.byCohort[12] != 0 || recs.byCohort[13] != 1 {
+		t.Errorf("want only cohort 13 closed, got %v", recs.byCohort)
+	}
+}
+
+func TestCloseIfDue_ContinuesAfterFailure(t *testing.T) {
+	c, recs := newCloser(false)
+	recs.failOn = domain.SessionMorning
+	_ = c.CloseIfDue(at(14, 31, 0))
+	if recs.bySession[domain.SessionAfternoon] != 2 {
+		t.Errorf("afternoon should still close after a morning failure, got %v", recs.bySession)
 	}
 }
