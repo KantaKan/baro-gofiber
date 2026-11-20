@@ -6,6 +6,8 @@ type CohortSettings struct {
 	Rules           CheckinRules      `bson:"rules" json:"rules"`
 	AllowedNetworks []string          `bson:"allowed_networks" json:"allowed_networks"`
 	GroupChatURLs   map[string]string `bson:"group_chat_urls,omitempty" json:"group_chat_urls,omitempty"`
+	StartDate       string            `bson:"start_date,omitempty" json:"start_date,omitempty"`
+	CourseDays      int               `bson:"course_days,omitempty" json:"course_days,omitempty"`
 }
 
 type CohortSettingsRepository interface {

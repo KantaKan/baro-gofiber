@@ -12,7 +12,33 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-const LeaveAllowance = 8
+const (
+	LeaveAllowance    = 8
+	DefaultCourseDays = 75
+)
+
+// CourseProgress counts class weekdays from start (day 1) to today, capped at days.
+// Returns zeros when start is empty/invalid; day/week are 0 before the course starts.
+func CourseProgress(start string, days int, today string) (dayNumber, week, totalWeeks int) {
+	s, err := utils.ParseDate(start)
+	if err != nil || days <= 0 {
+		return 0, 0, 0
+	}
+	totalWeeks = (days + 4) / 5
+	t, err := utils.ParseDate(today)
+	if err != nil || t.Before(s) {
+		return 0, 0, totalWeeks
+	}
+	for d := s; !d.After(t) && dayNumber < days; d = d.AddDate(0, 0, 1) {
+		if wd := d.Weekday(); wd != time.Saturday && wd != time.Sunday {
+			dayNumber++
+		}
+	}
+	if dayNumber == 0 {
+		return 0, 0, totalWeeks
+	}
+	return dayNumber, (dayNumber-1)/5 + 1, totalWeeks
+}
 
 type DayResult struct {
 	Date   string                  `json:"date"`
@@ -162,6 +188,13 @@ type MySummary struct {
 	PerfectWeek    bool                `json:"perfect_week"`
 	Rules          domain.CheckinRules `json:"rules"`
 	// The caller's own check-in preferences (never exposed to classmates).
+	Course struct {
+		StartDate  string `json:"start_date"`
+		CourseDays int    `json:"course_days"`
+		DayNumber  int    `json:"day_number"`
+		WeekNumber int    `json:"week_number"`
+		TotalWeeks int    `json:"total_weeks"`
+	} `json:"course"`
 	Preferences struct {
 		CheckinStyle  string `json:"checkin_style"`
 		CheckinRandom bool   `json:"checkin_random"`
@@ -218,6 +251,12 @@ func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) 
 	out.AttendanceRate = AttendanceRate(d)
 	out.PerfectWeek = HasPerfectWeek(d)
 	out.Rules = settings.Rules
+	days := settings.CourseDays
+	if days <= 0 {
+		days = DefaultCourseDays
+	}
+	out.Course.StartDate, out.Course.CourseDays = settings.StartDate, days
+	out.Course.DayNumber, out.Course.WeekNumber, out.Course.TotalWeeks = CourseProgress(settings.StartDate, days, today)
 	out.Preferences.CheckinStyle = user.CheckinStyle
 	out.Preferences.CheckinRandom = user.CheckinRandom
 	return out, nil

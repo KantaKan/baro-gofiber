@@ -40,6 +40,11 @@ func (s *Service) Update(cohort int, in domain.CohortSettings) error {
 			return fmt.Errorf("allowed network %q is not an IP address or CIDR range", n)
 		}
 	}
+	if in.StartDate != "" {
+		if _, err := time.Parse("2006-01-02", in.StartDate); err != nil {
+			return fmt.Errorf("start date must be YYYY-MM-DD")
+		}
+	}
 	in.CohortNumber = cohort
 	if in.AllowedNetworks == nil {
 		in.AllowedNetworks = []string{}

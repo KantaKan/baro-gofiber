@@ -102,3 +102,24 @@ func TestBuildDays(t *testing.T) {
 		t.Errorf("got %+v", got)
 	}
 }
+
+func TestCourseProgress(t *testing.T) {
+	cases := []struct {
+		start             string
+		days              int
+		today             string
+		day, week, totalW int
+	}{
+		{"2026-06-29", 75, "2026-06-29", 1, 1, 15},
+		{"2026-06-29", 75, "2026-09-08", 52, 11, 15},
+		{"2026-06-29", 75, "2026-06-28", 0, 0, 15},
+		{"", 75, "2026-09-08", 0, 0, 0},
+		{"2026-06-29", 75, "2027-01-01", 75, 15, 15},
+	}
+	for _, c := range cases {
+		d, w, tw := CourseProgress(c.start, c.days, c.today)
+		if d != c.day || w != c.week || tw != c.totalW {
+			t.Errorf("%s→%s: got (%d,%d,%d) want (%d,%d,%d)", c.start, c.today, d, w, tw, c.day, c.week, c.totalW)
+		}
+	}
+}

@@ -101,7 +101,6 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Delete("/notifications/:id", h.Notification.DeleteNotification)
 
 	student := app.Group("/attendance", middleware.AuthMiddleware)
-	student.Post("/submit", h.Attendance.SubmitAttendance)
 	student.Get("/my-status", h.Attendance.GetMyAttendanceStatus)
 	student.Get("/my-history", h.Attendance.GetMyAttendanceHistory)
 	student.Get("/my-daily-stats", h.Attendance.GetMyDailyStats)
