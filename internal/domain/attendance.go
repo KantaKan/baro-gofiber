@@ -60,6 +60,7 @@ type AttendanceRecord struct {
 	SubmittedAt  time.Time          `bson:"submitted_at" json:"submitted_at"`
 	Locked       bool               `bson:"locked" json:"locked"`
 	IPAddress    string             `bson:"ip_address,omitempty" json:"ip_address,omitempty"`
+	CheckinStyle string             `bson:"checkin_style,omitempty" json:"checkin_style,omitempty"`
 	Deleted      bool               `bson:"deleted" json:"deleted"`
 	DeletedAt    *time.Time         `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 	DeletedBy    string             `bson:"deleted_by,omitempty" json:"deleted_by,omitempty"`

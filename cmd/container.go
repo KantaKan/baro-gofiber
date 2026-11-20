@@ -40,6 +40,7 @@ type Container struct {
 	AttendanceOverviewService   *attendance.OverviewService
 	AttendanceExportService     *attendance.ExportService
 	CohortService               *cohortService.Service
+	CheckinService              *attendance.CheckinService
 
 	UserHandler         *handler.UserHandler
 	AdminHandler        *handler.AdminHandler
@@ -87,6 +88,7 @@ func (c *Container) initServices() {
 	c.AttendanceOverviewService = attendance.NewOverviewService(c.AttendanceRepo, c.AttendanceCodeRepo, c.UserService)
 	c.AttendanceExportService = attendance.NewExportService(c.AttendanceRepo, c.UserService)
 	c.CohortService = cohortService.NewService(c.CohortSettingsRepo)
+	c.CheckinService = attendance.NewCheckinService(c.AttendanceRepo, c.LeaveRepo, c.UserService, c.CohortService, c.HolidayService, cohortService.IPAllowed)
 }
 
 func (c *Container) initHandlers() {
@@ -99,6 +101,7 @@ func (c *Container) initHandlers() {
 		c.AttendanceOverviewService,
 		c.AttendanceExportService,
 		c.UserService,
+		c.CheckinService,
 	)
 	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService)
 	c.HolidayHandler = handler.NewHolidayHandler(c.HolidayService)

@@ -66,7 +66,13 @@ func main() {
 
 	container := NewContainer(config.DB)
 
-	app := fiber.New()
+	// Behind a load balancer the client IP arrives in a header (e.g. X-Forwarded-For);
+	// set PROXY_HEADER so the check-in network limit sees the learner's real IP.
+	fiberCfg := fiber.Config{}
+	if h := os.Getenv("PROXY_HEADER"); h != "" {
+		fiberCfg.ProxyHeader = h
+	}
+	app := fiber.New(fiberCfg)
 
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {

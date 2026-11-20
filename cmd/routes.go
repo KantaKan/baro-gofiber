@@ -104,7 +104,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	student.Get("/my-status", h.Attendance.GetMyAttendanceStatus)
 	student.Get("/my-history", h.Attendance.GetMyAttendanceHistory)
 	student.Get("/my-daily-stats", h.Attendance.GetMyDailyStats)
-	student.Get("/code", h.Attendance.GetActiveAttendanceCode)
+	student.Post("/check-in", h.Attendance.CheckIn)
 
 	leave := app.Group("/leave-requests", middleware.AuthMiddleware)
 	leave.Post("/", h.Leave.CreateLeaveRequest)

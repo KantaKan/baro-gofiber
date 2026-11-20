@@ -22,6 +22,7 @@ type AttendanceHandler struct {
 	overviewService   *attendance.OverviewService
 	exportService     *attendance.ExportService
 	userService       *user.Service
+	checkinService    *attendance.CheckinService
 }
 
 func NewAttendanceHandler(
@@ -31,8 +32,10 @@ func NewAttendanceHandler(
 	overviewService *attendance.OverviewService,
 	exportService *attendance.ExportService,
 	userService *user.Service,
+	checkinService *attendance.CheckinService,
 ) *AttendanceHandler {
 	return &AttendanceHandler{
+		checkinService:    checkinService,
 		codeService:       codeService,
 		submissionService: submissionService,
 		statsService:      statsService,
@@ -581,13 +584,13 @@ func (h *AttendanceHandler) ExportAttendance(c *fiber.Ctx) error {
 	}
 
 	req := attendance.ExportRequest{
-		Cohort:        cohort,
-		StartDate:     startDate,
-		EndDate:       endDate,
-		Format:        expFormat,
-		Structure:     expStructure,
-		SplitAMPM:     splitAMPM,
-		StatusFilter:  statusFilter,
+		Cohort:       cohort,
+		StartDate:    startDate,
+		EndDate:      endDate,
+		Format:       expFormat,
+		Structure:    expStructure,
+		SplitAMPM:    splitAMPM,
+		StatusFilter: statusFilter,
 	}
 
 	data, ext, err := h.exportService.Export(req)
@@ -671,4 +674,42 @@ func (h *AttendanceHandler) UpdateAttendanceStatus(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Attendance status updated", nil)
+}
+
+// CheckIn is the learner's code-free self check-in.
+func (h *AttendanceHandler) CheckIn(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	oid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	var body struct {
+		Style string `json:"style"`
+	}
+	_ = c.BodyParser(&body)
+
+	rec, err := h.checkinService.CheckIn(oid, c.IP(), body.Style)
+	switch err {
+	case nil:
+		return utils.SendResponse(c, fiber.StatusCreated, "Checked in", rec)
+	case attendance.ErrAlreadySubmitted:
+		return utils.SendError(c, fiber.StatusConflict, "You already checked in for this session.")
+	case attendance.ErrCoveredByLeave:
+		return utils.SendError(c, fiber.StatusConflict, "You have approved leave for this session, so there's nothing to check in.")
+	case attendance.ErrNetworkNotAllowed:
+		return utils.SendError(c, fiber.StatusForbidden, "Check-in isn't allowed from this network.")
+	case attendance.ErrNotOpenYet:
+		return utils.SendError(c, fiber.StatusUnprocessableEntity, "Check-in isn't open yet.")
+	case attendance.ErrCheckInClosed:
+		return utils.SendError(c, fiber.StatusUnprocessableEntity, "Check-in is closed for this session.")
+	case attendance.ErrNoClassToday:
+		return utils.SendError(c, fiber.StatusUnprocessableEntity, "There's no class today.")
+	case attendance.ErrStudentNotFound:
+		return utils.SendError(c, fiber.StatusNotFound, "Learner not found.")
+	default:
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error checking in")
+	}
 }

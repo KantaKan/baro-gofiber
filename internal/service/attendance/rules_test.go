@@ -60,12 +60,12 @@ func TestValidate(t *testing.T) {
 		t.Fatalf("default rules invalid: %v", err)
 	}
 	r := DefaultRules()
-	r.Morning.LateAfter = Clock{8, 0}
+	r.Morning.LateAfter = Clock{H: 8, M: 0}
 	if r.Validate() == nil {
 		t.Error("LateAfter before OpenAt should fail")
 	}
 	r = DefaultRules()
-	r.Morning.AbsentAfter = Clock{13, 0}
+	r.Morning.AbsentAfter = Clock{H: 13, M: 0}
 	if r.Validate() == nil {
 		t.Error("morning overlapping afternoon should fail")
 	}
