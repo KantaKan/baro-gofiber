@@ -94,7 +94,7 @@ func (c *Container) initServices() {
 }
 
 func (c *Container) initHandlers() {
-	c.UserHandler = handler.NewUserHandler(c.UserService)
+	c.UserHandler = handler.NewUserHandler(c.UserService, c.ProgressService)
 	c.AdminHandler = handler.NewAdminHandler(c.UserService, c.BadgeService, c.ReflectionService, c.BarometerService)
 	c.AttendanceHandler = handler.NewAttendanceHandler(
 		c.AttendanceCodeService,

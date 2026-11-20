@@ -30,6 +30,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	notifications.Post("/:id/read", h.Notification.MarkAsRead)
 
 	protected := app.Group("/users", middleware.AuthMiddleware)
+	protected.Put("/me/preferences", h.User.UpdateMyPreferences)
 	protected.Get("/", h.User.GetAllUsers)
 	protected.Get("/:id", h.User.GetUserByID)
 	protected.Put("/:id", h.User.UpdateUser)

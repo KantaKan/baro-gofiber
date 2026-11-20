@@ -55,78 +55,94 @@ type SessionDetails struct {
 }
 
 type ProfileComment struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	UserID    primitive.ObjectID `bson:"userId" json:"userId"`
-	ZoomName  string             `bson:"zoomName" json:"zoomName"`
-	Cohort    int                `bson:"cohort" json:"cohort"`
-	Content   string             `bson:"content" json:"content"`
+	ID        primitive.ObjectID  `bson:"_id,omitempty" json:"id,omitempty"`
+	UserID    primitive.ObjectID  `bson:"userId" json:"userId"`
+	ZoomName  string              `bson:"zoomName" json:"zoomName"`
+	Cohort    int                 `bson:"cohort" json:"cohort"`
+	Content   string              `bson:"content" json:"content"`
 	ParentID  *primitive.ObjectID `bson:"parentId,omitempty" json:"parentId,omitempty"`
 	Replies   []ProfileComment    `bson:"replies,omitempty" json:"replies,omitempty"`
-	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt time.Time          `bson:"updatedAt" json:"updatedAt"`
+	CreatedAt time.Time           `bson:"createdAt" json:"createdAt"`
+	UpdatedAt time.Time           `bson:"updatedAt" json:"updatedAt"`
 }
 
 type User struct {
-	ID               primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	JSDNumber        string             `bson:"jsd_number" json:"jsd_number"`
-	FirstName        string             `bson:"first_name" json:"first_name"`
-	LastName         string             `bson:"last_name" json:"last_name"`
-	Email            string             `bson:"email" json:"email"`
-	CohortNumber     int                `bson:"cohort_number" json:"cohort_number"`
-	Reflections      []Reflection       `bson:"reflections" json:"reflections"`
-	Password         string             `bson:"password,omitempty" json:"password,omitempty"`
-	Role             string             `bson:"role" json:"role"`
-	ProjectGroup     string             `bson:"project_group" json:"project_group"`
-	GenmateGroup     string             `bson:"genmate_group" json:"genmate_group"`
-	ZoomName         string             `bson:"zoom_name" json:"zoom_name"`
-	Badges           []Badge            `bson:"badges,omitempty" json:"badges,omitempty"`
-	SalesforceID     string             `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
-	AttendanceStatus string             `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
-	ProfileComments  []ProfileComment   `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
-	ProfileReactions []Reaction         `bson:"profile_reactions,omitempty" json:"profile_reactions,omitempty"`
-	Bio              string             `bson:"bio,omitempty" json:"bio,omitempty"`
-	SocialLinks      SocialLinks        `bson:"social_links,omitempty" json:"social_links,omitempty"`
+	ID               primitive.ObjectID   `bson:"_id,omitempty" json:"_id"`
+	JSDNumber        string               `bson:"jsd_number" json:"jsd_number"`
+	FirstName        string               `bson:"first_name" json:"first_name"`
+	LastName         string               `bson:"last_name" json:"last_name"`
+	Email            string               `bson:"email" json:"email"`
+	CohortNumber     int                  `bson:"cohort_number" json:"cohort_number"`
+	Reflections      []Reflection         `bson:"reflections" json:"reflections"`
+	Password         string               `bson:"password,omitempty" json:"password,omitempty"`
+	Role             string               `bson:"role" json:"role"`
+	ProjectGroup     string               `bson:"project_group" json:"project_group"`
+	GenmateGroup     string               `bson:"genmate_group" json:"genmate_group"`
+	ZoomName         string               `bson:"zoom_name" json:"zoom_name"`
+	Badges           []Badge              `bson:"badges,omitempty" json:"badges,omitempty"`
+	SalesforceID     string               `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
+	AttendanceStatus string               `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`
+	ProfileComments  []ProfileComment     `bson:"profile_comments,omitempty" json:"profile_comments,omitempty"`
+	ProfileReactions []Reaction           `bson:"profile_reactions,omitempty" json:"profile_reactions,omitempty"`
+	Bio              string               `bson:"bio,omitempty" json:"bio,omitempty"`
+	SocialLinks      SocialLinks          `bson:"social_links,omitempty" json:"social_links,omitempty"`
 	PinnedBadgeIDs   []primitive.ObjectID `bson:"pinned_badge_ids,omitempty" json:"pinned_badge_ids,omitempty"`
-	Deleted          bool               `bson:"deleted,omitempty" json:"deleted,omitempty"`
-	DeletedAt        *time.Time        `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
+	Deleted          bool                 `bson:"deleted,omitempty" json:"deleted,omitempty"`
+	DeletedAt        *time.Time           `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
+	CheckinStyle     string               `bson:"checkin_style,omitempty" json:"checkin_style,omitempty"`
+	CheckinRandom    bool                 `bson:"checkin_random,omitempty" json:"checkin_random,omitempty"`
+	Avatar           *Avatar              `bson:"avatar,omitempty" json:"avatar,omitempty"`
+	Skills           []string             `bson:"skills,omitempty" json:"skills,omitempty"`
+}
+
+// Avatar is a DiceBear avatar: Options[style][part] = value, or nil for "None".
+type Avatar struct {
+	Style   string                        `bson:"style" json:"style"`
+	Seed    string                        `bson:"seed" json:"seed"`
+	Bg      string                        `bson:"bg" json:"bg"`
+	Options map[string]map[string]*string `bson:"options,omitempty" json:"options,omitempty"`
 }
 
 // UserSafe is a restricted version of User for non-admin users
 // Only contains public-safe fields like name, avatar, badges
 type UserSafe struct {
-	ID            primitive.ObjectID   `json:"_id"`
-	JSDNumber     string               `json:"jsd_number"`
-	FirstName     string               `json:"first_name"`
-	LastName      string               `json:"last_name"`
-	CohortNumber  int                  `json:"cohort_number"`
-	ProjectGroup  string               `json:"project_group"`
-	GenmateGroup  string               `json:"genmate_group"`
-	ZoomName      string               `json:"zoom_name"`
-	Badges        []Badge              `json:"badges,omitempty"`
-	Bio           string               `json:"bio,omitempty"`
-	SocialLinks   SocialLinks          `json:"social_links,omitempty"`
-	PinnedBadgeIDs []primitive.ObjectID `json:"pinned_badge_ids,omitempty"`
-	ProfileComments []ProfileComment   `json:"profile_comments,omitempty"`
-	ProfileReactions []Reaction        `json:"profile_reactions,omitempty"`
+	ID               primitive.ObjectID   `json:"_id"`
+	JSDNumber        string               `json:"jsd_number"`
+	FirstName        string               `json:"first_name"`
+	LastName         string               `json:"last_name"`
+	CohortNumber     int                  `json:"cohort_number"`
+	ProjectGroup     string               `json:"project_group"`
+	GenmateGroup     string               `json:"genmate_group"`
+	ZoomName         string               `json:"zoom_name"`
+	Badges           []Badge              `json:"badges,omitempty"`
+	Bio              string               `json:"bio,omitempty"`
+	SocialLinks      SocialLinks          `json:"social_links,omitempty"`
+	PinnedBadgeIDs   []primitive.ObjectID `json:"pinned_badge_ids,omitempty"`
+	ProfileComments  []ProfileComment     `json:"profile_comments,omitempty"`
+	ProfileReactions []Reaction           `json:"profile_reactions,omitempty"`
+	Avatar           *Avatar              `json:"avatar,omitempty"`
+	Skills           []string             `json:"skills,omitempty"`
 }
 
 // ToSafe converts a User to UserSafe for non-admin responses
 func (u *User) ToSafe() UserSafe {
 	return UserSafe{
-		ID:            u.ID,
-		JSDNumber:    u.JSDNumber,
-		FirstName:     u.FirstName,
-		LastName:      u.LastName,
-		CohortNumber:  u.CohortNumber,
-		ProjectGroup:  u.ProjectGroup,
-		GenmateGroup:  u.GenmateGroup,
-		ZoomName:      u.ZoomName,
-		Badges:          u.Badges,
-		Bio:             u.Bio,
-		SocialLinks:     u.SocialLinks,
-		PinnedBadgeIDs:  u.PinnedBadgeIDs,
-		ProfileComments: u.ProfileComments,
+		ID:               u.ID,
+		JSDNumber:        u.JSDNumber,
+		FirstName:        u.FirstName,
+		LastName:         u.LastName,
+		CohortNumber:     u.CohortNumber,
+		ProjectGroup:     u.ProjectGroup,
+		GenmateGroup:     u.GenmateGroup,
+		ZoomName:         u.ZoomName,
+		Badges:           u.Badges,
+		Bio:              u.Bio,
+		SocialLinks:      u.SocialLinks,
+		PinnedBadgeIDs:   u.PinnedBadgeIDs,
+		ProfileComments:  u.ProfileComments,
 		ProfileReactions: u.ProfileReactions,
+		Avatar:           u.Avatar,
+		Skills:           u.Skills,
 	}
 }
 
