@@ -46,6 +46,29 @@ func (s *Service) GetActiveNotifications() ([]domain.Notification, error) {
 	return s.repo.GetActive()
 }
 
+func (s *Service) GetActiveNotificationsForUser(userID string) ([]domain.Notification, error) {
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.GetActiveForUser(id)
+}
+
+func (s *Service) CreateUserNotification(userID primitive.ObjectID, title, message, link, linkText string) error {
+	now := time.Now()
+	return s.repo.Create(&domain.Notification{
+		Title:        title,
+		Message:      message,
+		Link:         link,
+		LinkText:     linkText,
+		IsActive:     true,
+		Priority:     "normal",
+		StartDate:    now,
+		EndDate:      now.AddDate(0, 1, 0),
+		RecipientIDs: []primitive.ObjectID{userID},
+	})
+}
+
 func (s *Service) GetNotificationByID(id string) (*domain.Notification, error) {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -92,7 +115,7 @@ func (s *Service) IsNotificationReadByUser(notification *domain.Notification, us
 }
 
 func (s *Service) GetUnreadNotifications(userID string) ([]domain.Notification, error) {
-	notifications, err := s.repo.GetActive()
+	notifications, err := s.GetActiveNotificationsForUser(userID)
 	if err != nil {
 		return nil, err
 	}

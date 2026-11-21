@@ -102,11 +102,12 @@ type StudentAttendanceRow struct {
 }
 
 type AttendanceRecordFilter struct {
-	Cohort     int
-	Date       string
-	Session    AttendanceSession
-	UserID     primitive.ObjectID
-	NotDeleted bool
+	Cohort         int
+	Date           string
+	Session        AttendanceSession
+	UserID         primitive.ObjectID
+	NotDeleted     bool
+	IncludeDeleted bool
 }
 
 type AttendanceCodeFilter struct {
@@ -117,14 +118,19 @@ type AttendanceCodeFilter struct {
 
 type AttendanceRepository interface {
 	InsertRecord(ctx interface{}, record *AttendanceRecord) error
-	// UpsertRecord writes record for (user, date, session) unless a live record exists:
-	// a soft-deleted row is revived with record's values. inserted reports whether it wrote.
-	UpsertRecord(ctx interface{}, record *AttendanceRecord) (inserted bool, err error)
+	// InsertIfAbsent inserts record unless a live (non-deleted) record exists for
+	// (user, date, session). inserted reports whether it wrote.
+	InsertIfAbsent(ctx interface{}, record *AttendanceRecord) (inserted bool, err error)
 	// ActiveCohorts lists cohorts with any live record on or after since (YYYY-MM-DD).
 	ActiveCohorts(ctx interface{}, since string) ([]int, error)
+	FindByID(ctx interface{}, id primitive.ObjectID) (*AttendanceRecord, error)
 	FindRecord(ctx interface{}, filter AttendanceRecordFilter) (*AttendanceRecord, error)
 	FindRecords(ctx interface{}, filter AttendanceRecordFilter, opts interface{}) ([]AttendanceRecord, error)
 	FindRecordsRaw(ctx interface{}, bsonFilter interface{}, opts interface{}) ([]AttendanceRecord, error)
+	// UpsertRecord creates or updates the single record identified by (user_id, date, session).
+	// It uses a partial-unique filter (only non-deleted docs) so re-checking in after a soft
+	// delete works without colliding with the tombstoned record.
+	UpsertRecord(ctx interface{}, filter AttendanceRecordFilter, update interface{}) (*AttendanceRecord, error)
 	UpdateRecord(ctx interface{}, id primitive.ObjectID, update interface{}) error
 	UpdateRecords(ctx interface{}, filter AttendanceRecordFilter, update interface{}) error
 	DeleteRecord(ctx interface{}, id primitive.ObjectID, deletedBy string) error

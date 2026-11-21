@@ -22,7 +22,7 @@ type fakeCheckinRecords struct{ inserted bool }
 func (f fakeCheckinRecords) CountRecords(interface{}, domain.AttendanceRecordFilter) (int64, error) {
 	return 0, nil
 }
-func (f fakeCheckinRecords) UpsertRecord(interface{}, *domain.AttendanceRecord) (bool, error) {
+func (f fakeCheckinRecords) InsertIfAbsent(interface{}, *domain.AttendanceRecord) (bool, error) {
 	return f.inserted, nil
 }
 

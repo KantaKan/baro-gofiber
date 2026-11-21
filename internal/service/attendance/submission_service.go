@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 	"log"
-	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/pkg/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type SubmissionService struct {
@@ -30,109 +30,50 @@ func (s *SubmissionService) ManualMarkAttendance(userID primitive.ObjectID, date
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	log.Printf("[DEBUG] ManualMarkAttendance: userID=%s, date=%s, session=%s, status=%s", userID.Hex(), date, session, status)
-
 	user, err := s.userService.GetUserByID(userID.Hex())
 	if err != nil {
 		log.Printf("[ERROR] ManualMarkAttendance: user not found: %s, err=%v", userID.Hex(), err)
 		return nil, ErrStudentNotFound
 	}
-	log.Printf("[DEBUG] ManualMarkAttendance: user found: %s %s", user.FirstName, user.LastName)
 
-	filter := domain.AttendanceRecordFilter{
-		UserID:  userID,
-		Date:    date,
-		Session: domain.AttendanceSession(session),
-	}
+	now := utils.GetThailandTime()
 
-	existing, err := s.recordRepo.FindRecord(ctx, filter)
-	// Check for record not found - handle both service and repo error instances
-	isNotFound := errors.Is(err, ErrRecordNotFound) || (err != nil && err.Error() == "attendance record not found")
-	if err != nil && !isNotFound {
-		log.Printf("[ERROR] ManualMarkAttendance: FindRecord error: %v", err)
-		return nil, err
-	}
-
-	if existing != nil && existing.ID != primitive.NilObjectID {
-		log.Printf("[DEBUG] ManualMarkAttendance: updating existing record %s", existing.ID.Hex())
-		update := bson.M{
+	update := bson.M{
+		"$set": bson.M{
+			"user_id":        userID,
+			"jsd_number":     user.JSDNumber,
+			"first_name":     user.FirstName,
+			"last_name":      user.LastName,
+			"cohort_number":  user.CohortNumber,
+			"date":           date,
+			"session":        session,
 			"status":         status,
 			"marked_by":      domain.MarkedByAdmin,
 			"marked_by_user": markedBy,
-			"submitted_at":   time.Now(),
+			"submitted_at":   now,
+			"locked":         false,
 			"deleted":        false,
 			"deleted_at":     nil,
 			"deleted_by":     "",
-		}
-		if err := s.recordRepo.UpdateRecord(ctx, existing.ID, update); err != nil {
-			log.Printf("[ERROR] ManualMarkAttendance: UpdateRecord error: %v", err)
-			return nil, err
-		}
-		existing.Status = status
-		existing.MarkedBy = domain.MarkedByAdmin
-		existing.MarkedByUser = markedBy
-		existing.Deleted = false
-		return existing, nil
+		},
+		"$setOnInsert": bson.M{
+			"_id": primitive.NewObjectID(),
+		},
 	}
 
-	record := &domain.AttendanceRecord{
-		UserID:       userID,
-		JSDNumber:    user.JSDNumber,
-		FirstName:    user.FirstName,
-		LastName:     user.LastName,
-		CohortNumber: user.CohortNumber,
-		Date:         date,
-		Session:      domain.AttendanceSession(session),
-		Status:       status,
-		MarkedBy:     domain.MarkedByAdmin,
-		MarkedByUser: markedBy,
-		SubmittedAt:  time.Now(),
-		Locked:       false,
+	filter := domain.AttendanceRecordFilter{
+		UserID:     userID,
+		Date:       date,
+		Session:    domain.AttendanceSession(session),
+		NotDeleted: true,
 	}
 
-	log.Printf("[DEBUG] ManualMarkAttendance: inserting new record for user %s", userID.Hex())
-	if err := s.recordRepo.InsertRecord(ctx, record); err != nil {
-		log.Printf("[ERROR] ManualMarkAttendance: InsertRecord error: %v", err)
-
-		// Check for duplicate key error (unique index violation)
-		if mongo.IsDuplicateKeyError(err) {
-			log.Printf("[DEBUG] ManualMarkAttendance: duplicate key error, searching for existing record")
-			// Try to find and update the existing record
-			existing, findErr := s.recordRepo.FindRecord(ctx, filter)
-			if findErr == nil && existing != nil {
-				log.Printf("[DEBUG] ManualMarkAttendance: found existing record %s, updating", existing.ID.Hex())
-				update := bson.M{
-					"status":         status,
-					"marked_by":      domain.MarkedByAdmin,
-					"marked_by_user": markedBy,
-					"submitted_at":   time.Now(),
-					"deleted":        false,
-					"deleted_at":     nil,
-					"deleted_by":     "",
-				}
-				if updateErr := s.recordRepo.UpdateRecord(ctx, existing.ID, update); updateErr != nil {
-					log.Printf("[ERROR] ManualMarkAttendance: UpdateRecord failed: %v", updateErr)
-					return nil, updateErr
-				}
-				existing.Status = status
-				existing.MarkedBy = domain.MarkedByAdmin
-				existing.MarkedByUser = markedBy
-				existing.Deleted = false
-				return existing, nil
-			}
-			log.Printf("[DEBUG] ManualMarkAttendance: could not find existing record: %v", findErr)
-		}
-
-		// Check for other common errors
-		if strings.Contains(err.Error(), "context deadline exceeded") {
-			log.Printf("[ERROR] ManualMarkAttendance: database timeout")
-			return nil, errors.New("database timeout, please try again")
-		}
-
+	record, err := s.recordRepo.UpsertRecord(ctx, filter, update)
+	if err != nil {
+		log.Printf("[ERROR] ManualMarkAttendance upsert failed: %v", err)
 		return nil, err
 	}
 
-	log.Printf("[DEBUG] ManualMarkAttendance: success, record ID: %s", record.ID.Hex())
 	return record, nil
 }
 
@@ -141,64 +82,51 @@ func (s *SubmissionService) BulkMarkAttendance(userIDs []primitive.ObjectID, dat
 	defer cancel()
 
 	var records []domain.AttendanceRecord
+	now := utils.GetThailandTime()
 
 	for _, userID := range userIDs {
 		user, err := s.userService.GetUserByID(userID.Hex())
 		if err != nil {
+			log.Printf("[WARN] BulkMarkAttendance: skipping user %s: not found", userID.Hex())
 			continue
 		}
 
-		filter := domain.AttendanceRecordFilter{
-			UserID:  userID,
-			Date:    date,
-			Session: session,
-		}
-
-		existing, err := s.recordRepo.FindRecord(ctx, filter)
-		isNotFound := errors.Is(err, ErrRecordNotFound) || (err != nil && err.Error() == "attendance record not found")
-		if err != nil && !isNotFound {
-			continue
-		}
-
-		if existing != nil && existing.ID != primitive.NilObjectID {
-			update := bson.M{
+		update := bson.M{
+			"$set": bson.M{
+				"user_id":        userID,
+				"jsd_number":     user.JSDNumber,
+				"first_name":     user.FirstName,
+				"last_name":      user.LastName,
+				"cohort_number":  user.CohortNumber,
+				"date":           date,
+				"session":        session,
 				"status":         status,
 				"marked_by":      domain.MarkedByAdmin,
 				"marked_by_user": markedBy,
-				"submitted_at":   time.Now(),
+				"submitted_at":   now,
+				"locked":         false,
 				"deleted":        false,
 				"deleted_at":     nil,
 				"deleted_by":     "",
-			}
-			if err := s.recordRepo.UpdateRecord(ctx, existing.ID, update); err != nil {
-				continue
-			}
-			existing.Status = status
-			existing.MarkedBy = domain.MarkedByAdmin
-			existing.MarkedByUser = markedBy
-			existing.Deleted = false
-			records = append(records, *existing)
-		} else {
-			record := &domain.AttendanceRecord{
-				UserID:       userID,
-				JSDNumber:    user.JSDNumber,
-				FirstName:    user.FirstName,
-				LastName:     user.LastName,
-				CohortNumber: user.CohortNumber,
-				Date:         date,
-				Session:      session,
-				Status:       status,
-				MarkedBy:     domain.MarkedByAdmin,
-				MarkedByUser: markedBy,
-				SubmittedAt:  time.Now(),
-				Locked:       false,
-			}
-
-			if err := s.recordRepo.InsertRecord(ctx, record); err != nil {
-				continue
-			}
-			records = append(records, *record)
+			},
+			"$setOnInsert": bson.M{
+				"_id": primitive.NewObjectID(),
+			},
 		}
+
+		filter := domain.AttendanceRecordFilter{
+			UserID:     userID,
+			Date:       date,
+			Session:    session,
+			NotDeleted: true,
+		}
+
+		record, err := s.recordRepo.UpsertRecord(ctx, filter, update)
+		if err != nil {
+			log.Printf("[WARN] BulkMarkAttendance: upsert failed for user %s: %v", userID.Hex(), err)
+			continue
+		}
+		records = append(records, *record)
 	}
 
 	return records, nil
@@ -213,21 +141,8 @@ func (s *SubmissionService) DeleteAttendanceRecord(recordID string, deletedBy st
 		return nil, ErrRecordNotFound
 	}
 
-	filter := domain.AttendanceRecordFilter{}
-	records, err := s.recordRepo.FindRecords(ctx, filter, nil)
+	record, err := s.recordRepo.FindByID(ctx, oid)
 	if err != nil {
-		return nil, err
-	}
-
-	var record *domain.AttendanceRecord
-	for _, r := range records {
-		if r.ID == oid {
-			record = &r
-			break
-		}
-	}
-
-	if record == nil {
 		return nil, ErrRecordNotFound
 	}
 
@@ -243,8 +158,9 @@ func (s *SubmissionService) LockSession(date, session string, cohort int, locked
 	defer cancel()
 
 	filter := domain.AttendanceRecordFilter{
-		Date:    date,
-		Session: domain.AttendanceSession(session),
+		Date:       date,
+		Session:    domain.AttendanceSession(session),
+		NotDeleted: true,
 	}
 
 	if cohort > 0 {
@@ -260,9 +176,10 @@ func (s *SubmissionService) IsSessionLocked(date, session string, cohort int) (b
 	defer cancel()
 
 	filter := domain.AttendanceRecordFilter{
-		Date:    date,
-		Session: domain.AttendanceSession(session),
-		Cohort:  cohort,
+		Date:       date,
+		Session:    domain.AttendanceSession(session),
+		Cohort:     cohort,
+		NotDeleted: true,
 	}
 
 	records, err := s.recordRepo.FindRecords(ctx, filter, nil)
@@ -283,6 +200,16 @@ func (s *SubmissionService) GetAttendanceLogs(cohort int, date string, page, lim
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
 	filter := domain.AttendanceRecordFilter{
 		NotDeleted: true,
 	}
@@ -293,24 +220,67 @@ func (s *SubmissionService) GetAttendanceLogs(cohort int, date string, page, lim
 		filter.Date = date
 	}
 
-	records, err := s.recordRepo.FindRecords(ctx, filter, nil)
+	total, err := s.recordRepo.CountRecords(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	return records, len(records), nil
+	skip := int64((page - 1) * limit)
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "submitted_at", Value: -1}}).
+		SetSkip(skip).
+		SetLimit(int64(limit))
+
+	records, err := s.recordRepo.FindRecords(ctx, filter, findOpts)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return records, int(total), nil
 }
 
 func (s *SubmissionService) GetStudentAttendanceHistory(userID primitive.ObjectID) ([]domain.AttendanceRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "date", Value: -1}, {Key: "session", Value: 1}})
+
 	filter := domain.AttendanceRecordFilter{
 		UserID:     userID,
 		NotDeleted: true,
 	}
 
-	return s.recordRepo.FindRecords(ctx, filter, nil)
+	return s.recordRepo.FindRecords(ctx, filter, findOpts)
+}
+
+// GetStudentHistorySince returns records for a user starting from (today - days).
+func (s *SubmissionService) GetStudentHistorySince(userID primitive.ObjectID, days int) ([]domain.AttendanceRecord, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	startDate := utils.GetThailandTime().AddDate(0, 0, -days).Format("2006-01-02")
+
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "date", Value: -1}, {Key: "session", Value: 1}})
+
+	filter := domain.AttendanceRecordFilter{
+		UserID:     userID,
+		NotDeleted: true,
+	}
+
+	records, err := s.recordRepo.FindRecords(ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	filtered := make([]domain.AttendanceRecord, 0, len(records))
+	for _, r := range records {
+		if r.Date >= startDate {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered, nil
 }
 
 func (s *SubmissionService) GetUserAttendanceStatus(userID primitive.ObjectID) (map[string]interface{}, error) {
@@ -318,7 +288,10 @@ func (s *SubmissionService) GetUserAttendanceStatus(userID primitive.ObjectID) (
 	defer cancel()
 
 	pipeline := []bson.M{
-		{"$match": bson.M{"user_id": userID}},
+		{"$match": bson.M{
+			"user_id": userID,
+			"deleted": bson.M{"$ne": true},
+		}},
 		{"$group": bson.M{
 			"_id":            nil,
 			"present":        bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", "present"}}, 1, 0}}},
@@ -361,4 +334,29 @@ func (s *SubmissionService) GetUserAttendanceStatus(userID primitive.ObjectID) (
 	}
 
 	return result, nil
+}
+
+// ValidateDateFormat returns true if dateStr is YYYY-MM-DD.
+func ValidateDateFormat(dateStr string) bool {
+	if len(dateStr) != 10 {
+		return false
+	}
+	for i, c := range dateStr {
+		if i == 4 || i == 7 {
+			if c != '-' {
+				return false
+			}
+		} else if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isNotFound checks for both the service-level and repo-level not-found errors.
+func isNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, ErrRecordNotFound) || err.Error() == "attendance record not found"
 }

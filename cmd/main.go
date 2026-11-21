@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"gofiber-baro/config"
+	"gofiber-baro/internal/jobs"
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/pkg/utils"
 	"log"
+	"net/url"
 	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	_ "gofiber-baro/docs"
 
@@ -67,6 +71,32 @@ func main() {
 	log.Println("Successfully connected to MongoDB")
 
 	container := NewContainer(config.DB)
+	indexCtx, cancelIndexes := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.CharacterRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure Baro character indexes:", err)
+	}
+	cancelIndexes()
+	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.GiftBoxRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure gift box indexes:", err)
+	}
+	cancelIndexes()
+	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.GodEventRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure GOD event indexes:", err)
+	}
+	cancelIndexes()
+	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.StartupStoryRepo.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure Startup Story indexes:", err)
+	}
+	cancelIndexes()
+
+	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
 
 	// Close check-in sessions: once a minute, mark learners who didn't check in.
 	closer := attendance.NewSessionCloser(container.AttendanceRepo, container.LeaveRepo, container.UserService, container.CohortService, container.HolidayService)
@@ -81,6 +111,8 @@ func main() {
 	// Behind a load balancer the client IP arrives in a header (e.g. X-Forwarded-For);
 	// set PROXY_HEADER so the check-in network limit sees the learner's real IP.
 	app := fiber.New(fiberConfig(os.Getenv("PROXY_HEADER")))
+
+	app.Use(recover.New())
 
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
@@ -99,7 +131,7 @@ func main() {
 		return c.SendStatus(fiber.StatusNoContent)
 	})
 	app.Use(helmet.New(helmet.Config{
-		ContentSecurityPolicy: "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:",
+		ContentSecurityPolicy: buildCSP(),
 		XSSProtection:         "1; mode=block",
 		ContentTypeNosniff:    "nosniff",
 		ReferrerPolicy:        "no-referrer",
@@ -136,6 +168,15 @@ func main() {
 		TalkBoard:    container.TalkBoardHandler,
 		Notification: container.NotificationHandler,
 		Cohort:       container.CohortHandler,
+		Stamp:        container.StampHandler,
+		History:      container.HistoryHandler,
+		Cosmetic:     container.CosmeticHandler,
+		GiftBox:      container.GiftBoxHandler,
+		Character:    container.CharacterHandler,
+		Showcase:     container.ShowcaseHandler,
+		GodEvent:     container.GodEventHandler,
+		StartupStory: container.StartupStoryHandler,
+		Audit:        container.AuditMiddleware,
 	}
 
 	setupRoutes(app, handlers)
@@ -159,4 +200,19 @@ func fiberConfig(proxyHeader string) fiber.Config {
 		cfg.EnableIPValidation = true
 	}
 	return cfg
+
+}
+
+func buildCSP() string {
+	csp := "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data:"
+
+	publicBase := os.Getenv("SUPABASE_STORAGE_PUBLIC_URL")
+	if publicBase != "" {
+		u, err := url.Parse(publicBase)
+		if err == nil && u.Host != "" {
+			csp += " https://" + u.Host
+		}
+	}
+
+	return csp
 }

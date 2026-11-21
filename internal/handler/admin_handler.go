@@ -3,6 +3,7 @@ package handler
 import (
 	"gofiber-baro/internal/service/reflection"
 	"gofiber-baro/internal/service/user"
+	"gofiber-baro/pkg/middleware"
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,6 +13,7 @@ import (
 type AdminHandler struct {
 	userService       *user.Service
 	badgeService      *user.BadgeService
+	careEnergyService *user.CareEnergyService
 	reflectionService *reflection.Service
 	barometerService  *reflection.BarometerService
 }
@@ -19,12 +21,14 @@ type AdminHandler struct {
 func NewAdminHandler(
 	userService *user.Service,
 	badgeService *user.BadgeService,
+	careEnergyService *user.CareEnergyService,
 	reflectionService *reflection.Service,
 	barometerService *reflection.BarometerService,
 ) *AdminHandler {
 	return &AdminHandler{
 		userService:       userService,
 		badgeService:      badgeService,
+		careEnergyService: careEnergyService,
 		reflectionService: reflectionService,
 		barometerService:  barometerService,
 	}
@@ -128,9 +132,9 @@ func (h *AdminHandler) AwardBadge(c *fiber.Ctx) error {
 
 func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
 	type RequestBody struct {
-		UserIDs []string `json:"userIds"`
-		Type    string   `json:"type"`
-		Name    string   `json:"name"`
+		UserIDs  []string `json:"userIds"`
+		Type     string   `json:"type"`
+		Name     string   `json:"name"`
 		Emoji    string   `json:"emoji"`
 		ImageUrl string   `json:"imageUrl"`
 		Color    string   `json:"color"`
@@ -170,6 +174,96 @@ func (h *AdminHandler) BulkAwardBadge(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success":      true,
 		"message":      "Bulk badge award completed",
+		"data":         nil,
+		"successCount": successCount,
+		"failCount":    failCount,
+	})
+}
+
+func (h *AdminHandler) GrantCareEnergy(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	type RequestBody struct {
+		Amount int    `json:"amount"`
+		Note   string `json:"note"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Amount <= 0 {
+		body.Amount = 1
+	}
+
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	claims, _ := c.Locals("user").(*middleware.Claims)
+	grantedBy := ""
+	if claims != nil {
+		grantedBy = claims.UserID
+	}
+
+	if err := h.careEnergyService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error granting Care Energy")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Care Energy granted successfully", nil)
+}
+
+func (h *AdminHandler) BulkGrantCareEnergy(c *fiber.Ctx) error {
+	type RequestBody struct {
+		UserIDs []string `json:"userIds"`
+		Amount  int      `json:"amount"`
+		Note    string   `json:"note"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if len(body.UserIDs) == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "User IDs are required")
+	}
+
+	if body.Amount <= 0 {
+		body.Amount = 1
+	}
+
+	claims, _ := c.Locals("user").(*middleware.Claims)
+	grantedBy := ""
+	if claims != nil {
+		grantedBy = claims.UserID
+	}
+
+	successCount := 0
+	failCount := 0
+
+	for _, id := range body.UserIDs {
+		userID, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			failCount++
+			continue
+		}
+
+		if err := h.careEnergyService.Grant(userID, body.Amount, body.Note, grantedBy); err != nil {
+			failCount++
+			continue
+		}
+		successCount++
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success":      true,
+		"message":      "Bulk Care Energy grant completed",
 		"data":         nil,
 		"successCount": successCount,
 		"failCount":    failCount,
@@ -301,6 +395,77 @@ func (h *AdminHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Feedback updated successfully", nil)
 }
 
+// ponytail: no CSV upload, no individual validation per field beyond required
+func (h *AdminHandler) BulkRegisterUsers(c *fiber.Ctx) error {
+	type UserEntry struct {
+		FirstName    string `json:"first_name"`
+		LastName     string `json:"last_name"`
+		Email        string `json:"email"`
+		JSDNumber    string `json:"jsd_number"`
+		Password     string `json:"password"`
+		ProjectGroup string `json:"project_group"`
+		GenmateGroup string `json:"genmate_group"`
+		ZoomName     string `json:"zoom_name"`
+	}
+	type RequestBody struct {
+		CohortNumber int         `json:"cohort_number"`
+		Password     string      `json:"password"`
+		Users        []UserEntry `json:"users"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.CohortNumber == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "cohort_number is required")
+	}
+	if len(body.Users) == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "at least one user is required")
+	}
+	if len(body.Users) > 200 {
+		return utils.SendError(c, fiber.StatusBadRequest, "maximum 200 users per request")
+	}
+
+	inputs := make([]user.BulkUserInput, len(body.Users))
+	for i, u := range body.Users {
+		inputs[i] = user.BulkUserInput{
+			FirstName:    u.FirstName,
+			LastName:     u.LastName,
+			Email:        u.Email,
+			JSDNumber:    u.JSDNumber,
+			Password:     u.Password,
+			ProjectGroup: u.ProjectGroup,
+			GenmateGroup: u.GenmateGroup,
+			ZoomName:     u.ZoomName,
+		}
+	}
+
+	results, err := h.userService.BulkCreateUsers(inputs, body.CohortNumber, body.Password)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Bulk registration failed")
+	}
+
+	successCount := 0
+	failCount := 0
+	for _, r := range results {
+		if r.Status == "created" {
+			successCount++
+		} else {
+			failCount++
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"success":      true,
+		"message":      "Bulk registration completed",
+		"data":         results,
+		"successCount": successCount,
+		"failCount":    failCount,
+	})
+}
+
 func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
@@ -312,4 +477,63 @@ func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "User deleted successfully", nil)
+}
+
+// UpdatePlantOverride lets an admin override a learner's full plant look —
+// palette plus species/pot/leaf/flower/stem — or clear any of them back to
+// the hash-derived default by sending an empty string.
+// PATCH /admin/users/:id/plant
+func (h *AdminHandler) UpdatePlantOverride(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	type RequestBody struct {
+		Palette string `json:"palette"`
+		Species string `json:"species"`
+		Pot     string `json:"pot"`
+		Leaf    string `json:"leaf"`
+		Flower  string `json:"flower"`
+		Stem    string `json:"stem"`
+	}
+
+	var body RequestBody
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Palette != "" && !validPlantPalettes[body.Palette] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown palette")
+	}
+	if body.Species != "" && !validPlantSpecies[body.Species] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown species")
+	}
+	if body.Pot != "" && !validPlantPots[body.Pot] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown pot style")
+	}
+	if body.Leaf != "" && !validPlantLeaves[body.Leaf] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown leaf style")
+	}
+	if body.Flower != "" && !validPlantFlowers[body.Flower] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown flower type")
+	}
+	if body.Stem != "" && !validPlantStems[body.Stem] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown stem style")
+	}
+
+	update := map[string]interface{}{
+		"selected_palette": body.Palette,
+		"selected_species": body.Species,
+		"selected_pot":     body.Pot,
+		"selected_leaf":    body.Leaf,
+		"selected_flower":  body.Flower,
+		"selected_stem":    body.Stem,
+	}
+
+	if err := h.userService.UpdatePlantOverride(id, update, body.Palette, body.Pot); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating plant override")
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Plant updated", nil)
 }

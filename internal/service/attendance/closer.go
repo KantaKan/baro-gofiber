@@ -33,7 +33,7 @@ func PlanSessionClose(learners []primitive.ObjectID, checkedIn map[primitive.Obj
 
 type closerRecords interface {
 	FindRecords(ctx interface{}, filter domain.AttendanceRecordFilter, opts interface{}) ([]domain.AttendanceRecord, error)
-	UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) (bool, error)
+	InsertIfAbsent(ctx interface{}, record *domain.AttendanceRecord) (bool, error)
 	ActiveCohorts(ctx interface{}, since string) ([]int, error)
 }
 
@@ -150,7 +150,7 @@ func (s *SessionCloser) closeSession(cohort int, date string, session domain.Att
 			CohortNumber: cohort, Date: date, Session: session, Status: status,
 			MarkedBy: domain.MarkedByAdmin, MarkedByUser: "system", SubmittedAt: time.Now(),
 		}
-		if _, err := s.records.UpsertRecord(ctx, rec); err != nil {
+		if _, err := s.records.InsertIfAbsent(ctx, rec); err != nil {
 			return err
 		}
 	}

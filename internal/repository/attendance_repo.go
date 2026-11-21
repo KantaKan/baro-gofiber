@@ -34,30 +34,13 @@ func (r *attendanceRepository) InsertRecord(ctx interface{}, record *domain.Atte
 	return err
 }
 
-func (r *attendanceRepository) UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) (bool, error) {
+func (r *attendanceRepository) InsertIfAbsent(ctx interface{}, record *domain.AttendanceRecord) (bool, error) {
 	c := ctx.(context.Context)
-	key := bson.M{"user_id": record.UserID, "date": record.Date, "session": record.Session}
-
-	// The unique index covers soft-deleted rows too, so revive one if it exists.
-	revive := bson.M{"user_id": record.UserID, "date": record.Date, "session": record.Session, "deleted": true}
-	res, err := r.collection.UpdateOne(c, revive, bson.M{
-		"$set": bson.M{
-			"status": record.Status, "marked_by": record.MarkedBy, "marked_by_user": record.MarkedByUser,
-			"submitted_at": record.SubmittedAt, "ip_address": record.IPAddress, "checkin_style": record.CheckinStyle,
-			"jsd_number": record.JSDNumber, "first_name": record.FirstName, "last_name": record.LastName,
-			"cohort_number": record.CohortNumber, "locked": false, "deleted": false,
-		},
-		"$unset": bson.M{"deleted_at": "", "deleted_by": ""},
-	})
-	if err != nil {
-		return false, err
-	}
-	if res.ModifiedCount > 0 {
-		return true, nil
-	}
-
+	// The unique index is partial on deleted=false, so tombstoned rows never collide.
+	key := bson.M{"user_id": record.UserID, "date": record.Date, "session": record.Session, "deleted": false}
 	record.ID = primitive.NewObjectID()
-	res, err = r.collection.UpdateOne(c, key, bson.M{"$setOnInsert": record}, options.Update().SetUpsert(true))
+	record.Deleted = false
+	res, err := r.collection.UpdateOne(c, key, bson.M{"$setOnInsert": record}, options.Update().SetUpsert(true))
 	if mongo.IsDuplicateKeyError(err) {
 		return false, nil
 	}
@@ -87,6 +70,21 @@ func (r *attendanceRepository) ActiveCohorts(ctx interface{}, since string) ([]i
 		}
 	}
 	return out, nil
+
+}
+
+func (r *attendanceRepository) FindByID(ctx interface{}, id primitive.ObjectID) (*domain.AttendanceRecord, error) {
+	c := ctx.(context.Context)
+
+	var record domain.AttendanceRecord
+	err := r.collection.FindOne(c, bson.M{"_id": id}).Decode(&record)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+	return &record, nil
 }
 
 func (r *attendanceRepository) FindRecord(ctx interface{}, filter domain.AttendanceRecordFilter) (*domain.AttendanceRecord, error) {
@@ -149,6 +147,43 @@ func (r *attendanceRepository) FindRecordsRaw(ctx interface{}, bsonFilter interf
 		return nil, err
 	}
 	return records, nil
+}
+
+// UpsertRecord finds a single live record matching filter and atomically updates it,
+// or inserts a new one if none exists. It returns the resulting record.
+func (r *attendanceRepository) UpsertRecord(ctx interface{}, filter domain.AttendanceRecordFilter, update interface{}) (*domain.AttendanceRecord, error) {
+	c := ctx.(context.Context)
+	bsonFilter := r.buildFilter(filter)
+
+	opts := options.FindOneAndUpdate().
+		SetUpsert(true).
+		SetReturnDocument(options.After)
+
+	// Ensure a new doc gets an _id even on the insert path of FindOneAndUpdate.
+	setDoc, ok := update.(bson.M)
+	if ok {
+		if _, hasSetID := setDoc["_id"]; !hasSetID {
+			if _, hasSetOnInsert := setDoc["$setOnInsert"]; !hasSetOnInsert {
+				setDoc["$setOnInsert"] = bson.M{"_id": primitive.NewObjectID()}
+			} else {
+				soi, _ := setDoc["$setOnInsert"].(bson.M)
+				if _, ok := soi["_id"]; !ok {
+					soi["_id"] = primitive.NewObjectID()
+					setDoc["$setOnInsert"] = soi
+				}
+			}
+		}
+	}
+
+	var record domain.AttendanceRecord
+	err := r.collection.FindOneAndUpdate(c, bsonFilter, update, opts).Decode(&record)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrRecordNotFound
+		}
+		return nil, err
+	}
+	return &record, nil
 }
 
 func (r *attendanceRepository) UpdateRecord(ctx interface{}, id primitive.ObjectID, update interface{}) error {
@@ -223,7 +258,13 @@ func (r *attendanceRepository) AggregateDailyStats(ctx interface{}, pipeline int
 func (r *attendanceRepository) buildFilter(filter domain.AttendanceRecordFilter) bson.M {
 	bsonFilter := bson.M{}
 
-	if filter.NotDeleted {
+	// Only include soft-deleted records when explicitly requested.
+	if filter.IncludeDeleted {
+		// no deleted predicate
+	} else if filter.NotDeleted {
+		bsonFilter["deleted"] = bson.M{"$ne": true}
+	} else {
+		// Default: exclude soft-deleted unless caller opts out.
 		bsonFilter["deleted"] = bson.M{"$ne": true}
 	}
 	if filter.Cohort > 0 {

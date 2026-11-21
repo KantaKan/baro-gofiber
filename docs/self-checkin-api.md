@@ -14,7 +14,7 @@ All times are Asia/Bangkok. Default rules (per cohort, editable by admins):
   - 403 network not allowed · 409 already checked in / approved leave covers it · 422 not open yet / closed / no class.
 - `GET /attendance/me/summary` → `today.morning|afternoon` (`status`, `checked_in_at`, `style`) or null, `streak`, `leave_used`, `leave_allowance` (8), `warning_level` (none | first ≥4 | second ≥6 | third ≥7), `attendance_rate` (0–1), `perfect_week`, `class_today` (false on weekends/holidays), `rules`, `preferences`, `course` (`start_date`, `course_days`, `day_number`, `week_number`, `total_weeks`; zeros when no start date).
 - `PUT /users/me/preferences` — any of `checkin_style`, `checkin_random`, `avatar` `{style, seed, bg, options}`, `skills` (≤5, ≤24 chars). 403 when a style/avatar item is still locked (rocket 15 · arcade 20 · dj 30 · gold = perfect week · saturn 15 · galaxy 30).
-- Removed for learners: `GET /attendance/code`. `POST /attendance/submit` was removed in Plan 2.
+- Still available (from main): `GET /attendance/code` and `POST /attendance/submit` for the code-based flow. Self check-in works alongside it.
 
 ## Admin
 

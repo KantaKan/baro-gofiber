@@ -108,7 +108,7 @@ type IPCheck func(allowed []string, ip string) bool
 
 type checkinRecords interface {
 	CountRecords(ctx interface{}, filter domain.AttendanceRecordFilter) (int64, error)
-	UpsertRecord(ctx interface{}, record *domain.AttendanceRecord) (bool, error)
+	InsertIfAbsent(ctx interface{}, record *domain.AttendanceRecord) (bool, error)
 }
 
 type checkinLeaves interface {
@@ -180,7 +180,7 @@ func (s *CheckinService) CheckIn(userID primitive.ObjectID, ip, style string) (*
 		CohortNumber: user.CohortNumber, Date: date, Session: d.Session, Status: d.Status,
 		MarkedBy: domain.MarkedBySelf, SubmittedAt: time.Now(), IPAddress: ip, CheckinStyle: style,
 	}
-	inserted, err := s.records.UpsertRecord(ctx, rec)
+	inserted, err := s.records.InsertIfAbsent(ctx, rec)
 	if err != nil {
 		return nil, err
 	}

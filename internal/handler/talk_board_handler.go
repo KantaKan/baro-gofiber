@@ -123,7 +123,7 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 		UserID:    userOID,
 		ZoomName:  userData.ZoomName,
 		Cohort:    userData.CohortNumber,
-		Content:   html.EscapeString(body.Content),
+		Content:   body.Content,
 		Reactions: []domain.Reaction{},
 		Comments:  []domain.Comment{},
 		CreatedAt: time.Now(),
@@ -194,7 +194,7 @@ func (h *TalkBoardHandler) AddComment(c *fiber.Ctx) error {
 		UserID:    userOID,
 		ZoomName:  userData.ZoomName,
 		Cohort:    userData.CohortNumber,
-		Content:   html.EscapeString(body.Content),
+		Content:   body.Content,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}

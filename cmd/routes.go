@@ -19,10 +19,33 @@ type Handlers struct {
 	TalkBoard    *handler.TalkBoardHandler
 	Notification *handler.NotificationHandler
 	Cohort       *handler.CohortHandler
+	Stamp        *handler.StampHandler
+	History      *handler.HistoryHandler
+	Cosmetic     *handler.CosmeticHandler
+	GiftBox      *handler.GiftBoxHandler
+	Character    *handler.BaroCharacterHandler
+	Showcase     *handler.ShowcaseHandler
+	GodEvent     *handler.GodEventHandler
+	StartupStory *handler.StartupStoryHandler
+	Audit        fiber.Handler
 }
 
 func setupRoutes(app *fiber.App, h Handlers) {
-	app.Post("/login", h.User.LoginUser)
+	app.Use(h.Audit)
+
+	loginLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+				"error": "Too many login attempts, please try again later",
+			})
+		},
+	})
+	app.Post("/login", loginLimiter, h.User.LoginUser)
 	app.Get("/api/verify-token", middleware.AuthMiddleware, h.User.VerifyToken)
 
 	notifications := app.Group("/api/notifications", middleware.AuthMiddleware)
@@ -32,14 +55,83 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected := app.Group("/users", middleware.AuthMiddleware)
 	protected.Put("/me/preferences", h.User.UpdateMyPreferences)
 	protected.Get("/", h.User.GetAllUsers)
+	protected.Get("/genmate-garden", h.User.GetGenmateGarden)
 	protected.Get("/:id", h.User.GetUserByID)
 	protected.Put("/:id", h.User.UpdateUser)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
 	protected.Get("/:id/reflections", h.User.GetUserReflections)
+	protected.Post("/:id/reflection-rewards/reconcile", h.User.ReconcileReflectionMilestones)
 	protected.Put("/:id/personal-details", h.User.UpdatePersonalDetails)
 	protected.Post("/:id/profile/comments", h.User.AddProfileComment)
 	protected.Delete("/:id/profile/comments/:commentId", h.User.DeleteProfileComment)
 	protected.Post("/:id/profile/reactions", h.User.AddProfileReaction)
+	protected.Post("/:id/plant/reactions", h.User.AddPlantReaction)
+	protected.Get("/:id/care-energy", h.User.GetCareEnergy)
+	protected.Post("/:id/care-energy/protect", h.User.UseCareEnergyProtect)
+	protected.Post("/:id/care-energy/feed", h.User.UseCareEnergyFeed)
+	protected.Post("/:id/care-energy/gift", h.User.GiftCareEnergy)
+	protected.Post("/:id/care-energy/rescue", h.User.RescueCareEnergy)
+	protected.Post("/:id/care-energy/character-care", h.User.CareForCharacter)
+
+	app.Get("/holidays", middleware.AuthMiddleware, h.Holiday.GetHolidays)
+
+	cosmetics := app.Group("/plant-cosmetics", middleware.AuthMiddleware)
+	cosmetics.Get("/catalog", h.Cosmetic.GetCatalog)
+	cosmetics.Get("/collection", h.Cosmetic.GetCollection)
+	cosmetics.Put("/equipment/:slot", h.Cosmetic.EquipCosmetic)
+	cosmetics.Delete("/equipment/:slot", h.Cosmetic.UnequipCosmetic)
+
+	characterCosmetics := app.Group("/character-cosmetics", middleware.AuthMiddleware)
+	characterCosmetics.Get("/catalog", h.Cosmetic.GetCharacterCatalog)
+	characterCosmetics.Get("/collection", h.Cosmetic.GetCharacterCollection)
+	characterCosmetics.Put("/equipment/:slot", h.Cosmetic.EquipCharacterCosmetic)
+	characterCosmetics.Delete("/equipment/:slot", h.Cosmetic.UnequipCharacterCosmetic)
+
+	giftBoxes := app.Group("/gift-boxes", middleware.AuthMiddleware)
+	giftBoxes.Get("", h.GiftBox.List)
+	giftBoxes.Get("/recipients", h.GiftBox.SearchRecipients)
+	giftBoxes.Get("/:id/odds", h.GiftBox.Odds)
+	giftBoxes.Post("/:id/open", h.GiftBox.Open)
+	giftBoxes.Post("/:id/transfer", h.GiftBox.Transfer)
+
+	characters := app.Group("/baro-characters", middleware.AuthMiddleware)
+	characters.Get("", h.Character.Collection)
+	characters.Get("/growth", h.Character.Growth)
+	characters.Get("/selection", h.Character.Selection)
+	characters.Put("/equipped", h.Character.Equip)
+	characters.Put("/pinned", h.Character.Pin)
+	characters.Post("/reveal", h.Character.RevealStarter)
+
+	lawn := app.Group("/showcase-lawn", middleware.AuthMiddleware)
+	lawn.Get("", h.Showcase.List)
+	lawn.Get("/me", h.Showcase.Mine)
+	lawn.Put("/me", h.Showcase.Save)
+	lawn.Delete("/me", h.Showcase.Remove)
+	lawn.Put("/me/mood", h.Showcase.SetMood)
+	lawn.Put("/me/emote", h.Showcase.SetEmote)
+	lawn.Post("/:ownerId/reactions", h.Showcase.React)
+
+	app.Get("/god-events", middleware.AuthMiddleware, h.GodEvent.List)
+
+	startup := app.Group("/startup-story", middleware.AuthMiddleware)
+	startup.Get("", h.StartupStory.Overview)
+	startup.Get("/leaderboard", h.StartupStory.Leaderboard)
+	startup.Put("/opt-out", h.StartupStory.OptOut)
+	startup.Post("/runs", h.StartupStory.StartRun)
+	startup.Post("/runs/active/founder", h.StartupStory.PickFounder)
+	startup.Post("/runs/active/projects", h.StartupStory.StartProject)
+	startup.Post("/runs/active/ship", h.StartupStory.Ship)
+	startup.Post("/runs/active/item", h.StartupStory.PickItem)
+	startup.Post("/runs/active/abandon", h.StartupStory.Abandon)
+	startup.Post("/runs/active/ipo-choice", h.StartupStory.IPOChoice)
+	startup.Post("/runs/active/perk", h.StartupStory.PickPerk)
+	startup.Post("/runs/active/event", h.StartupStory.PickEvent)
+	startup.Post("/runs/active/hire", h.StartupStory.Hire)
+	startup.Post("/runs/active/desks", h.StartupStory.BuyDesk)
+	startup.Post("/runs/active/desks/upgrade", h.StartupStory.UpgradeDesk)
+	startup.Post("/runs/active/infra", h.StartupStory.Infra)
+	startup.Post("/runs/active/office", h.StartupStory.MoveOffice)
+	startup.Delete("/runs/active/staff/:id", h.StartupStory.Dismiss)
 
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
@@ -60,12 +152,32 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)
 	admin.Delete("/users/:id", h.Admin.DeleteUser)
 	admin.Post("/badges/bulk", h.Admin.BulkAwardBadge)
+	admin.Post("/users/:id/care-energy", h.Admin.GrantCareEnergy)
+	admin.Post("/care-energy/bulk", h.Admin.BulkGrantCareEnergy)
+	admin.Patch("/users/:id/plant", h.Admin.UpdatePlantOverride)
+	admin.Get("/users/:id/cosmetics", h.Cosmetic.GetAdminCollection)
+	admin.Post("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.GrantCosmetic)
+	admin.Get("/users/:id/character-cosmetics", h.Cosmetic.GetAdminCharacterCollection)
+	admin.Post("/users/:id/character-cosmetics/:cosmeticId", h.Cosmetic.GrantCharacterCosmetic)
+	admin.Get("/users/:id/baro-characters", h.Character.AdminCollection)
+	admin.Get("/users/:id/baro-characters/selection", h.Character.AdminSelection)
+	admin.Post("/users/:id/baro-characters", h.Character.AdminGrant)
+	admin.Put("/users/:id/baro-characters/equipped", h.Character.AdminEquip)
+	admin.Put("/users/:id/baro-characters/pinned", h.Character.AdminPin)
+	admin.Delete("/users/:id/cosmetics/:cosmeticId", h.Cosmetic.RevokeCosmetic)
+	admin.Post("/users/:id/gift-boxes", h.GiftBox.Grant)
+	admin.Post("/cohorts/:cohortNumber/gift-boxes", h.GiftBox.GrantCohort)
+	admin.Put("/showcase-lawn/:ownerId/moderation", h.Showcase.Moderate)
+	admin.Post("/god-events", handler.GodEventCastLimiter(), h.GodEvent.Cast)
+	admin.Get("/cohorts/:cohortNumber/gift-boxes/recipients", h.GiftBox.PreviewAudience)
+	admin.Post("/users/bulk-register", h.Admin.BulkRegisterUsers)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)
 	admin.Get("/reflections", h.Admin.GetAllReflections)
 	admin.Get("/reflections/chartday", h.Admin.GetAllUsersBarometerData)
 	admin.Get("/reflections/weekly", h.Admin.GetWeeklySummary)
 	admin.Get("/emoji-zone-table", h.Admin.GetEmojiZoneTableData)
+	admin.Get("/history", h.History.GetHistory)
 
 	admin.Post("/attendance/generate-code", h.Attendance.GenerateAttendanceCode)
 	admin.Get("/attendance/active-code", h.Attendance.GetActiveAttendanceCode)
@@ -73,7 +185,6 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/attendance/manual", h.Attendance.ManualMarkAttendance)
 	admin.Get("/attendance/logs", h.Attendance.GetAttendanceLogs)
 	admin.Get("/attendance/stats", h.Attendance.GetAttendanceStats)
-	admin.Get("/attendance/stats-by-days", h.Attendance.GetAttendanceStatsByDays)
 	admin.Get("/attendance/daily-stats", h.Attendance.GetDailyAttendanceStats)
 	admin.Get("/attendance/student/:id", h.Attendance.GetStudentAttendanceHistory)
 	admin.Post("/attendance/lock", h.Attendance.LockSession)
@@ -101,9 +212,11 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Delete("/notifications/:id", h.Notification.DeleteNotification)
 
 	student := app.Group("/attendance", middleware.AuthMiddleware)
+	student.Post("/submit", h.Attendance.SubmitAttendance) // code-based check-in (main); self check-in below
 	student.Get("/my-status", h.Attendance.GetMyAttendanceStatus)
 	student.Get("/my-history", h.Attendance.GetMyAttendanceHistory)
 	student.Get("/my-daily-stats", h.Attendance.GetMyDailyStats)
+	student.Get("/code", h.Attendance.GetActiveAttendanceCode)
 	student.Post("/check-in", h.Attendance.CheckIn)
 	student.Get("/me/summary", h.Attendance.GetMySummary)
 
@@ -121,4 +234,18 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	board.Post("/posts/:postId/reactions", h.TalkBoard.AddReactionToPost)
 	board.Delete("/posts/:postId/reactions", h.TalkBoard.RemoveReactionFromPost)
 	board.Post("/posts/:postId/comments/:commentId/reactions", h.TalkBoard.AddReactionToComment)
+
+	stamps := app.Group("/stamps", middleware.AuthMiddleware)
+	stamps.Post("/", h.Stamp.CreateStamp)
+
+	cohorts := app.Group("/cohorts", middleware.AuthMiddleware)
+	cohorts.Get("/", h.Stamp.ListCohorts)
+	cohorts.Get("/:cohortNumber", h.Stamp.GetCohort)
+	cohorts.Get("/:cohortNumber/stamps", h.Stamp.GetCohortStamps)
+	cohorts.Get("/:cohortNumber/garden", h.User.GetCohortGarden)
+
+	admin.Put("/cohorts/:cohortNumber", h.Stamp.SetCohortLockAt)
+	admin.Post("/cohorts/:cohortNumber/poster", h.Stamp.UploadPoster)
+	admin.Delete("/cohorts/:cohortNumber/stamps", h.Stamp.ClearCohortStamps)
+	admin.Delete("/cohorts/:cohortNumber/stamps/:stampId", h.Stamp.DeleteStamp)
 }

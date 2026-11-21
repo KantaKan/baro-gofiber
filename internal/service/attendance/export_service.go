@@ -33,13 +33,13 @@ const (
 )
 
 type ExportRequest struct {
-	Cohort       int
-	StartDate    string
-	EndDate      string
-	Format       ExportFormat
-	Structure    ExportStructure
-	SplitAMPM    bool
-	LeaveData    []domain.LeaveRequest
+	Cohort     int
+	StartDate  string
+	EndDate    string
+	Format     ExportFormat
+	Structure  ExportStructure
+	SplitAMPM  bool
+	LeaveData  []domain.LeaveRequest
 	StatusFilter string // "", "active", "dropout", "dismissed"
 }
 

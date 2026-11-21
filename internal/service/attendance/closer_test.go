@@ -53,7 +53,7 @@ type fakeCloserRecords struct {
 func (f *fakeCloserRecords) FindRecords(_ interface{}, _ domain.AttendanceRecordFilter, _ interface{}) ([]domain.AttendanceRecord, error) {
 	return f.existing, nil
 }
-func (f *fakeCloserRecords) UpsertRecord(_ interface{}, r *domain.AttendanceRecord) (bool, error) {
+func (f *fakeCloserRecords) InsertIfAbsent(_ interface{}, r *domain.AttendanceRecord) (bool, error) {
 	if f.failOn != "" && r.Session == f.failOn {
 		return false, errors.New("boom")
 	}

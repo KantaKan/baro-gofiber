@@ -1,13 +1,20 @@
 package handler
 
 import (
+	"context"
 	"errors"
+	"html"
+	"log"
+	"strings"
+	"time"
+
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/achievement"
 	"gofiber-baro/internal/service/attendance"
+	"gofiber-baro/internal/service/milestone"
 	"gofiber-baro/internal/service/user"
 	middleware "gofiber-baro/pkg/middleware"
 	"gofiber-baro/pkg/utils"
-	"html"
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
@@ -15,13 +22,52 @@ import (
 )
 
 type UserHandler struct {
-	userService *user.Service
-	db          interface{}
-	progress    *attendance.ProgressService
+	userService       *user.Service
+	careEnergyService *user.CareEnergyService
+	milestones        milestoneReconciler
+	achievements      achievementReconciler
+	db                interface{}
+	progress          *attendance.ProgressService
 }
 
-func NewUserHandler(userService *user.Service, progress *attendance.ProgressService) *UserHandler {
-	return &UserHandler{userService: userService, progress: progress}
+type milestoneReconciler interface {
+	Reconcile(ctx context.Context, userID primitive.ObjectID, now time.Time) ([]domain.TeacherGiftBox, error)
+}
+
+type achievementReconciler interface {
+	Reconcile(ctx context.Context, userID primitive.ObjectID, now time.Time) ([]domain.TeacherGiftBox, error)
+	RecordSocial(ctx context.Context, userID primitive.ObjectID, event string, now time.Time) (*domain.TeacherGiftBox, error)
+}
+
+// ponytail: mirrors the PALETTES name list in react-genbaro/src/lib/plant-variants.ts — keep in sync
+var validPlantPalettes = map[string]bool{
+	"Forest": true, "Sunset": true, "Ocean": true, "Desert": true, "Rose": true,
+	"Lavender": true, "Sunshine": true, "Mint": true, "Coral": true, "Autumn": true,
+	"Jade": true, "Berry": true, "Citrus": true, "Slate": true, "Blush": true, "Midnight": true,
+}
+
+// ponytail: mirrors the PlantSpecies union in react-genbaro/src/lib/plant-variants.ts — keep in sync
+var validPlantSpecies = map[string]bool{
+	"flower": true, "cactus": true, "succulent": true, "tree": true, "fern": true,
+	"vine": true, "bamboo": true, "palm": true, "mushroom": true, "pine": true,
+	"clover": true, "orchid": true, "coral": true, "grass": true, "lotus": true,
+	"bonsai": true, "flytrap": true, "sunflower": true, "topiary": true,
+	"strawberry": true, "tulip": true, "pumpkin-vine": true,
+}
+
+// ponytail: mirrors POT_STYLES/LEAF_STYLES/FLOWER_TYPES/STEM_STYLES in plant-variants.ts — keep in sync
+var validPlantPots = map[string]bool{
+	"round": true, "square": true, "tall": true, "bowl": true,
+	// admin-only reward pots — see SPECIAL_POT_STYLES in plant-variants.ts
+	"trophy": true, "starlight": true, "rainbow": true, "crystal": true, "sweetheart": true,
+	"laurel": true, "constellation": true, "mosaic": true, "royal": true, "firework": true,
+}
+var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide": true}
+var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
+var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
+
+func NewUserHandler(userService *user.Service, careEnergyService *user.CareEnergyService, milestones *milestone.Service, achievements *achievement.Service, progress *attendance.ProgressService) *UserHandler {
+	return &UserHandler{userService: userService, careEnergyService: careEnergyService, milestones: milestones, achievements: achievements, progress: progress}
 }
 
 func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
@@ -124,10 +170,67 @@ func (h *UserHandler) CreateReflection(c *fiber.Ctx) error {
 		if err.Error() == "user has already created a reflection today" {
 			return utils.SendError(c, fiber.StatusConflict, "You have already submitted a reflection today. Please try again tomorrow.")
 		}
+		log.Printf("CreateReflection error for user %s: %v", objectID.Hex(), err)
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error creating reflection")
 	}
+	h.attachMilestoneRewards(c.UserContext(), objectID, createdReflection)
 
 	return utils.SendResponse(c, fiber.StatusCreated, "Reflection successfully created", createdReflection)
+}
+
+func (h *UserHandler) ReconcileReflectionMilestones(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	objectID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.Role != "admin" && claims.UserID != userID {
+		return utils.SendError(c, fiber.StatusForbidden, "You are not allowed to reconcile rewards for this user")
+	}
+	boxes, err := h.milestones.Reconcile(c.UserContext(), objectID, utils.GetThailandTime())
+	if h.achievements != nil {
+		achievementBoxes, achievementErr := h.achievements.Reconcile(c.UserContext(), objectID, utils.GetThailandTime())
+		boxes = append(boxes, achievementBoxes...)
+		if err == nil {
+			err = achievementErr
+		}
+	}
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Reward reconciliation can be retried")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Reflection rewards reconciled", boxes)
+}
+
+func (h *UserHandler) attachMilestoneRewards(ctx context.Context, userID primitive.ObjectID, reflection *domain.Reflection) {
+	if h.milestones == nil || reflection == nil {
+		return
+	}
+	boxes, err := h.milestones.Reconcile(ctx, userID, utils.GetThailandTime())
+	reflection.RewardBoxes = boxes
+	if h.achievements != nil {
+		achievementBoxes, achievementErr := h.achievements.Reconcile(ctx, userID, utils.GetThailandTime())
+		reflection.RewardBoxes = append(reflection.RewardBoxes, achievementBoxes...)
+		if err == nil {
+			err = achievementErr
+		}
+	}
+	if err != nil {
+		log.Printf("milestone reconciliation error for user %s: %v", userID.Hex(), err)
+		reflection.RewardWarning = "Your reflection was saved. Your reward will be checked again shortly."
+	}
+}
+
+func (h *UserHandler) recordSocialAchievement(ctx context.Context, userID primitive.ObjectID, event string) {
+	if h.achievements == nil {
+		return
+	}
+	if _, err := h.achievements.RecordSocial(ctx, userID, event, utils.GetThailandTime()); err != nil {
+		log.Printf("social achievement error for user %s: %v", userID.Hex(), err)
+	}
 }
 
 func (h *UserHandler) GetUserReflections(c *fiber.Ctx) error {
@@ -245,6 +348,240 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "User updated successfully", nil)
 }
 
+func (h *UserHandler) UseCareEnergyProtect(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	if claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own Care Energy")
+	}
+
+	var body struct {
+		Date string `json:"date"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Date == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "A date is required")
+	}
+
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	if err := h.careEnergyService.ProtectDate(userID, body.Date); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidProtectDate):
+			return utils.SendError(c, fiber.StatusBadRequest, "That date can't be protected")
+		case errors.Is(err, domain.ErrDateAlreadyProtected):
+			return utils.SendError(c, fiber.StatusConflict, "That date is already protected")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error using Care Energy")
+		}
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Streak protected", nil)
+}
+
+func (h *UserHandler) UseCareEnergyFeed(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	if claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only use your own Care Energy")
+	}
+
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	var body struct {
+		Quantity int `json:"quantity"`
+	}
+	_ = c.BodyParser(&body)
+	if body.Quantity < 1 {
+		body.Quantity = 1
+	}
+
+	if err := h.careEnergyService.Feed(userID, body.Quantity); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidFeedQuantity):
+			return utils.SendError(c, fiber.StatusBadRequest, "Quantity must be at least 1")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error using Care Energy")
+		}
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Plant fed", nil)
+}
+
+func (h *UserHandler) GetCareEnergy(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.UserID != id && claims.Role != "admin" {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only view your own Care Energy")
+	}
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	state, err := h.careEnergyService.CareEnergyState(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Care Energy retrieved", state)
+}
+
+func (h *UserHandler) CareForCharacter(c *fiber.Ctx) error {
+	id := c.Params("id")
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.UserID != id {
+		return utils.SendError(c, fiber.StatusForbidden, "You can only care for your own character")
+	}
+	userID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	result, err := h.careEnergyService.CareCharacter(userID)
+	if errors.Is(err, domain.ErrInsufficientCareEnergy) {
+		return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
+	}
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Could not care for character")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Your character enjoyed that", result)
+}
+
+// resolveGenmate validates the caller and the :id target, and enforces that a
+// non-admin caller shares the target's cohort. On failure it writes the
+// error response and returns a nil target - callers must check target, not the
+// error, since utils.SendError returns nil when the write succeeds.
+func (h *UserHandler) resolveGenmate(c *fiber.Ctx) (primitive.ObjectID, primitive.ObjectID, *domain.User, error) {
+	var giverOID, recipientOID primitive.ObjectID
+
+	recipientID := c.Params("id")
+	if recipientID == "" {
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusBadRequest, "User ID is required")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	giverOID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusBadRequest, "Invalid giver ID")
+	}
+
+	recipientOID, err = primitive.ObjectIDFromHex(recipientID)
+	if err != nil {
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	target, err := h.userService.GetUserByID(recipientID)
+	if err != nil {
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+
+	if claims.Role != "admin" && claims.Cohort != target.CohortNumber {
+		return giverOID, recipientOID, nil, utils.SendError(c, fiber.StatusForbidden, "You can only do that for someone in your cohort")
+	}
+
+	return giverOID, recipientOID, target, nil
+}
+
+func (h *UserHandler) GiftCareEnergy(c *fiber.Ctx) error {
+	giverOID, recipientOID, target, resp := h.resolveGenmate(c)
+	if target == nil {
+		return resp
+	}
+
+	var body struct {
+		Quantity int `json:"quantity"`
+	}
+	_ = c.BodyParser(&body)
+	if body.Quantity < 1 {
+		body.Quantity = 1
+	}
+
+	note := strings.TrimSpace("Fertilized " + target.FirstName + " " + target.LastName)
+
+	if err := h.careEnergyService.Gift(giverOID, recipientOID, body.Quantity, note); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidFeedQuantity):
+			return utils.SendError(c, fiber.StatusBadRequest, "Quantity must be at least 1")
+		case errors.Is(err, user.ErrCannotGiftSelf):
+			return utils.SendError(c, fiber.StatusBadRequest, "Use Feed to fertilize your own plant")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error sending Care Energy")
+		}
+	}
+
+	h.recordSocialAchievement(c.UserContext(), giverOID, "care-energy-gift")
+	return utils.SendResponse(c, fiber.StatusOK, "Care Energy sent", nil)
+}
+
+func (h *UserHandler) RescueCareEnergy(c *fiber.Ctx) error {
+	giverOID, recipientOID, target, resp := h.resolveGenmate(c)
+	if target == nil {
+		return resp
+	}
+
+	var body struct {
+		Date string `json:"date"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Date == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "A date is required")
+	}
+
+	note := strings.TrimSpace("Rescued " + target.FirstName + " " + target.LastName)
+
+	if err := h.careEnergyService.Rescue(giverOID, recipientOID, body.Date, note); err != nil {
+		switch {
+		case errors.Is(err, user.ErrInvalidProtectDate):
+			return utils.SendError(c, fiber.StatusBadRequest, "That date can't be protected")
+		case errors.Is(err, user.ErrCannotGiftSelf):
+			return utils.SendError(c, fiber.StatusBadRequest, "Use Protect to cover your own missed day")
+		case errors.Is(err, domain.ErrDateAlreadyProtected):
+			return utils.SendError(c, fiber.StatusConflict, "That day is already protected")
+		case errors.Is(err, domain.ErrInsufficientCareEnergy):
+			return utils.SendError(c, fiber.StatusConflict, "Not enough Care Energy")
+		default:
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error rescuing that day")
+		}
+	}
+
+	h.recordSocialAchievement(c.UserContext(), giverOID, "streak-rescue")
+	return utils.SendResponse(c, fiber.StatusOK, "Day rescued", nil)
+}
+
 func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 	id := c.Params("id")
 	if id == "" {
@@ -262,9 +599,10 @@ func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 	}
 
 	var body struct {
-		Bio            string             `json:"bio"`
-		SocialLinks    domain.SocialLinks `json:"social_links"`
-		PinnedBadgeIDs []string           `json:"pinned_badge_ids"`
+		Bio             string             `json:"bio"`
+		SocialLinks     domain.SocialLinks `json:"social_links"`
+		PinnedBadgeIDs  []string           `json:"pinned_badge_ids"`
+		SelectedPalette string             `json:"selected_palette"`
 	}
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
@@ -274,9 +612,18 @@ func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Bio must be under 1000 characters")
 	}
 
+	// ponytail: trusts the client's own tier check (getPlantVariant/getUnlockedPalettes in
+	// plant-variants.ts) — only sanity-checks the name here since this is a cosmetic,
+	// owner-only field. Port getEffectivePlantDays/TIER_THRESHOLDS to Go if this ladder
+	// ever gates something non-cosmetic.
+	if body.SelectedPalette != "" && !validPlantPalettes[body.SelectedPalette] {
+		return utils.SendError(c, fiber.StatusBadRequest, "Unknown palette")
+	}
+
 	update := bson.M{
-		"bio":          body.Bio,
-		"social_links": body.SocialLinks,
+		"bio":              body.Bio,
+		"social_links":     body.SocialLinks,
+		"selected_palette": body.SelectedPalette,
 	}
 
 	pinnedOIDs := []primitive.ObjectID{}
@@ -358,6 +705,187 @@ func (h *UserHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Feedback updated successfully", nil)
+}
+
+func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	if claims.Cohort <= 0 {
+		return utils.SendResponse(c, fiber.StatusOK, "Genmate garden retrieved", fiber.Map{
+			"users": []interface{}{},
+		})
+	}
+
+	me, err := h.userService.GetUserByID(claims.UserID)
+	if err != nil || me.GenmateGroup == "" {
+		return utils.SendResponse(c, fiber.StatusOK, "Genmate garden retrieved", fiber.Map{
+			"users": []interface{}{},
+		})
+	}
+
+	users, _, err := h.userService.GetAllUsers(claims.Cohort, "learner", "", "", "first_name", 1, 1, 1000)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching genmate garden")
+	}
+
+	members := make([]fiber.Map, 0)
+	for _, u := range users {
+		if u.Deleted || u.GenmateGroup != me.GenmateGroup {
+			continue
+		}
+
+		dates := make([]string, 0, len(u.Reflections))
+		for _, r := range u.Reflections {
+			day := r.Day
+			if day == "" {
+				day = r.Date.Format(time.RFC3339)
+			}
+			dates = append(dates, day)
+		}
+
+		protectedDates := make([]string, 0)
+		for _, entry := range u.CareEnergyLog {
+			if entry.Kind == "protect" && entry.RelatedDate != "" {
+				protectedDates = append(protectedDates, entry.RelatedDate)
+			}
+		}
+
+		members = append(members, fiber.Map{
+			"_id":                u.ID.Hex(),
+			"first_name":         u.FirstName,
+			"last_name":          u.LastName,
+			"cohort_number":      u.CohortNumber,
+			"genmate_group":      u.GenmateGroup,
+			"reflection_dates":   dates,
+			"growth_points":      u.GrowthPoints,
+			"protected_dates":    protectedDates,
+			"plant_reactions":    u.PlantReactions,
+			"selected_palette":   u.SelectedPalette,
+			"selected_species":   u.SelectedSpecies,
+			"selected_pot":       u.SelectedPot,
+			"selected_leaf":      u.SelectedLeaf,
+			"selected_flower":    u.SelectedFlower,
+			"selected_stem":      u.SelectedStem,
+			"equipped_cosmetics": u.EquippedCosmetics,
+		})
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Genmate garden retrieved", fiber.Map{
+		"users": members,
+	})
+}
+
+// enforceCohortAccess mirrors StampHandler's guard of the same name
+// (internal/handler/stamp_handler.go) verbatim by behavior: a learner may
+// only read their own cohort (re-checked against fresh DB state, not the
+// possibly-stale JWT claim), admins bypass entirely. Not shared as a single
+// function across handlers to avoid a cross-handler dependency for ~10 lines
+// of logic — see COHORT_FARM_SPEC.md, ticket 07.
+func (h *UserHandler) enforceCohortAccess(c *fiber.Ctx, cohort int) error {
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+	if claims.Role == "admin" {
+		return nil
+	}
+	me, err := h.userService.GetUserByID(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
+	}
+	if cohort != me.CohortNumber {
+		return utils.SendError(c, fiber.StatusForbidden, "You cannot access other cohorts")
+	}
+	return nil
+}
+
+// GetCohortGarden returns every learner in the cohort, grouped by
+// genmate_group, for the cohort-wide memory farm (COHORT_FARM_SPEC.md).
+// Learners with no group land in one "Unaffiliated" bucket rather than being
+// silently dropped — ticket 06's decision: a permanent memory shouldn't erase
+// anyone the way the 2D admin garden's live view reasonably does.
+func (h *UserHandler) GetCohortGarden(c *fiber.Ctx) error {
+	cohort, err := c.ParamsInt("cohortNumber", 0)
+	if err != nil || cohort <= 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
+	}
+
+	if err := h.enforceCohortAccess(c, cohort); err != nil {
+		return err
+	}
+
+	users, _, err := h.userService.GetAllUsers(cohort, "learner", "", "", "first_name", 1, 1, 1000)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching cohort garden")
+	}
+
+	const unaffiliatedGroupName = "Unaffiliated"
+	groupOrder := make([]string, 0)
+	groupMembers := make(map[string][]fiber.Map)
+
+	for _, u := range users {
+		if u.Deleted {
+			continue
+		}
+
+		groupName := u.GenmateGroup
+		if groupName == "" {
+			groupName = unaffiliatedGroupName
+		}
+		if _, seen := groupMembers[groupName]; !seen {
+			groupOrder = append(groupOrder, groupName)
+		}
+
+		dates := make([]string, 0, len(u.Reflections))
+		for _, r := range u.Reflections {
+			day := r.Day
+			if day == "" {
+				day = r.Date.Format(time.RFC3339)
+			}
+			dates = append(dates, day)
+		}
+
+		protectedDates := make([]string, 0)
+		for _, entry := range u.CareEnergyLog {
+			if entry.Kind == "protect" && entry.RelatedDate != "" {
+				protectedDates = append(protectedDates, entry.RelatedDate)
+			}
+		}
+
+		groupMembers[groupName] = append(groupMembers[groupName], fiber.Map{
+			"_id":                u.ID.Hex(),
+			"first_name":         u.FirstName,
+			"last_name":          u.LastName,
+			"cohort_number":      u.CohortNumber,
+			"genmate_group":      groupName,
+			"reflection_dates":   dates,
+			"growth_points":      u.GrowthPoints,
+			"protected_dates":    protectedDates,
+			"plant_reactions":    u.PlantReactions,
+			"selected_palette":   u.SelectedPalette,
+			"selected_species":   u.SelectedSpecies,
+			"selected_pot":       u.SelectedPot,
+			"selected_leaf":      u.SelectedLeaf,
+			"selected_flower":    u.SelectedFlower,
+			"selected_stem":      u.SelectedStem,
+			"equipped_cosmetics": u.EquippedCosmetics,
+		})
+	}
+
+	groups := make([]fiber.Map, 0, len(groupOrder))
+	for _, name := range groupOrder {
+		groups = append(groups, fiber.Map{
+			"group_name": name,
+			"members":    groupMembers[name],
+		})
+	}
+
+	return utils.SendResponse(c, fiber.StatusOK, "Cohort garden retrieved", fiber.Map{
+		"groups": groups,
+	})
 }
 
 func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
@@ -534,6 +1062,66 @@ func (h *UserHandler) AddProfileReaction(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
 
+	if targetOID != reactorOID {
+		h.recordSocialAchievement(c.UserContext(), reactorOID, "profile-reaction")
+	}
+	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
+}
+
+func (h *UserHandler) AddPlantReaction(c *fiber.Ctx) error {
+	userID := c.Params("id")
+	targetOID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+
+	claims, ok := c.Locals("user").(*middleware.Claims)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
+	}
+
+	reactorOID, err := primitive.ObjectIDFromHex(claims.UserID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reactor ID")
+	}
+
+	if claims.Role != "admin" {
+		me, err := h.userService.GetUserByID(claims.UserID)
+		if err != nil {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only cheer your genmates' plants")
+		}
+		target, err := h.userService.GetUserByID(userID)
+		if err != nil {
+			return utils.SendError(c, fiber.StatusNotFound, "User not found")
+		}
+		if me.GenmateGroup == "" || me.GenmateGroup != target.GenmateGroup {
+			return utils.SendError(c, fiber.StatusForbidden, "You can only cheer your genmates' plants")
+		}
+	}
+
+	var body struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	if body.Value == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Reaction value is required")
+	}
+
+	if body.Type == "" {
+		body.Type = "emoji"
+	}
+
+	if err := h.userService.AddPlantReaction(targetOID, reactorOID, body.Type, body.Value); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
+	}
+
+	if targetOID != reactorOID {
+		h.recordSocialAchievement(c.UserContext(), reactorOID, "garden-cheer")
+	}
 	return utils.SendResponse(c, fiber.StatusCreated, "Reaction added successfully", nil)
 }
 
