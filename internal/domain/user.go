@@ -136,6 +136,10 @@ type User struct {
 	GiftBoxes          []TeacherGiftBox     `bson:"gift_boxes,omitempty" json:"gift_boxes,omitempty"`
 	CharacterCareCount int                  `bson:"character_care_count,omitempty" json:"character_care_count,omitempty"`
 	LastCaredAt        *time.Time           `bson:"last_cared_at,omitempty" json:"last_cared_at,omitempty"`
+	CheckinStyle       string               `bson:"checkin_style,omitempty" json:"checkin_style,omitempty"`
+	CheckinRandom      bool                 `bson:"checkin_random,omitempty" json:"checkin_random,omitempty"`
+	Avatar             *Avatar              `bson:"avatar,omitempty" json:"avatar,omitempty"`
+	Skills             []string             `bson:"skills,omitempty" json:"skills,omitempty"`
 }
 
 func (u *User) UnmarshalBSON(data []byte) error {
@@ -191,6 +195,8 @@ type UserSafe struct {
 	CareEnergyBalance int                  `json:"care_energy_balance,omitempty"`
 	GrowthPoints      int                  `json:"growth_points,omitempty"`
 	CareEnergyLog     []CareEnergyLogEntry `json:"care_energy_log,omitempty"`
+	Avatar            *Avatar              `json:"avatar,omitempty"`
+	Skills            []string             `json:"skills,omitempty"`
 }
 
 // ToSafe converts a User to UserSafe for non-admin responses
@@ -221,6 +227,8 @@ func (u *User) ToSafe() UserSafe {
 		CareEnergyBalance: u.CareEnergyBalance,
 		GrowthPoints:      u.GrowthPoints,
 		CareEnergyLog:     u.CareEnergyLog,
+		Avatar:            u.Avatar,
+		Skills:            u.Skills,
 	}
 }
 
@@ -297,4 +305,12 @@ type UserRepository interface {
 	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot, legacyValue string) (bool, error)
 	EquipCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error
 	UnequipCosmetic(ctx interface{}, userID primitive.ObjectID, slot string) error
+}
+
+// Avatar is a DiceBear avatar: Options[style][part] = value, or nil for "None".
+type Avatar struct {
+	Style   string                        `bson:"style" json:"style"`
+	Seed    string                        `bson:"seed" json:"seed"`
+	Bg      string                        `bson:"bg" json:"bg"`
+	Options map[string]map[string]*string `bson:"options,omitempty" json:"options,omitempty"`
 }

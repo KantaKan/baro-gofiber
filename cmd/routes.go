@@ -18,6 +18,7 @@ type Handlers struct {
 	Holiday      *handler.HolidayHandler
 	TalkBoard    *handler.TalkBoardHandler
 	Notification *handler.NotificationHandler
+	Cohort       *handler.CohortHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -52,6 +53,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	notifications.Post("/:id/read", h.Notification.MarkAsRead)
 
 	protected := app.Group("/users", middleware.AuthMiddleware)
+	protected.Put("/me/preferences", h.User.UpdateMyPreferences)
 	protected.Get("/", h.User.GetAllUsers)
 	protected.Get("/genmate-garden", h.User.GetGenmateGarden)
 	protected.Get("/:id", h.User.GetUserByID)
@@ -193,6 +195,9 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Patch("/users/:id/salesforce-id", h.Attendance.UpdateSalesforceID)
 	admin.Patch("/users/:id/attendance-status", h.Attendance.UpdateAttendanceStatus)
 
+	admin.Get("/cohorts/:cohort/settings", h.Cohort.GetSettings)
+	admin.Put("/cohorts/:cohort/settings", h.Cohort.UpdateSettings)
+
 	admin.Post("/holidays", h.Holiday.CreateHoliday)
 	admin.Get("/holidays", h.Holiday.GetHolidays)
 	admin.Delete("/holidays/:id", h.Holiday.DeleteHoliday)
@@ -207,11 +212,13 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Delete("/notifications/:id", h.Notification.DeleteNotification)
 
 	student := app.Group("/attendance", middleware.AuthMiddleware)
-	student.Post("/submit", h.Attendance.SubmitAttendance)
+	student.Post("/submit", h.Attendance.SubmitAttendance) // code-based check-in (main); self check-in below
 	student.Get("/my-status", h.Attendance.GetMyAttendanceStatus)
 	student.Get("/my-history", h.Attendance.GetMyAttendanceHistory)
 	student.Get("/my-daily-stats", h.Attendance.GetMyDailyStats)
 	student.Get("/code", h.Attendance.GetActiveAttendanceCode)
+	student.Post("/check-in", h.Attendance.CheckIn)
+	student.Get("/me/summary", h.Attendance.GetMySummary)
 
 	leave := app.Group("/leave-requests", middleware.AuthMiddleware)
 	leave.Post("/", h.Leave.CreateLeaveRequest)

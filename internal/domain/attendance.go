@@ -60,6 +60,7 @@ type AttendanceRecord struct {
 	SubmittedAt  time.Time          `bson:"submitted_at" json:"submitted_at"`
 	Locked       bool               `bson:"locked" json:"locked"`
 	IPAddress    string             `bson:"ip_address,omitempty" json:"ip_address,omitempty"`
+	CheckinStyle string             `bson:"checkin_style,omitempty" json:"checkin_style,omitempty"`
 	Deleted      bool               `bson:"deleted" json:"deleted"`
 	DeletedAt    *time.Time         `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 	DeletedBy    string             `bson:"deleted_by,omitempty" json:"deleted_by,omitempty"`
@@ -101,12 +102,12 @@ type StudentAttendanceRow struct {
 }
 
 type AttendanceRecordFilter struct {
-	Cohort          int
-	Date            string
-	Session         AttendanceSession
-	UserID          primitive.ObjectID
-	NotDeleted      bool
-	IncludeDeleted  bool
+	Cohort         int
+	Date           string
+	Session        AttendanceSession
+	UserID         primitive.ObjectID
+	NotDeleted     bool
+	IncludeDeleted bool
 }
 
 type AttendanceCodeFilter struct {
@@ -117,6 +118,11 @@ type AttendanceCodeFilter struct {
 
 type AttendanceRepository interface {
 	InsertRecord(ctx interface{}, record *AttendanceRecord) error
+	// InsertIfAbsent inserts record unless a live (non-deleted) record exists for
+	// (user, date, session). inserted reports whether it wrote.
+	InsertIfAbsent(ctx interface{}, record *AttendanceRecord) (inserted bool, err error)
+	// ActiveCohorts lists cohorts with any live record on or after since (YYYY-MM-DD).
+	ActiveCohorts(ctx interface{}, since string) ([]int, error)
 	FindByID(ctx interface{}, id primitive.ObjectID) (*AttendanceRecord, error)
 	FindRecord(ctx interface{}, filter AttendanceRecordFilter) (*AttendanceRecord, error)
 	FindRecords(ctx interface{}, filter AttendanceRecordFilter, opts interface{}) ([]AttendanceRecord, error)

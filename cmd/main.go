@@ -4,6 +4,8 @@ import (
 	"context"
 	"gofiber-baro/config"
 	"gofiber-baro/internal/jobs"
+	"gofiber-baro/internal/service/attendance"
+	"gofiber-baro/pkg/utils"
 	"log"
 	"net/url"
 	"os"
@@ -96,7 +98,19 @@ func main() {
 
 	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
 
-	app := fiber.New()
+	// Close check-in sessions: once a minute, mark learners who didn't check in.
+	closer := attendance.NewSessionCloser(container.AttendanceRepo, container.LeaveRepo, container.UserService, container.CohortService, container.HolidayService)
+	go func() {
+		for range time.Tick(time.Minute) {
+			if err := closer.CloseIfDue(utils.GetThailandTime()); err != nil {
+				log.Printf("session closer: %v", err)
+			}
+		}
+	}()
+
+	// Behind a load balancer the client IP arrives in a header (e.g. X-Forwarded-For);
+	// set PROXY_HEADER so the check-in network limit sees the learner's real IP.
+	app := fiber.New(fiberConfig(os.Getenv("PROXY_HEADER")))
 
 	app.Use(recover.New())
 
@@ -153,6 +167,7 @@ func main() {
 		Holiday:      container.HolidayHandler,
 		TalkBoard:    container.TalkBoardHandler,
 		Notification: container.NotificationHandler,
+		Cohort:       container.CohortHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
@@ -174,6 +189,18 @@ func main() {
 	log.Printf("Database Name: %s", dbName)
 	log.Printf("Port: %s", port)
 	log.Fatal(app.Listen(":" + port))
+}
+
+// fiberConfig reads the client IP from proxyHeader when set. EnableIPValidation makes
+// c.IP() return the first valid address of a list like "203.0.113.5, 10.0.0.2".
+func fiberConfig(proxyHeader string) fiber.Config {
+	cfg := fiber.Config{}
+	if proxyHeader != "" {
+		cfg.ProxyHeader = proxyHeader
+		cfg.EnableIPValidation = true
+	}
+	return cfg
+
 }
 
 func buildCSP() string {

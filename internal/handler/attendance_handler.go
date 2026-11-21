@@ -22,6 +22,8 @@ type AttendanceHandler struct {
 	overviewService   *attendance.OverviewService
 	exportService     *attendance.ExportService
 	userService       *user.Service
+	checkinService    *attendance.CheckinService
+	progressService   *attendance.ProgressService
 }
 
 func NewAttendanceHandler(
@@ -31,8 +33,12 @@ func NewAttendanceHandler(
 	overviewService *attendance.OverviewService,
 	exportService *attendance.ExportService,
 	userService *user.Service,
+	checkinService *attendance.CheckinService,
+	progressService *attendance.ProgressService,
 ) *AttendanceHandler {
 	return &AttendanceHandler{
+		progressService:   progressService,
+		checkinService:    checkinService,
 		codeService:       codeService,
 		submissionService: submissionService,
 		statsService:      statsService,
@@ -671,4 +677,76 @@ func (h *AttendanceHandler) UpdateAttendanceStatus(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Attendance status updated", nil)
+}
+
+// CheckIn is the learner's code-free self check-in.
+// @Summary      Self check-in (no code)
+// @Tags         attendance
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object  false  "{\"style\": \"slide\"}"
+// @Success      201  {object}  domain.AttendanceRecord
+// @Failure      403  {object}  map[string]string  "network not allowed"
+// @Failure      409  {object}  map[string]string  "already checked in / covered by leave"
+// @Failure      422  {object}  map[string]string  "not open / closed / no class"
+// @Security     BearerAuth
+// @Router       /attendance/check-in [post]
+func (h *AttendanceHandler) CheckIn(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	oid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	var body struct {
+		Style string `json:"style"`
+	}
+	_ = c.BodyParser(&body)
+
+	rec, err := h.checkinService.CheckIn(oid, c.IP(), body.Style)
+	switch err {
+	case nil:
+		return utils.SendResponse(c, fiber.StatusCreated, "Checked in", rec)
+	case attendance.ErrAlreadySubmitted:
+		return utils.SendError(c, fiber.StatusConflict, "You already checked in for this session.")
+	case attendance.ErrCoveredByLeave:
+		return utils.SendError(c, fiber.StatusConflict, "You have approved leave for this session, so there's nothing to check in.")
+	case attendance.ErrNetworkNotAllowed:
+		return utils.SendError(c, fiber.StatusForbidden, "Check-in isn't allowed from this network.")
+	case attendance.ErrNotOpenYet:
+		return utils.SendError(c, fiber.StatusUnprocessableEntity, "Check-in isn't open yet.")
+	case attendance.ErrCheckInClosed:
+		return utils.SendError(c, fiber.StatusUnprocessableEntity, "Check-in is closed for this session.")
+	case attendance.ErrNoClassToday:
+		return utils.SendError(c, fiber.StatusUnprocessableEntity, "There's no class today.")
+	case attendance.ErrStudentNotFound:
+		return utils.SendError(c, fiber.StatusNotFound, "Learner not found.")
+	default:
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error checking in")
+	}
+}
+
+// GetMySummary returns the caller's own streak, leave usage and today's check-ins.
+// @Summary      My attendance summary
+// @Tags         attendance
+// @Produce      json
+// @Success      200  {object}  attendance.MySummary
+// @Security     BearerAuth
+// @Router       /attendance/me/summary [get]
+func (h *AttendanceHandler) GetMySummary(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	oid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	sum, err := h.progressService.Summary(oid)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error building summary")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Summary retrieved", sum)
 }

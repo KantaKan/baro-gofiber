@@ -9,6 +9,7 @@ import (
 	"gofiber-baro/internal/service/achievement"
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/character"
+	cohortService "gofiber-baro/internal/service/cohort"
 	"gofiber-baro/internal/service/giftbox"
 	"gofiber-baro/internal/service/godevent"
 	"gofiber-baro/internal/service/holiday"
@@ -37,6 +38,7 @@ type Container struct {
 	HolidayRepo        domain.HolidayRepository
 	TalkBoardRepo      domain.TalkBoardRepository
 	NotificationRepo   domain.NotificationRepository
+	CohortSettingsRepo domain.CohortSettingsRepository
 	StampRepo          domain.StampRepository
 	CohortRepo         domain.CohortRepository
 	AuditLogRepo       domain.AuditLogRepository
@@ -72,6 +74,9 @@ type Container struct {
 	AttendanceStatsService      *attendance.StatsService
 	AttendanceOverviewService   *attendance.OverviewService
 	AttendanceExportService     *attendance.ExportService
+	CohortService               *cohortService.Service
+	CheckinService              *attendance.CheckinService
+	ProgressService             *attendance.ProgressService
 	StartupStoryService         *startupstory.Service
 
 	UserHandler         *handler.UserHandler
@@ -81,6 +86,7 @@ type Container struct {
 	HolidayHandler      *handler.HolidayHandler
 	TalkBoardHandler    *handler.TalkBoardHandler
 	NotificationHandler *handler.NotificationHandler
+	CohortHandler       *handler.CohortHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
 	CosmeticHandler     *handler.CosmeticHandler
@@ -112,6 +118,7 @@ func (c *Container) initRepositories() {
 	c.HolidayRepo = repository.NewHolidayRepository(c.DB)
 	c.TalkBoardRepo = repository.NewTalkBoardRepository(c.DB)
 	c.NotificationRepo = repository.NewNotificationRepository(c.DB)
+	c.CohortSettingsRepo = repository.NewCohortSettingsRepository(c.DB)
 	c.StampRepo = repository.NewStampRepository(c.DB)
 	c.CohortRepo = repository.NewCohortRepository(c.DB)
 	c.AuditLogRepo = repository.NewAuditLogRepository(c.DB)
@@ -159,10 +166,13 @@ func (c *Container) initServices() {
 	c.AttendanceStatsService = attendance.NewStatsService(c.AttendanceRepo, c.UserService)
 	c.AttendanceOverviewService = attendance.NewOverviewService(c.AttendanceRepo, c.AttendanceCodeRepo, c.UserService)
 	c.AttendanceExportService = attendance.NewExportService(c.AttendanceRepo, c.UserService)
+	c.CohortService = cohortService.NewService(c.CohortSettingsRepo)
+	c.CheckinService = attendance.NewCheckinService(c.AttendanceRepo, c.LeaveRepo, c.UserService, c.CohortService, c.HolidayService, cohortService.IPAllowed)
+	c.ProgressService = attendance.NewProgressService(c.AttendanceRepo, c.UserService, c.CohortService, c.HolidayService)
 }
 
 func (c *Container) initHandlers() {
-	c.UserHandler = handler.NewUserHandler(c.UserService, c.CareEnergyService, c.MilestoneService, c.AchievementService)
+	c.UserHandler = handler.NewUserHandler(c.UserService, c.CareEnergyService, c.MilestoneService, c.AchievementService, c.ProgressService)
 	c.AdminHandler = handler.NewAdminHandler(c.UserService, c.BadgeService, c.CareEnergyService, c.ReflectionService, c.BarometerService)
 	c.AttendanceHandler = handler.NewAttendanceHandler(
 		c.AttendanceCodeService,
@@ -171,11 +181,14 @@ func (c *Container) initHandlers() {
 		c.AttendanceOverviewService,
 		c.AttendanceExportService,
 		c.UserService,
+		c.CheckinService,
+		c.ProgressService,
 	)
 	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService)
 	c.HolidayHandler = handler.NewHolidayHandler(c.HolidayService)
 	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo, c.UserService)
 	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
+	c.CohortHandler = handler.NewCohortHandler(c.CohortService)
 	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
 	c.HistoryHandler = handler.NewHistoryHandler(c.AuditLogRepo, c.UserRepo)
 	c.CosmeticHandler = handler.NewCosmeticHandler(c.CosmeticService)

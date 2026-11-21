@@ -10,6 +10,7 @@ import (
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/achievement"
+	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/milestone"
 	"gofiber-baro/internal/service/user"
 	middleware "gofiber-baro/pkg/middleware"
@@ -26,6 +27,7 @@ type UserHandler struct {
 	milestones        milestoneReconciler
 	achievements      achievementReconciler
 	db                interface{}
+	progress          *attendance.ProgressService
 }
 
 type milestoneReconciler interface {
@@ -64,8 +66,8 @@ var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide":
 var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
 var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
 
-func NewUserHandler(userService *user.Service, careEnergyService *user.CareEnergyService, milestones *milestone.Service, achievements *achievement.Service) *UserHandler {
-	return &UserHandler{userService: userService, careEnergyService: careEnergyService, milestones: milestones, achievements: achievements}
+func NewUserHandler(userService *user.Service, careEnergyService *user.CareEnergyService, milestones *milestone.Service, achievements *achievement.Service, progress *attendance.ProgressService) *UserHandler {
+	return &UserHandler{userService: userService, careEnergyService: careEnergyService, milestones: milestones, achievements: achievements, progress: progress}
 }
 
 func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
@@ -1151,4 +1153,80 @@ func (h *UserHandler) createReflection(userID primitive.ObjectID, reflection dom
 
 func (h *UserHandler) getReflections(userID primitive.ObjectID) ([]domain.Reflection, error) {
 	return h.userService.GetReflections(userID)
+}
+
+// UpdateMyPreferences saves the caller's check-in style, random mode, avatar and skills.
+// @Summary      Update my check-in style, avatar and skills
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Param        body  body  object  true  "checkin_style, checkin_random, avatar, skills (all optional)"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string  "locked: keep your streak going"
+// @Security     BearerAuth
+// @Router       /users/me/preferences [put]
+func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	oid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	var body struct {
+		CheckinStyle  *string        `json:"checkin_style"`
+		CheckinRandom *bool          `json:"checkin_random"`
+		Avatar        *domain.Avatar `json:"avatar"`
+		Skills        *[]string      `json:"skills"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	sum, err := h.progress.Summary(oid)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading your progress")
+	}
+	set := bson.M{}
+	if body.CheckinStyle != nil {
+		known, unlocked := user.StyleUnlocked(*body.CheckinStyle, sum.Streak, sum.PerfectWeek)
+		if !known {
+			return utils.SendError(c, fiber.StatusBadRequest, "Unknown check-in style")
+		}
+		if !unlocked {
+			return utils.SendError(c, fiber.StatusForbidden, "Locked: keep your streak going")
+		}
+		set["checkin_style"] = *body.CheckinStyle
+	}
+	if body.CheckinRandom != nil {
+		set["checkin_random"] = *body.CheckinRandom
+	}
+	if body.Avatar != nil {
+		if err := user.AvatarAllowed(*body.Avatar, sum.Streak); err != nil {
+			if err == user.ErrAvatarLocked {
+				return utils.SendError(c, fiber.StatusForbidden, "Locked: keep your streak going")
+			}
+			return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+		}
+		set["avatar"] = body.Avatar
+	}
+	if body.Skills != nil {
+		if len(*body.Skills) > 5 {
+			return utils.SendError(c, fiber.StatusBadRequest, "You can add up to 5 skills")
+		}
+		for _, sk := range *body.Skills {
+			if len([]rune(sk)) > 24 {
+				return utils.SendError(c, fiber.StatusBadRequest, "Each skill can be at most 24 characters")
+			}
+		}
+		set["skills"] = *body.Skills
+	}
+	if len(set) == 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "Nothing to update")
+	}
+	if err := h.userService.UpdateUser(userID, set); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error saving preferences")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Preferences updated", set)
 }
