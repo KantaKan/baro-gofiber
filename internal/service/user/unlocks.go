@@ -28,7 +28,7 @@ func StyleUnlocked(style string, streak int, perfectWeek bool) (known, unlocked 
 }
 
 var (
-	avatarStyles = map[string]bool{"notionists": true, "lorelei": true, "adventurer": true, "fun-emoji": true, "pixel-art": true, "thumbs": true}
+	avatarStyles = map[string]bool{"blobatar": true, "notionists": true, "lorelei": true, "adventurer": true, "fun-emoji": true, "pixel-art": true, "thumbs": true}
 	hexColor     = regexp.MustCompile(`^[0-9a-fA-F]{6}$`)
 	// locked avatar options: style -> part -> value -> streak needed
 	avatarLocks = map[string]map[string]map[string]int{
@@ -41,7 +41,7 @@ func AvatarAllowed(a domain.Avatar, streak int) error {
 	if !avatarStyles[a.Style] {
 		return fmt.Errorf("unknown avatar style %q", a.Style)
 	}
-	if !hexColor.MatchString(a.Bg) {
+	if !(a.Style == "blobatar" && a.Bg == "") && !hexColor.MatchString(a.Bg) {
 		return fmt.Errorf("background must be a 6-digit hex color")
 	}
 	for style, parts := range a.Options {

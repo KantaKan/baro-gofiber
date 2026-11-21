@@ -62,3 +62,12 @@ func TestAvatarAllowed(t *testing.T) {
 		t.Error("galaxy at 29 accepted")
 	}
 }
+
+func TestAvatarAllowedBlobatar(t *testing.T) {
+	if err := AvatarAllowed(domain.Avatar{Style: "blobatar", Seed: "x", Bg: "d1fae5"}, 0); err != nil {
+		t.Errorf("blobatar rejected: %v", err)
+	}
+	if err := AvatarAllowed(domain.Avatar{Style: "blobatar", Seed: "x"}, 0); err != nil {
+		t.Errorf("blobatar without bg rejected: %v", err)
+	}
+}
