@@ -20,6 +20,7 @@ type Handlers struct {
 	Notification *handler.NotificationHandler
 	Cohort       *handler.CohortHandler
 	Cup          *handler.CupHandler
+	AdminViews   *handler.AdminViewsHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -186,6 +187,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/attendance/manual", h.Attendance.ManualMarkAttendance)
 	admin.Get("/attendance/logs", h.Attendance.GetAttendanceLogs)
 	admin.Get("/attendance/stats", h.Attendance.GetAttendanceStats)
+	admin.Get("/today", h.AdminViews.Today)
 	admin.Get("/attendance/daily-stats", h.Attendance.GetDailyAttendanceStats)
 	admin.Get("/attendance/student/:id", h.Attendance.GetStudentAttendanceHistory)
 	admin.Post("/attendance/lock", h.Attendance.LockSession)

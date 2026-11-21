@@ -180,6 +180,7 @@ func main() {
 		Notification: container.NotificationHandler,
 		Cohort:       container.CohortHandler,
 		Cup:          container.CupHandler,
+		AdminViews:   container.AdminViewsHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
