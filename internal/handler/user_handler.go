@@ -1190,7 +1190,7 @@ func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
 	}
 	set := bson.M{}
 	if body.CheckinStyle != nil {
-		known, unlocked := user.StyleUnlocked(*body.CheckinStyle, sum.Streak, sum.PerfectWeek)
+		known, unlocked := user.StyleUnlocked(*body.CheckinStyle, sum.Streak, sum.PerfectWeek, sum.Champion)
 		if !known {
 			return utils.SendError(c, fiber.StatusBadRequest, "Unknown check-in style")
 		}

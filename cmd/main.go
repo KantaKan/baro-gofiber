@@ -5,6 +5,7 @@ import (
 	"gofiber-baro/config"
 	"gofiber-baro/internal/jobs"
 	"gofiber-baro/internal/service/attendance"
+	"gofiber-baro/internal/service/cup"
 	"gofiber-baro/pkg/utils"
 	"log"
 	"net/url"
@@ -84,6 +85,9 @@ func main() {
 	}
 	cancelIndexes()
 	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.CupRepo.EnsureIndexes(indexCtx); err != nil {
+		log.Fatal("Failed to ensure GenMate Cup indexes:", err)
+	}
 	if err := container.GodEventRepo.EnsureIndexes(indexCtx); err != nil {
 		cancelIndexes()
 		log.Fatal("Failed to ensure GOD event indexes:", err)
@@ -100,10 +104,17 @@ func main() {
 
 	// Close check-in sessions: once a minute, mark learners who didn't check in.
 	closer := attendance.NewSessionCloser(container.AttendanceRepo, container.LeaveRepo, container.UserService, container.CohortService, container.HolidayService)
+	cupRunner := cup.NewRunner(container.CupService, container.CupRepo, container.AttendanceRepo, container.CohortService, container.GiftBoxService,
+		func(t time.Time) (bool, error) { return attendance.IsClassDay(t, container.HolidayService) })
 	go func() {
 		for range time.Tick(time.Minute) {
-			if err := closer.CloseIfDue(utils.GetThailandTime()); err != nil {
+			now := utils.GetThailandTime()
+			if err := closer.CloseIfDue(now); err != nil {
 				log.Printf("session closer: %v", err)
+			}
+			// After the closer, so the showing-up bonus sees every learner's record.
+			if err := cupRunner.RunDue(now); err != nil {
+				log.Printf("cup runner: %v", err)
 			}
 		}
 	}()
@@ -168,6 +179,7 @@ func main() {
 		TalkBoard:    container.TalkBoardHandler,
 		Notification: container.NotificationHandler,
 		Cohort:       container.CohortHandler,
+		Cup:          container.CupHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,

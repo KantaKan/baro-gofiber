@@ -85,3 +85,15 @@ func TestSummaryClassToday(t *testing.T) {
 		t.Error("a normal Tuesday is a class day")
 	}
 }
+
+func TestSummaryChampion(t *testing.T) {
+	p := NewProgressService(userRecs{}, oneUser{domain.User{CohortNumber: 13, GenmateGroup: "A"}}, fakeSettings{}, fakeHolidays{})
+	sum, _ := p.Summary(primitive.NewObjectID())
+	if sum.Champion {
+		t.Fatal("champion without a checker")
+	}
+	p.SetChampionCheck(func(u domain.User) bool { return u.GenmateGroup == "A" })
+	if sum, _ = p.Summary(primitive.NewObjectID()); !sum.Champion {
+		t.Error("summary should report champion from the Cup")
+	}
+}

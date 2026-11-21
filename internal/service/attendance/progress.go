@@ -180,13 +180,15 @@ type MySummary struct {
 		Morning   *SessionToday `json:"morning"`
 		Afternoon *SessionToday `json:"afternoon"`
 	} `json:"today"`
-	Streak         int                 `json:"streak"`
-	LeaveUsed      int                 `json:"leave_used"`
-	LeaveAllowance int                 `json:"leave_allowance"`
-	WarningLevel   string              `json:"warning_level"`
-	AttendanceRate float64             `json:"attendance_rate"`
-	PerfectWeek    bool                `json:"perfect_week"`
-	Rules          domain.CheckinRules `json:"rules"`
+	Streak         int     `json:"streak"`
+	LeaveUsed      int     `json:"leave_used"`
+	LeaveAllowance int     `json:"leave_allowance"`
+	WarningLevel   string  `json:"warning_level"`
+	AttendanceRate float64 `json:"attendance_rate"`
+	PerfectWeek    bool    `json:"perfect_week"`
+	// Champion: the learner's group won last week's GenMate Cup (Victory Lap, gold frame).
+	Champion bool                `json:"champion"`
+	Rules    domain.CheckinRules `json:"rules"`
 	// ClassToday is false on weekends and holidays (no check-in).
 	ClassToday bool `json:"class_today"`
 	Course     struct {
@@ -212,11 +214,15 @@ type ProgressService struct {
 	settings CohortSettingsGetter
 	holidays HolidayChecker
 	now      func() time.Time
+	champion func(domain.User) bool
 }
 
 func NewProgressService(records progressRecords, users UserServiceInterface, settings CohortSettingsGetter, holidays HolidayChecker) *ProgressService {
 	return &ProgressService{records: records, users: users, settings: settings, holidays: holidays, now: utils.GetThailandTime}
 }
+
+// SetChampionCheck plugs in the GenMate Cup (kept optional to avoid a package cycle).
+func (s *ProgressService) SetChampionCheck(fn func(domain.User) bool) { s.champion = fn }
 
 func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) {
 	var out MySummary
@@ -266,5 +272,8 @@ func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) 
 	out.Course.DayNumber, out.Course.WeekNumber, out.Course.TotalWeeks = CourseProgress(settings.StartDate, days, today)
 	out.Preferences.CheckinStyle = user.CheckinStyle
 	out.Preferences.CheckinRandom = user.CheckinRandom
+	if s.champion != nil {
+		out.Champion = s.champion(*user)
+	}
 	return out, nil
 }

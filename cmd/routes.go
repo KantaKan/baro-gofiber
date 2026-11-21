@@ -19,6 +19,7 @@ type Handlers struct {
 	TalkBoard    *handler.TalkBoardHandler
 	Notification *handler.NotificationHandler
 	Cohort       *handler.CohortHandler
+	Cup          *handler.CupHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -198,6 +199,10 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Get("/cohorts/:cohort/settings", h.Cohort.GetSettings)
 	admin.Put("/cohorts/:cohort/settings", h.Cohort.UpdateSettings)
 
+	admin.Post("/cup/awards", h.Cup.Award)
+	admin.Delete("/cup/awards/:id", h.Cup.DeleteAward)
+	admin.Get("/cup/standings", h.Cup.Standings)
+
 	admin.Post("/holidays", h.Holiday.CreateHoliday)
 	admin.Get("/holidays", h.Holiday.GetHolidays)
 	admin.Delete("/holidays/:id", h.Holiday.DeleteHoliday)
@@ -219,6 +224,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	student.Get("/code", h.Attendance.GetActiveAttendanceCode)
 	student.Post("/check-in", h.Attendance.CheckIn)
 	student.Get("/me/summary", h.Attendance.GetMySummary)
+
+	app.Get("/cup/me", middleware.AuthMiddleware, h.Cup.Me)
 
 	leave := app.Group("/leave-requests", middleware.AuthMiddleware)
 	leave.Post("/", h.Leave.CreateLeaveRequest)
