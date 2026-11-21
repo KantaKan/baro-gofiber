@@ -72,3 +72,44 @@ func (h *AdminViewsHandler) Today(c *fiber.Ctx) error {
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Today retrieved", attendance.BuildTodayRoster(users, recs, now, st.Rules, classDay))
 }
+
+func mondayOf(t time.Time) string {
+	back := (int(t.Weekday()) + 6) % 7
+	return time.Date(t.Year(), t.Month(), t.Day()-back, 0, 0, 0, 0, t.Location()).Format("2006-01-02")
+}
+
+// Register returns one week of AM/PM attendance for a cohort.
+// @Summary      Admin weekly register
+// @Tags         admin
+// @Produce      json
+// @Param        cohort  query  int     true   "Cohort number"
+// @Param        week    query  string  false  "Monday YYYY-MM-DD (default: this week)"
+// @Success      200  {object}  attendance.RegisterView
+// @Failure      400  {object}  map[string]string
+// @Security     BearerAuth
+// @Router       /admin/attendance/register [get]
+func (h *AdminViewsHandler) Register(c *fiber.Ctx) error {
+	cohort := c.QueryInt("cohort")
+	if cohort <= 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
+	}
+	week := c.Query("week")
+	if week == "" {
+		week = mondayOf(h.now())
+	} else if t, err := time.Parse("2006-01-02", week); err != nil || t.Weekday() != time.Monday {
+		return utils.SendError(c, fiber.StatusBadRequest, "week must be a Monday (YYYY-MM-DD)")
+	}
+	users, recs, _, err := h.cohortData(cohort)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading register")
+	}
+	hol := map[string]bool{}
+	t, _ := time.Parse("2006-01-02", week)
+	for i := 0; i < 5; i++ {
+		d := t.AddDate(0, 0, i).Format("2006-01-02")
+		if ok, _, err := h.holidays.IsHoliday(d); err == nil && ok {
+			hol[d] = true
+		}
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Register retrieved", attendance.BuildRegister(users, recs, week, hol))
+}

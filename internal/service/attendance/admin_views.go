@@ -208,3 +208,147 @@ func BuildTodayRoster(learners []domain.User, records []domain.AttendanceRecord,
 	v.Counts[domain.SessionAfternoon] = pm
 	return v
 }
+
+type RegisterLearner struct {
+	ID           string            `json:"id"`
+	FirstName    string            `json:"first_name"`
+	LastName     string            `json:"last_name"`
+	ZoomName     string            `json:"zoom_name"`
+	JSDNumber    string            `json:"jsd_number"`
+	GenmateGroup string            `json:"genmate_group"`
+	Avatar       *domain.Avatar    `json:"avatar,omitempty"`
+	Days         [5][2]SessionCell `json:"days"`
+	WeekRate     float64           `json:"week_rate"`
+	LeaveUsed    int               `json:"leave_used"`
+}
+
+type RegisterKPIs struct {
+	AttendanceRate float64 `json:"attendance_rate"`
+	Lates          int     `json:"lates"`
+	Absences       int     `json:"absences"`
+	Excused        int     `json:"excused"`
+	AtSixPlus      int     `json:"at_six_plus"`
+	AtSeven        int     `json:"at_seven"`
+}
+
+type RegisterView struct {
+	Week     string            `json:"week"`
+	Dates    [5]string         `json:"dates"`
+	Holidays []string          `json:"holidays"`
+	KPIs     RegisterKPIs      `json:"kpis"`
+	Previous RegisterKPIs      `json:"previous"`
+	Learners []RegisterLearner `json:"learners"`
+}
+
+func attended(s domain.AttendanceStatus) bool {
+	return s == domain.StatusPresent || s == domain.StatusLate || s == domain.StatusLateExcused
+}
+
+func weekDates(week string) ([5]string, bool) {
+	var out [5]string
+	m, err := time.ParseInLocation("2006-01-02", week, bangkokLoc())
+	if err != nil {
+		return out, false
+	}
+	for i := 0; i < 5; i++ {
+		out[i] = m.AddDate(0, 0, i).Format("2006-01-02")
+	}
+	return out, true
+}
+
+// weekKPIs counts one week's records across learners. Rate = attended / recorded sessions
+// (the session closer writes a record for every past class session).
+func weekKPIs(learners []domain.User, byUser map[primitive.ObjectID][]domain.AttendanceRecord, dates [5]string) RegisterKPIs {
+	in := map[string]bool{}
+	for _, d := range dates {
+		in[d] = true
+	}
+	var k RegisterKPIs
+	att, tot := 0, 0
+	for _, u := range learners {
+		for _, r := range byUser[u.ID] {
+			if !in[r.Date] {
+				continue
+			}
+			switch r.Status {
+			case domain.StatusHoliday, domain.StatusNoClass, domain.StatusDropout, "":
+				continue
+			case domain.StatusLate:
+				k.Lates++
+			case domain.StatusAbsent:
+				k.Absences++
+			case domain.StatusAbsentExcused, domain.StatusLateExcused:
+				k.Excused++
+			}
+			tot++
+			if attended(r.Status) {
+				att++
+			}
+		}
+	}
+	if tot > 0 {
+		k.AttendanceRate = float64(att) / float64(tot)
+	}
+	return k
+}
+
+// BuildRegister assembles one week (Mon–Fri) of AM/PM statuses for a cohort.
+func BuildRegister(learners []domain.User, records []domain.AttendanceRecord, week string, holidays map[string]bool) RegisterView {
+	dates, _ := weekDates(week)
+	v := RegisterView{Week: week, Dates: dates, Holidays: []string{}, Learners: []RegisterLearner{}}
+	idx := map[string]int{}
+	for i, d := range dates {
+		idx[d] = i
+		if holidays[d] {
+			v.Holidays = append(v.Holidays, d)
+		}
+	}
+	byUser := map[primitive.ObjectID][]domain.AttendanceRecord{}
+	for _, r := range records {
+		byUser[r.UserID] = append(byUser[r.UserID], r)
+	}
+	active := activeLearners(learners)
+	for _, u := range active {
+		l := RegisterLearner{ID: u.ID.Hex(), FirstName: u.FirstName, LastName: u.LastName, ZoomName: u.ZoomName,
+			JSDNumber: u.JSDNumber, GenmateGroup: u.GenmateGroup, Avatar: u.Avatar}
+		att, tot := 0, 0
+		for _, r := range byUser[u.ID] {
+			i, ok := idx[r.Date]
+			if !ok {
+				continue
+			}
+			s := 0
+			if r.Session == domain.SessionAfternoon {
+				s = 1
+			}
+			l.Days[i][s] = cellOf(r)
+			switch r.Status {
+			case domain.StatusHoliday, domain.StatusNoClass, domain.StatusDropout:
+				continue
+			}
+			tot++
+			if attended(r.Status) {
+				att++
+			}
+		}
+		if tot > 0 {
+			l.WeekRate = float64(att) / float64(tot)
+		}
+		l.LeaveUsed = LeaveDaysUsed(BuildDays(byUser[u.ID]))
+		v.Learners = append(v.Learners, l)
+	}
+	v.KPIs = weekKPIs(active, byUser, dates)
+	if m, err := time.ParseInLocation("2006-01-02", week, bangkokLoc()); err == nil {
+		prev, _ := weekDates(m.AddDate(0, 0, -7).Format("2006-01-02"))
+		v.Previous = weekKPIs(active, byUser, prev)
+	}
+	for _, l := range v.Learners {
+		if l.LeaveUsed >= 6 {
+			v.KPIs.AtSixPlus++
+		}
+		if l.LeaveUsed >= 7 {
+			v.KPIs.AtSeven++
+		}
+	}
+	return v
+}

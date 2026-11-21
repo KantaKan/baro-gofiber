@@ -80,3 +80,39 @@ func TestZoneOf(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildRegister(t *testing.T) {
+	a := learner("A", "F", "01")
+	rec := func(d string, s domain.AttendanceSession, st domain.AttendanceStatus) domain.AttendanceRecord {
+		return domain.AttendanceRecord{ID: primitive.NewObjectID(), UserID: a.ID, Date: d, Session: s, Status: st, MarkedBy: domain.MarkedBySelf}
+	}
+	M, A := domain.SessionMorning, domain.SessionAfternoon
+	recs := []domain.AttendanceRecord{
+		rec("2026-08-17", M, domain.StatusPresent), rec("2026-08-17", A, domain.StatusPresent),
+		rec("2026-08-18", M, domain.StatusLate), rec("2026-08-18", A, domain.StatusPresent),
+		rec("2026-08-20", M, domain.StatusAbsent), rec("2026-08-20", A, domain.StatusAbsentExcused),
+	}
+	v := BuildRegister([]domain.User{a}, recs, "2026-08-17", map[string]bool{"2026-08-19": true})
+	if v.Week != "2026-08-17" || v.Dates[4] != "2026-08-21" || len(v.Holidays) != 1 || v.Holidays[0] != "2026-08-19" {
+		t.Fatalf("week header = %+v", v)
+	}
+	l := v.Learners[0]
+	if l.Days[0][0].Status != domain.StatusPresent || l.Days[0][1].Status != domain.StatusPresent || l.Days[2][0].Status != "" {
+		t.Errorf("days = %+v", l.Days)
+	}
+	if l.WeekRate < 0.666 || l.WeekRate > 0.667 { // attended 4 of 6 recorded sessions (Wed holiday, Fri not yet)
+		t.Errorf("week rate = %v, want 4/6", l.WeekRate)
+	}
+	if v.KPIs.Lates != 1 || v.KPIs.Absences != 1 || v.KPIs.Excused != 1 || l.LeaveUsed != 2 {
+		t.Errorf("kpis = %+v leave %d", v.KPIs, l.LeaveUsed)
+	}
+}
+
+func TestBuildRegisterPreviousWeek(t *testing.T) {
+	a := learner("A", "F", "01")
+	recs := []domain.AttendanceRecord{{ID: primitive.NewObjectID(), UserID: a.ID, Date: "2026-08-12", Session: domain.SessionMorning, Status: domain.StatusLate}}
+	v := BuildRegister([]domain.User{a}, recs, "2026-08-17", nil)
+	if v.KPIs.Lates != 0 || v.Previous.Lates != 1 {
+		t.Errorf("kpis %+v previous %+v", v.KPIs, v.Previous)
+	}
+}

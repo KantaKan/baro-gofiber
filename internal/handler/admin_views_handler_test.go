@@ -41,6 +41,7 @@ func avApp() *fiber.App {
 	h.now = func() time.Time { return time.Date(2026, 9, 8, 9, 0, 0, 0, loc) }
 	app := fiber.New()
 	app.Get("/admin/today", h.Today)
+	app.Get("/admin/attendance/register", h.Register)
 	return app
 }
 
@@ -52,5 +53,18 @@ func TestAdminToday(t *testing.T) {
 	}
 	if res, _ := avApp().Test(httptest.NewRequest("GET", "/admin/today", nil)); res.StatusCode != 400 {
 		t.Errorf("missing cohort → %d, want 400", res.StatusCode)
+	}
+}
+
+func TestAdminRegister(t *testing.T) {
+	res, _ := avApp().Test(httptest.NewRequest("GET", "/admin/attendance/register?cohort=13", nil))
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 || !strings.Contains(string(b), `"week":"2026-09-07"`) {
+		t.Fatalf("status %d body %s", res.StatusCode, b)
+	}
+	for _, bad := range []string{"/admin/attendance/register?cohort=13&week=2026-09-08", "/admin/attendance/register?cohort=13&week=nope", "/admin/attendance/register"} {
+		if res, _ := avApp().Test(httptest.NewRequest("GET", bad, nil)); res.StatusCode != 400 {
+			t.Errorf("%s → %d, want 400", bad, res.StatusCode)
+		}
 	}
 }
