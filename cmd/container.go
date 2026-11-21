@@ -90,7 +90,7 @@ func (c *Container) initServices() {
 	c.AttendanceExportService = attendance.NewExportService(c.AttendanceRepo, c.UserService)
 	c.CohortService = cohortService.NewService(c.CohortSettingsRepo)
 	c.CheckinService = attendance.NewCheckinService(c.AttendanceRepo, c.LeaveRepo, c.UserService, c.CohortService, c.HolidayService, cohortService.IPAllowed)
-	c.ProgressService = attendance.NewProgressService(c.AttendanceRepo, c.UserService, c.CohortService)
+	c.ProgressService = attendance.NewProgressService(c.AttendanceRepo, c.UserService, c.CohortService, c.HolidayService)
 }
 
 func (c *Container) initHandlers() {

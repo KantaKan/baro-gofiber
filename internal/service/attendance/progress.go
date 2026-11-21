@@ -187,8 +187,9 @@ type MySummary struct {
 	AttendanceRate float64             `json:"attendance_rate"`
 	PerfectWeek    bool                `json:"perfect_week"`
 	Rules          domain.CheckinRules `json:"rules"`
-	// The caller's own check-in preferences (never exposed to classmates).
-	Course struct {
+	// ClassToday is false on weekends and holidays (no check-in).
+	ClassToday bool `json:"class_today"`
+	Course     struct {
 		StartDate  string `json:"start_date"`
 		CourseDays int    `json:"course_days"`
 		DayNumber  int    `json:"day_number"`
@@ -209,10 +210,12 @@ type ProgressService struct {
 	records  progressRecords
 	users    UserServiceInterface
 	settings CohortSettingsGetter
+	holidays HolidayChecker
+	now      func() time.Time
 }
 
-func NewProgressService(records progressRecords, users UserServiceInterface, settings CohortSettingsGetter) *ProgressService {
-	return &ProgressService{records: records, users: users, settings: settings}
+func NewProgressService(records progressRecords, users UserServiceInterface, settings CohortSettingsGetter, holidays HolidayChecker) *ProgressService {
+	return &ProgressService{records: records, users: users, settings: settings, holidays: holidays, now: utils.GetThailandTime}
 }
 
 func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) {
@@ -231,7 +234,11 @@ func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) 
 	if err != nil {
 		return out, err
 	}
-	today := utils.GetThailandDate()
+	nowT := s.now()
+	today := utils.FormatDate(nowT)
+	if out.ClassToday, err = IsClassDay(nowT, s.holidays); err != nil {
+		return out, err
+	}
 	for _, r := range recs {
 		if r.Date != today {
 			continue

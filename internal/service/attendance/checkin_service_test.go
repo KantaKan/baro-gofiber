@@ -59,12 +59,29 @@ func (userRecs) FindRecords(interface{}, domain.AttendanceRecordFilter, interfac
 }
 
 func TestSummaryIncludesOwnPreferences(t *testing.T) {
-	p := NewProgressService(userRecs{}, oneUser{domain.User{CohortNumber: 13, CheckinStyle: "cat", CheckinRandom: true}}, fakeSettings{})
+	p := NewProgressService(userRecs{}, oneUser{domain.User{CohortNumber: 13, CheckinStyle: "cat", CheckinRandom: true}}, fakeSettings{}, fakeHolidays{})
 	sum, err := p.Summary(primitive.NewObjectID())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if sum.Preferences.CheckinStyle != "cat" || !sum.Preferences.CheckinRandom {
 		t.Errorf("preferences missing: %+v", sum.Preferences)
+	}
+}
+
+func TestSummaryClassToday(t *testing.T) {
+	p := NewProgressService(userRecs{}, oneUser{domain.User{CohortNumber: 13}}, fakeSettings{}, fakeHolidays{holiday: true})
+	p.now = func() time.Time { return at(9, 0, 0) } // Tuesday, but a holiday
+	sum, err := p.Summary(primitive.NewObjectID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.ClassToday {
+		t.Error("holiday should not be a class day")
+	}
+	p = NewProgressService(userRecs{}, oneUser{domain.User{CohortNumber: 13}}, fakeSettings{}, fakeHolidays{})
+	p.now = func() time.Time { return at(9, 0, 0) }
+	if sum, _ = p.Summary(primitive.NewObjectID()); !sum.ClassToday {
+		t.Error("a normal Tuesday is a class day")
 	}
 }
