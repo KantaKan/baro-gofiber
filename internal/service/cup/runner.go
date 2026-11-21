@@ -80,20 +80,44 @@ func (r *Runner) RunDue(now time.Time) error {
 	return all
 }
 
+// showingUp checks today (once the afternoon closes) and, every 10 minutes, this
+// week's earlier days, so an excuse approved later still earns the bonus before Friday's close.
 func (r *Runner) showingUp(cohort int, now time.Time) error {
-	date := now.Format(dateFmt)
-	if r.isDone(fmt.Sprintf("show|%d|%s", cohort, date)) {
+	week := WeekStart(now)
+	if !now.Before(WeekEnd(week)) {
 		return nil
-	}
-	if ok, err := r.classDay(now); err != nil || !ok {
-		return err
 	}
 	st, err := r.settings.Get(cohort)
 	if err != nil {
 		return err
 	}
-	if !now.After(st.Rules.Afternoon.AbsentAfter.On(now)) {
+	mon, _ := parseDay(week)
+	var all error
+	for d := mon; !d.After(now); d = d.AddDate(0, 0, 1) {
+		date := d.Format(dateFmt)
+		today := date == now.Format(dateFmt)
+		if today && !now.After(st.Rules.Afternoon.AbsentAfter.On(now)) {
+			continue
+		}
+		if !today && now.Minute()%10 != 0 {
+			continue
+		}
+		if err := r.showingUpDay(cohort, date, d.Add(12*time.Hour), week); err != nil {
+			all = errors.Join(all, err)
+		}
+	}
+	return all
+}
+
+func (r *Runner) showingUpDay(cohort int, date string, noon time.Time, week string) error {
+	if r.isDone(fmt.Sprintf("show|%d|%s", cohort, date)) {
 		return nil
+	}
+	if ok, err := r.classDay(noon); err != nil || !ok {
+		if err == nil {
+			r.markDone(fmt.Sprintf("show|%d|%s", cohort, date))
+		}
+		return err
 	}
 	c, cancel := ctx()
 	defer cancel()
@@ -110,6 +134,7 @@ func (r *Runner) showingUp(cohort int, now time.Time) error {
 		statuses[rec.UserID] = append(statuses[rec.UserID], rec.Status)
 	}
 	pending := false
+	now := noon
 	for group, members := range groups {
 		key := fmt.Sprintf("showup:%d:%s:%s", cohort, group, date)
 		if r.isDone(key) {
@@ -125,12 +150,14 @@ func (r *Runner) showingUp(cohort int, now time.Time) error {
 			pending = true
 			continue
 		}
-		if WholeGroupOnTime(members, statuses) {
-			a := &domain.CupAward{Cohort: cohort, Group: group, Category: CatShowingUp, Points: ShowingUpPoints,
-				Reason: "Whole group on time", Day: date, Week: WeekStart(now), Key: key, CreatedAt: now}
-			if _, err := r.store.InsertOnce(c, a); err != nil {
-				return err
-			}
+		if !WholeGroupOnTime(members, statuses) {
+			pending = true // an approved excuse may still change a late/absent this week
+			continue
+		}
+		a := &domain.CupAward{Cohort: cohort, Group: group, Category: CatShowingUp, Points: ShowingUpPoints,
+			Reason: "Whole group on time", Day: date, Week: week, Key: key, CreatedAt: now}
+		if _, err := r.store.InsertOnce(c, a); err != nil {
+			return err
 		}
 		r.markDone(key)
 	}

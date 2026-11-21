@@ -167,3 +167,29 @@ func TestIsChampion(t *testing.T) {
 		t.Error("a win two weeks ago no longer counts")
 	}
 }
+
+func TestAwardAfterCloseCountsNextWeek(t *testing.T) {
+	f := newFake()
+	f.members["A"] = []primitive.ObjectID{primitive.NewObjectID()}
+	s := NewService(f, fixedStart("2026-07-06"))
+	a, err := s.Award(admin, 13, "A", CatCoding, 20, "Friday demo", at(2026, 9, 11, 17, 0))
+	if err != nil || a.Week != "2026-09-14" || a.Day != "2026-09-14" {
+		t.Fatalf("after-close award = %+v %v, want next week's Monday", a, err)
+	}
+}
+
+func TestWeekendShowsNextWeekAndNewChampion(t *testing.T) {
+	f := newFake()
+	me := primitive.NewObjectID()
+	f.members["A"] = []primitive.ObjectID{me}
+	f.wins = append(f.wins, domain.CupWin{Cohort: 13, Week: "2026-09-07", WeekNo: 10, Group: "A", Members: []primitive.ObjectID{me}})
+	s := NewService(f, fixedStart("2026-07-06"))
+	sat := at(2026, 9, 12, 10, 0)
+	got, _ := s.Me(domain.User{ID: me, CohortNumber: 13, GenmateGroup: "A"}, sat)
+	if got.Week != "2026-09-14" || got.ChampionGroup != "A" {
+		t.Errorf("Saturday: week %s champion %q, want next week with A as champion", got.Week, got.ChampionGroup)
+	}
+	if !s.IsChampion(domain.User{ID: me, CohortNumber: 13}, sat) {
+		t.Error("winners are champions from the Friday close")
+	}
+}

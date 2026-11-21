@@ -50,6 +50,17 @@ func WeekEnd(week string) time.Time {
 	return time.Date(m.Year(), m.Month(), m.Day()+4, 16, 45, 0, 0, bangkok)
 }
 
+// CurrentWeek is the week that is still open at t: after Friday 16:45 (and over the
+// weekend) points and standings belong to next week.
+func CurrentWeek(t time.Time) string {
+	w := WeekStart(t)
+	if !t.Before(WeekEnd(w)) {
+		m, _ := parseDay(w)
+		return m.AddDate(0, 0, 7).Format(dateFmt)
+	}
+	return w
+}
+
 // WeekNo counts weeks from the cohort start (week 1 = the start's week); ISO week if no start.
 func WeekNo(start, week string) int {
 	w, ok := parseDay(week)

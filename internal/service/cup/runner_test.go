@@ -158,3 +158,25 @@ func TestZeroWeekAndFailedGrant(t *testing.T) {
 		t.Fatalf("retry after failure: wins=%d grants=%d", len(st.wins), len(g.calls))
 	}
 }
+
+func TestLateExcuseRestoresBonus(t *testing.T) {
+	st, recs, _, r, a1, a2, b1 := setup()
+	day := "2026-09-07" // Monday
+	for _, u := range []primitive.ObjectID{a1, a2} {
+		recs.recs = append(recs.recs, rec(u, day, domain.SessionMorning, domain.StatusPresent), rec(u, day, domain.SessionAfternoon, domain.StatusPresent))
+	}
+	recs.recs = append(recs.recs, rec(b1, day, domain.SessionMorning, domain.StatusLate), rec(b1, day, domain.SessionAfternoon, domain.StatusPresent))
+	r.RunDue(at(2026, 9, 7, 14, 31))
+	if countCat(st, CatShowingUp) != 1 {
+		t.Fatal("A only at first")
+	}
+	recs.recs[len(recs.recs)-2].Status = domain.StatusLateExcused // TA approves leave on Tuesday
+	r.RunDue(at(2026, 9, 8, 10, 40))
+	if n := countCat(st, CatShowingUp); n != 2 {
+		t.Fatalf("B should get Monday's bonus once excused, showing_up awards = %d", n)
+	}
+	r.RunDue(at(2026, 9, 8, 10, 50))
+	if countCat(st, CatShowingUp) != 2 {
+		t.Fatal("no duplicates on later re-checks")
+	}
+}

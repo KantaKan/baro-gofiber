@@ -72,8 +72,13 @@ func (s *Service) Award(adminID string, cohort int, group, category string, poin
 	if _, ok := groups[group]; !ok {
 		return nil, fmt.Errorf("%w: unknown group %q", ErrInvalidAward, group)
 	}
+	// After Friday's close the points go to next week (shown on its Monday), never to a closed week.
+	week, day := CurrentWeek(now), now.In(bangkok).Format(dateFmt)
+	if week != WeekStart(now) {
+		day = week
+	}
 	a := &domain.CupAward{Cohort: cohort, Group: group, Category: category, Points: points, Reason: reason,
-		Day: now.In(bangkok).Format(dateFmt), Week: WeekStart(now), AwardedBy: by, CreatedAt: now}
+		Day: day, Week: week, AwardedBy: by, CreatedAt: now}
 	if err := s.store.Insert(c, a); err != nil {
 		return nil, err
 	}
@@ -156,7 +161,7 @@ func (s *Service) IsChampion(u domain.User, now time.Time) bool {
 	if err != nil {
 		return false
 	}
-	prev := WeekStart(WeekEnd(WeekStart(now)).AddDate(0, 0, -7))
+	prev := WeekStart(WeekEnd(CurrentWeek(now)).AddDate(0, 0, -7))
 	for _, w := range wins {
 		if w.Week == prev {
 			for _, m := range w.Members {
@@ -170,7 +175,7 @@ func (s *Service) IsChampion(u domain.User, now time.Time) bool {
 }
 
 func (s *Service) Me(u domain.User, now time.Time) (*MyCup, error) {
-	week := WeekStart(now)
+	week := CurrentWeek(now)
 	standings, awards, err := s.Standings(u.CohortNumber, week)
 	if err != nil {
 		return nil, err

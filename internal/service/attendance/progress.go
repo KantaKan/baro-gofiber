@@ -180,15 +180,15 @@ type MySummary struct {
 		Morning   *SessionToday `json:"morning"`
 		Afternoon *SessionToday `json:"afternoon"`
 	} `json:"today"`
-	Streak         int                 `json:"streak"`
-	LeaveUsed      int                 `json:"leave_used"`
-	LeaveAllowance int                 `json:"leave_allowance"`
-	WarningLevel   string              `json:"warning_level"`
-	AttendanceRate float64             `json:"attendance_rate"`
-	PerfectWeek    bool                `json:"perfect_week"`
+	Streak         int     `json:"streak"`
+	LeaveUsed      int     `json:"leave_used"`
+	LeaveAllowance int     `json:"leave_allowance"`
+	WarningLevel   string  `json:"warning_level"`
+	AttendanceRate float64 `json:"attendance_rate"`
+	PerfectWeek    bool    `json:"perfect_week"`
 	// Champion: the learner's group won last week's GenMate Cup (Victory Lap, gold frame).
-	Champion bool `json:"champion"`
-	Rules          domain.CheckinRules `json:"rules"`
+	Champion bool                `json:"champion"`
+	Rules    domain.CheckinRules `json:"rules"`
 	// ClassToday is false on weekends and holidays (no check-in).
 	ClassToday bool `json:"class_today"`
 	Course     struct {

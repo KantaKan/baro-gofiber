@@ -104,3 +104,15 @@ func TestWholeGroupOnTime(t *testing.T) {
 		t.Error("empty group must not earn the bonus")
 	}
 }
+
+func TestCurrentWeek(t *testing.T) {
+	if got := CurrentWeek(at(2026, 9, 11, 16, 44)); got != "2026-09-07" {
+		t.Errorf("Fri 16:44 = %s", got)
+	}
+	if got := CurrentWeek(at(2026, 9, 11, 16, 45)); got != "2026-09-14" {
+		t.Errorf("Fri 16:45 belongs to next week, got %s", got)
+	}
+	if got := CurrentWeek(at(2026, 9, 13, 12, 0)); got != "2026-09-14" {
+		t.Errorf("Sunday belongs to next week, got %s", got)
+	}
+}

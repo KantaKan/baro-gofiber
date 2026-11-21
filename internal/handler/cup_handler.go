@@ -116,7 +116,7 @@ func (h *CupHandler) Standings(c *fiber.Ctx) error {
 	if cohort <= 0 {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
 	}
-	week := c.Query("week", cup.WeekStart(utils.GetThailandTime()))
+	week := c.Query("week", cup.CurrentWeek(utils.GetThailandTime()))
 	s, awards, err := h.svc.Standings(cohort, week)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading standings")
