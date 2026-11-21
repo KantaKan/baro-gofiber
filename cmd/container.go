@@ -10,6 +10,7 @@ import (
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/character"
 	cohortService "gofiber-baro/internal/service/cohort"
+	"gofiber-baro/internal/service/cup"
 	"gofiber-baro/internal/service/giftbox"
 	"gofiber-baro/internal/service/godevent"
 	"gofiber-baro/internal/service/holiday"
@@ -75,6 +76,8 @@ type Container struct {
 	AttendanceOverviewService   *attendance.OverviewService
 	AttendanceExportService     *attendance.ExportService
 	CohortService               *cohortService.Service
+	CupRepo                     *repository.CupRepository
+	CupService                  *cup.Service
 	CheckinService              *attendance.CheckinService
 	ProgressService             *attendance.ProgressService
 	StartupStoryService         *startupstory.Service
@@ -167,6 +170,8 @@ func (c *Container) initServices() {
 	c.AttendanceOverviewService = attendance.NewOverviewService(c.AttendanceRepo, c.AttendanceCodeRepo, c.UserService)
 	c.AttendanceExportService = attendance.NewExportService(c.AttendanceRepo, c.UserService)
 	c.CohortService = cohortService.NewService(c.CohortSettingsRepo)
+	c.CupRepo = repository.NewCupRepository(c.DB)
+	c.CupService = cup.NewService(c.CupRepo, c.CohortService)
 	c.CheckinService = attendance.NewCheckinService(c.AttendanceRepo, c.LeaveRepo, c.UserService, c.CohortService, c.HolidayService, cohortService.IPAllowed)
 	c.ProgressService = attendance.NewProgressService(c.AttendanceRepo, c.UserService, c.CohortService, c.HolidayService)
 }
