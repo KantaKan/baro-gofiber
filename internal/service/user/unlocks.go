@@ -44,14 +44,13 @@ func AvatarAllowed(a domain.Avatar, streak int) error {
 	if !(a.Style == "blobatar" && a.Bg == "") && !hexColor.MatchString(a.Bg) {
 		return fmt.Errorf("background must be a 6-digit hex color")
 	}
-	for style, parts := range a.Options {
-		for part, v := range parts {
-			if v == nil {
-				continue
-			}
-			if need, ok := avatarLocks[style][part][*v]; ok && streak < need {
-				return ErrAvatarLocked
-			}
+	// Only the style in use matters; edits kept for other styles are re-checked when picked.
+	for part, v := range a.Options[a.Style] {
+		if v == nil {
+			continue
+		}
+		if need, ok := avatarLocks[a.Style][part][*v]; ok && streak < need {
+			return ErrAvatarLocked
 		}
 	}
 	return nil
