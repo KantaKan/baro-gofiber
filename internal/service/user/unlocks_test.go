@@ -71,3 +71,15 @@ func TestAvatarAllowedBlobatar(t *testing.T) {
 		t.Errorf("blobatar without bg rejected: %v", err)
 	}
 }
+
+func TestAvatarLocksOnlyCheckActiveStyle(t *testing.T) {
+	// galaxy kept from when the streak was 30, but the learner now uses Blobatar
+	a := domain.Avatar{Style: "blobatar", Seed: "x", Bg: "fce7f3", Options: map[string]map[string]*string{"notionists": {"bodyIcon": str("galaxy")}}}
+	if err := AvatarAllowed(a, 0); err != nil {
+		t.Errorf("an unused style's locked item must not block saving: %v", err)
+	}
+	a.Style = "notionists"
+	if err := AvatarAllowed(a, 0); err != ErrAvatarLocked {
+		t.Errorf("active locked item must still be rejected, got %v", err)
+	}
+}
