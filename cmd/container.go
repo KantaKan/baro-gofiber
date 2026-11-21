@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gofiber-baro/pkg/utils"
 	"log"
 
 	"gofiber-baro/internal/domain"
@@ -90,6 +91,7 @@ type Container struct {
 	TalkBoardHandler    *handler.TalkBoardHandler
 	NotificationHandler *handler.NotificationHandler
 	CohortHandler       *handler.CohortHandler
+	CupHandler          *handler.CupHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
 	CosmeticHandler     *handler.CosmeticHandler
@@ -174,6 +176,7 @@ func (c *Container) initServices() {
 	c.CupService = cup.NewService(c.CupRepo, c.CohortService)
 	c.CheckinService = attendance.NewCheckinService(c.AttendanceRepo, c.LeaveRepo, c.UserService, c.CohortService, c.HolidayService, cohortService.IPAllowed)
 	c.ProgressService = attendance.NewProgressService(c.AttendanceRepo, c.UserService, c.CohortService, c.HolidayService)
+	c.ProgressService.SetChampionCheck(func(u domain.User) bool { return c.CupService.IsChampion(u, utils.GetThailandTime()) })
 }
 
 func (c *Container) initHandlers() {
@@ -194,6 +197,7 @@ func (c *Container) initHandlers() {
 	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo, c.UserService)
 	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
 	c.CohortHandler = handler.NewCohortHandler(c.CohortService)
+	c.CupHandler = handler.NewCupHandler(c.CupService, c.UserService)
 	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
 	c.HistoryHandler = handler.NewHistoryHandler(c.AuditLogRepo, c.UserRepo)
 	c.CosmeticHandler = handler.NewCosmeticHandler(c.CosmeticService)

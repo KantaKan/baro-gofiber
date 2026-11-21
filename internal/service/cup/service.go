@@ -148,6 +148,27 @@ type MyCup struct {
 	WallOfFame    []FameRow         `json:"wall_of_fame"`
 }
 
+// IsChampion: the learner was in last week's winning group (frozen members).
+func (s *Service) IsChampion(u domain.User, now time.Time) bool {
+	c, cancel := ctx()
+	defer cancel()
+	wins, err := s.store.Wins(c, u.CohortNumber)
+	if err != nil {
+		return false
+	}
+	prev := WeekStart(WeekEnd(WeekStart(now)).AddDate(0, 0, -7))
+	for _, w := range wins {
+		if w.Week == prev {
+			for _, m := range w.Members {
+				if m == u.ID {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func (s *Service) Me(u domain.User, now time.Time) (*MyCup, error) {
 	week := WeekStart(now)
 	standings, awards, err := s.Standings(u.CohortNumber, week)

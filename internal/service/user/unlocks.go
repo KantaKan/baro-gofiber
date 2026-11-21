@@ -12,14 +12,18 @@ import (
 var styleStreak = map[string]int{
 	"slide": 0, "hold": 0, "ring": 0, "run": 0, "coffee": 0, "red": 0, "cat": 0,
 	"bubble": 0, "scratch": 0, "alarm": 0, "slot": 0, "gacha": 0,
-	"rocket": 15, "arcade": 20, "dj": 30, "gold": 0,
+	"rocket": 15, "arcade": 20, "dj": 30, "gold": 0, "victory": 0,
 }
 
 // StyleUnlocked reports whether style exists and whether the learner may use it.
-func StyleUnlocked(style string, streak int, perfectWeek bool) (known, unlocked bool) {
+// "victory" (Victory Lap) is only for the GenMate Cup champions of the week.
+func StyleUnlocked(style string, streak int, perfectWeek, champion bool) (known, unlocked bool) {
 	need, ok := styleStreak[style]
 	if !ok {
 		return false, false
+	}
+	if style == "victory" {
+		return true, champion
 	}
 	if style == "gold" {
 		return true, perfectWeek

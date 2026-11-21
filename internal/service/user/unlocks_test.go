@@ -11,22 +11,25 @@ func TestStyleUnlocked(t *testing.T) {
 		style           string
 		streak          int
 		perfect         bool
+		champion        bool
 		known, unlocked bool
 	}{
-		{"slide", 0, false, true, true},
-		{"gacha", 0, false, true, true},
-		{"rocket", 14, false, true, false},
-		{"rocket", 15, false, true, true},
-		{"arcade", 19, false, true, false},
-		{"arcade", 20, false, true, true},
-		{"dj", 29, false, true, false},
-		{"dj", 30, false, true, true},
-		{"gold", 99, false, true, false},
-		{"gold", 0, true, true, true},
-		{"victory-lap", 99, true, false, false},
+		{"slide", 0, false, false, true, true},
+		{"gacha", 0, false, false, true, true},
+		{"rocket", 14, false, false, true, false},
+		{"rocket", 15, false, false, true, true},
+		{"arcade", 19, false, false, true, false},
+		{"arcade", 20, false, false, true, true},
+		{"dj", 29, false, false, true, false},
+		{"dj", 30, false, false, true, true},
+		{"gold", 99, false, false, true, false},
+		{"gold", 0, true, false, true, true},
+		{"victory", 99, true, false, true, false},
+		{"victory", 0, false, true, true, true},
+		{"victory-lap", 99, true, true, false, false},
 	}
 	for _, c := range cases {
-		k, u := StyleUnlocked(c.style, c.streak, c.perfect)
+		k, u := StyleUnlocked(c.style, c.streak, c.perfect, c.champion)
 		if k != c.known || u != c.unlocked {
 			t.Errorf("%s streak=%d perfect=%v: got (%v,%v) want (%v,%v)", c.style, c.streak, c.perfect, k, u, c.known, c.unlocked)
 		}

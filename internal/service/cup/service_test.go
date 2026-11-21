@@ -152,3 +152,18 @@ func TestMe(t *testing.T) {
 }
 
 var _ = time.Now
+
+func TestIsChampion(t *testing.T) {
+	f := newFake()
+	me, other := primitive.NewObjectID(), primitive.NewObjectID()
+	f.wins = append(f.wins, domain.CupWin{Cohort: 13, Week: "2026-08-31", Group: "B", Members: []primitive.ObjectID{me}},
+		domain.CupWin{Cohort: 13, Week: "2026-08-24", Group: "C", Members: []primitive.ObjectID{other}})
+	s := NewService(f, fixedStart(""))
+	now := at(2026, 9, 9, 11, 0)
+	if !s.IsChampion(domain.User{ID: me, CohortNumber: 13, GenmateGroup: "A"}, now) {
+		t.Error("last week's winner (frozen members) is champion this week")
+	}
+	if s.IsChampion(domain.User{ID: other, CohortNumber: 13, GenmateGroup: "C"}, now) {
+		t.Error("a win two weeks ago no longer counts")
+	}
+}

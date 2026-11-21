@@ -179,6 +179,7 @@ func main() {
 		TalkBoard:    container.TalkBoardHandler,
 		Notification: container.NotificationHandler,
 		Cohort:       container.CohortHandler,
+		Cup:          container.CupHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,

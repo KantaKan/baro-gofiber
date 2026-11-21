@@ -16,7 +16,7 @@ type CupAward struct {
 	Reason    string             `bson:"reason" json:"reason"`
 	Day       string             `bson:"day" json:"day"`   // YYYY-MM-DD (Bangkok)
 	Week      string             `bson:"week" json:"week"` // Monday YYYY-MM-DD
-	AwardedBy primitive.ObjectID `bson:"awarded_by,omitempty" json:"-"`
+	AwardedBy primitive.ObjectID `bson:"awarded_by,omitempty" json:"awarded_by,omitempty"`
 	Key       string             `bson:"key,omitempty" json:"-"` // idempotency for server awards
 	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
 }
