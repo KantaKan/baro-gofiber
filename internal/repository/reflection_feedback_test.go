@@ -33,4 +33,13 @@ func TestReflectionFeedbackUpdate(t *testing.T) {
 	if !reflect.DeepEqual(cleared, wantCleared) {
 		t.Errorf("clearing: got %v, want %v", cleared, wantCleared)
 	}
+
+	unknown := reflectionFeedbackUpdate("Nice work", domain.FeedbackAuthor{At: at})
+	wantUnknown := bson.M{
+		"$set":   bson.M{"reflections.$.admin_feedback": "Nice work", "reflections.$.admin_feedback_at": at},
+		"$unset": bson.M{"reflections.$.admin_feedback_by": "", "reflections.$.admin_feedback_name": ""},
+	}
+	if !reflect.DeepEqual(unknown, wantUnknown) {
+		t.Errorf("unknown replier: got %v, want %v", unknown, wantUnknown)
+	}
 }

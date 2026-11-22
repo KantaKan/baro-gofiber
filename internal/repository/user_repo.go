@@ -477,6 +477,13 @@ func reflectionFeedbackUpdate(feedback string, author domain.FeedbackAuthor) bso
 			"$unset": bson.M{"reflections.$.admin_feedback_by": "", "reflections.$.admin_feedback_name": "", "reflections.$.admin_feedback_at": ""},
 		}
 	}
+	if author.ID == "" {
+		// replier unknown: don't keep a previous replier's name on this reply
+		return bson.M{
+			"$set":   bson.M{"reflections.$.admin_feedback": feedback, "reflections.$.admin_feedback_at": author.At},
+			"$unset": bson.M{"reflections.$.admin_feedback_by": "", "reflections.$.admin_feedback_name": ""},
+		}
+	}
 	return bson.M{"$set": bson.M{
 		"reflections.$.admin_feedback":      feedback,
 		"reflections.$.admin_feedback_by":   author.ID,
