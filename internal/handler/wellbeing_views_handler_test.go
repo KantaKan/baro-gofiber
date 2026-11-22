@@ -51,6 +51,7 @@ func wbApp(users []domain.User) *fiber.App {
 	app.Get("/admin/learners", h.Learners)
 	app.Get("/admin/learners/:id/overview", h.Overview)
 	app.Get("/admin/support", h.Support)
+	app.Get("/admin/reflections/weeks", h.Weeks)
 	return app
 }
 
@@ -65,6 +66,7 @@ func TestWellbeingViews(t *testing.T) {
 		"/admin/learners?cohort=13":                   `"support":true`,
 		"/admin/learners/" + u.ID.Hex() + "/overview": `"panic_run"`,
 		"/admin/support?cohort=13":                    `"pattern:panic_run"`,
+		"/admin/reflections/weeks?cohort=13&weeks=2":  `"week":"2026-09-07"`,
 	}
 	for url, want := range cases {
 		code, body := send(app, "GET", url, "")
@@ -72,7 +74,7 @@ func TestWellbeingViews(t *testing.T) {
 			t.Errorf("%s → %d, want body containing %s: %s", url, code, want, body)
 		}
 	}
-	for _, bad := range []string{"/admin/reflections/board", "/admin/reflections/board?cohort=13&range=year", "/admin/learners/" + primitive.NewObjectID().Hex() + "/overview"} {
+	for _, bad := range []string{"/admin/reflections/weeks", "/admin/reflections/weeks?cohort=13&weeks=99", "/admin/reflections/board", "/admin/reflections/board?cohort=13&range=year", "/admin/learners/" + primitive.NewObjectID().Hex() + "/overview"} {
 		if code, _ := send(app, "GET", bad, ""); code != 400 && code != 404 {
 			t.Errorf("%s → %d, want 400/404", bad, code)
 		}

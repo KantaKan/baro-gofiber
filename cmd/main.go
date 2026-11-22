@@ -221,6 +221,7 @@ func main() {
 		Slack:        container.SlackHandler,
 		Report:       container.ReportHandler,
 		Calendar:     container.CalendarHandler,
+		CohortList:   container.CohortListHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
