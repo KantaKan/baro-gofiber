@@ -30,6 +30,7 @@ type Handlers struct {
 	Team         *handler.TeamHandler
 	Slack        *handler.SlackHandler
 	Report       *handler.ReportHandler
+	Calendar     *handler.CalendarHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -59,6 +60,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	app.Post("/login", loginLimiter, h.User.LoginUser)
 	app.Get("/invites/:token", loginLimiter, h.Team.Lookup)
 	app.Post("/invites/:token/accept", loginLimiter, h.Team.Accept)
+	app.Get("/calendar/me", middleware.AuthMiddleware, h.Calendar.Mine)
 	app.Get("/api/verify-token", middleware.AuthMiddleware, h.User.VerifyToken)
 
 	notifications := app.Group("/api/notifications", middleware.AuthMiddleware)
@@ -176,6 +178,10 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/settings/slack/match", h.Slack.Match)
 	admin.Get("/settings/slack/log", h.Slack.Log)
 	admin.Post("/nudges/ping", h.Slack.Ping)
+	admin.Get("/calendar", h.Calendar.Get)
+	admin.Post("/calendar/import", h.Calendar.Import)
+	admin.Put("/calendar/weeks/:n/publish", h.Calendar.Publish)
+	admin.Put("/calendar/settings", h.Calendar.Settings)
 	admin.Get("/report", h.Report.Get)
 	admin.Put("/report/notes", h.Report.SaveNotes)
 	admin.Post("/report/send", h.Report.Send)
