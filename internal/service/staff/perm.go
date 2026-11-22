@@ -89,7 +89,8 @@ var writes = []struct {
 
 // RequiredCap is the capability a request to an /admin path needs.
 func RequiredCap(method, path string) Capability {
-	p := strings.TrimSuffix(strings.TrimPrefix(path, "/admin"), "/")
+	// Fiber matches routes ignoring case, so the table must too.
+	p := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.ToLower(path), "/admin"), "/"))
 	if method == "GET" || method == "HEAD" {
 		switch {
 		case strings.HasPrefix(p, "/team"), strings.HasPrefix(p, "/settings/slack"):
@@ -121,7 +122,7 @@ func RequiredCap(method, path string) Capability {
 func CohortFromRequest(path string, query func(string) string) (int, bool) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	for i := 0; i+1 < len(parts); i++ {
-		if parts[i] == "cohorts" {
+		if strings.EqualFold(parts[i], "cohorts") {
 			if n, err := strconv.Atoi(parts[i+1]); err == nil && n > 0 {
 				return n, true
 			}
@@ -131,6 +132,22 @@ func CohortFromRequest(path string, query func(string) string) (int, bool) {
 		return n, true
 	}
 	return 0, false
+}
+
+// LearnerFromPath finds a learner id named in an /admin path
+// (/admin/learners/:id/..., /admin/users/:id/..., /admin/userreflections/:id, /admin/attendance/student/:id).
+func LearnerFromPath(path string) (string, bool) {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for i := 0; i+1 < len(parts); i++ {
+		switch strings.ToLower(parts[i]) {
+		case "learners", "users", "userreflections", "student":
+			id := parts[i+1]
+			if id != "" && !strings.EqualFold(id, "bulk-register") {
+				return id, true
+			}
+		}
+	}
+	return "", false
 }
 
 // InScope: Owners see every cohort; everyone else only their listed cohorts.

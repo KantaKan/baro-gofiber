@@ -26,10 +26,10 @@ func (s *stubTeam) Invite(_ primitive.ObjectID, email, role string, _ []int, _ [
 	s.invited = email + ":" + role
 	return "tok", &staff.Invite{ID: primitive.NewObjectID(), Email: email, Role: role, ExpiresAt: time.Now()}, nil
 }
-func (s *stubTeam) Renew(primitive.ObjectID) (string, *staff.Invite, error) {
+func (s *stubTeam) Renew(primitive.ObjectID, primitive.ObjectID) (string, *staff.Invite, error) {
 	return "", nil, staff.ErrInviteInvalid
 }
-func (s *stubTeam) CancelInvite(primitive.ObjectID) error { return nil }
+func (s *stubTeam) CancelInvite(primitive.ObjectID, primitive.ObjectID) error { return nil }
 func (s *stubTeam) Lookup(string) (*staff.Invite, bool, error) {
 	return nil, false, staff.ErrInviteInvalid
 }

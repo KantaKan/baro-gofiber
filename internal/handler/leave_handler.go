@@ -206,6 +206,20 @@ func (h *LeaveHandler) CreateLeaveRequestAdmin(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
 	}
 
+	// Entering leave for someone is an approval too, so a TA has the same 6-of-8 limit here.
+	if role := staffRole(c); role == staff.TA {
+		if h.project == nil {
+			return utils.SendError(c, fiber.StatusForbidden, "Needs an Admin to enter leave")
+		}
+		n, perr := h.project(userID, body.Date)
+		if perr != nil {
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error checking leave")
+		}
+		if !taMayApprove(role, string(domain.LeaveStatusApproved), n) {
+			return utils.SendError(c, fiber.StatusForbidden, "Needs an Admin: this would take them past 6 of 8 leave days")
+		}
+	}
+
 	adminID := c.Locals("userID").(string)
 
 	var session *domain.AttendanceSession

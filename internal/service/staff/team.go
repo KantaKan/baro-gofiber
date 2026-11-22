@@ -129,7 +129,10 @@ func (t *Team) Invite(actor primitive.ObjectID, email, role string, cohorts []in
 }
 
 // Renew issues a new link for a pending invite; the old link stops working.
-func (t *Team) Renew(id primitive.ObjectID) (string, *Invite, error) {
+func (t *Team) Renew(actor, id primitive.ObjectID) (string, *Invite, error) {
+	if err := t.requireOwner(actor); err != nil {
+		return "", nil, err
+	}
 	inv, err := t.s.InviteByID(id)
 	if err != nil || inv == nil || inv.UsedAt != nil {
 		return "", nil, ErrInviteInvalid
@@ -145,7 +148,12 @@ func (t *Team) Renew(id primitive.ObjectID) (string, *Invite, error) {
 	return tok, inv, nil
 }
 
-func (t *Team) CancelInvite(id primitive.ObjectID) error { return t.s.DeleteInvite(id) }
+func (t *Team) CancelInvite(actor, id primitive.ObjectID) error {
+	if err := t.requireOwner(actor); err != nil {
+		return err
+	}
+	return t.s.DeleteInvite(id)
+}
 
 func (t *Team) valid(token string) (*Invite, error) {
 	if len(token) < 20 {

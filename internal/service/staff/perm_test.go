@@ -42,6 +42,39 @@ func TestAllowed(t *testing.T) {
 	}
 }
 
+func TestPathCaseDoesNotMatter(t *testing.T) {
+	// Fiber routes are case-insensitive, so the permission table must be too.
+	if RequiredCap("GET", "/admin/TEAM") != CapTeam || RequiredCap("GET", "/admin/Attendance/Export/Salesforce") != CapCohortAdmin {
+		t.Error("GET paths must match ignoring case")
+	}
+	if RequiredCap("POST", "/ADMIN/cohorts") != CapCreateCohort || RequiredCap("POST", "/admin/TEAM/invites/x/renew") != CapTeam {
+		t.Error("write paths must match ignoring case")
+	}
+	if n, ok := CohortFromRequest("/admin/Cohorts/14/Settings", func(string) string { return "" }); !ok || n != 14 {
+		t.Error("cohort in path must match ignoring case")
+	}
+}
+
+func TestLearnerFromRequest(t *testing.T) {
+	cases := map[string]string{
+		"/admin/learners/abc123/overview":  "abc123",
+		"/admin/Learners/abc123/notes":     "abc123",
+		"/admin/users/abc123/badges":       "abc123",
+		"/admin/userreflections/abc123":    "abc123",
+		"/admin/attendance/student/abc123": "abc123",
+	}
+	for path, want := range cases {
+		if got, ok := LearnerFromPath(path); !ok || got != want {
+			t.Errorf("%s = %q %v, want %q", path, got, ok, want)
+		}
+	}
+	for _, p := range []string{"/admin/learners", "/admin/today", "/admin/users/bulk-register", "/admin/notes/abc"} {
+		if _, ok := LearnerFromPath(p); ok {
+			t.Errorf("%s should name no learner", p)
+		}
+	}
+}
+
 func TestCohortScope(t *testing.T) {
 	q := func(v string) func(string) string { return func(string) string { return v } }
 	if n, ok := CohortFromRequest("/admin/cohorts/14/settings", q("")); !ok || n != 14 {

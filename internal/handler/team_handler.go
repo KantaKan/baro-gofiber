@@ -16,8 +16,8 @@ type teamService interface {
 	Members() ([]domain.User, error)
 	Invites() ([]staff.Invite, error)
 	Invite(actor primitive.ObjectID, email, role string, cohorts []int, groups []string) (string, *staff.Invite, error)
-	Renew(id primitive.ObjectID) (string, *staff.Invite, error)
-	CancelInvite(id primitive.ObjectID) error
+	Renew(actor, id primitive.ObjectID) (string, *staff.Invite, error)
+	CancelInvite(actor, id primitive.ObjectID) error
 	Lookup(token string) (*staff.Invite, bool, error)
 	Accept(token, first, last, password string) error
 	Update(actor, id primitive.ObjectID, role string, cohorts []int, groups []string) error
@@ -125,11 +125,12 @@ func pathID(c *fiber.Ctx) (primitive.ObjectID, bool) {
 // Renew re-issues an invite link.
 // @Summary  New invite link  @Tags admin  @Security BearerAuth  @Router /admin/team/invites/{id}/renew [post]
 func (h *TeamHandler) Renew(c *fiber.Ctx) error {
+	actor, aok := actorID(c)
 	id, ok := pathID(c)
-	if !ok {
+	if !ok || !aok {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid invite")
 	}
-	tok, inv, err := h.team.Renew(id)
+	tok, inv, err := h.team.Renew(actor, id)
 	if err != nil {
 		return teamErr(c, err)
 	}
@@ -139,12 +140,13 @@ func (h *TeamHandler) Renew(c *fiber.Ctx) error {
 // CancelInvite deletes a pending invite.
 // @Summary  Cancel invite  @Tags admin  @Security BearerAuth  @Router /admin/team/invites/{id} [delete]
 func (h *TeamHandler) CancelInvite(c *fiber.Ctx) error {
+	actor, aok := actorID(c)
 	id, ok := pathID(c)
-	if !ok {
+	if !ok || !aok {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid invite")
 	}
-	if err := h.team.CancelInvite(id); err != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Couldn't cancel")
+	if err := h.team.CancelInvite(actor, id); err != nil {
+		return teamErr(c, err)
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Invite cancelled", nil)
 }

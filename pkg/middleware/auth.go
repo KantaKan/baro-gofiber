@@ -11,6 +11,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// StaffStillActive, when set, is asked about every staff (role "admin") token: a removed
+// team member's token stays valid for days, so it must not be enough on its own.
+// It returns false when the account no longer has staff access.
+var StaffStillActive func(userID string) (bool, error)
+
 // Custom claims structure
 type Claims struct {
 	UserID string `json:"user_id"`
@@ -57,6 +62,16 @@ func AuthMiddleware(c *fiber.Ctx) error {
 	// Check token expiration
 	if claims.ExpiresAt != nil && claims.ExpiresAt.Before(time.Now()) {
 		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: Token expired")
+	}
+
+	if claims.Role == "admin" && StaffStillActive != nil {
+		active, err := StaffStillActive(claims.UserID)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "Could not check your access, try again")
+		}
+		if !active {
+			return fiber.NewError(fiber.StatusForbidden, "Your staff access has ended")
+		}
 	}
 
 	// Store the claims in the context for later use

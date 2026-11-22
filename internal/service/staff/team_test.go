@@ -132,7 +132,10 @@ func TestInviteExpiresAndRenews(t *testing.T) {
 	if _, _, err := team.Lookup(tok); !errors.Is(err, ErrInviteInvalid) {
 		t.Fatal("expired invite works")
 	}
-	tok2, _, err := team.Renew(inv.ID)
+	if _, _, err := team.Renew(primitive.NewObjectID(), inv.ID); !errors.Is(err, ErrNotOwner) {
+		t.Fatalf("a non-owner renewed an invite: %v", err)
+	}
+	tok2, _, err := team.Renew(owner, inv.ID)
 	if err != nil || tok2 == tok {
 		t.Fatalf("renew: %v", err)
 	}
@@ -144,6 +147,19 @@ func TestInviteExpiresAndRenews(t *testing.T) {
 	}
 	if _, _, err := team.Invite(owner, "b@x.co", Owner, nil, nil); !errors.Is(err, ErrBadRole) {
 		t.Error("invite as owner allowed")
+	}
+}
+
+func TestOnlyOwnerCancels(t *testing.T) {
+	team, m, owner, _ := setup()
+	_, inv, _ := team.Invite(owner, "a@x.co", Viewer, []int{13}, nil)
+	adm := &domain.User{FirstName: "A", Email: "ad@x.co", Role: "admin", StaffRole: Admin}
+	_ = m.CreateUser(adm)
+	if err := team.CancelInvite(adm.ID, inv.ID); !errors.Is(err, ErrNotOwner) || len(m.invites) != 1 {
+		t.Fatalf("admin cancelled an invite: %v", err)
+	}
+	if err := team.CancelInvite(owner, inv.ID); err != nil || len(m.invites) != 0 {
+		t.Fatalf("owner cancel: %v", err)
 	}
 }
 
