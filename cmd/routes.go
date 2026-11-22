@@ -26,6 +26,7 @@ type Handlers struct {
 	Wellbeing    *handler.WellbeingViewsHandler
 	CohortAdmin  *handler.CohortAdminHandler
 	Activity     *handler.ActivityHandler
+	StaffGuard   fiber.Handler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -153,7 +154,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 		},
 	})
 
-	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole, adminLimiter)
+	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole, h.StaffGuard, adminLimiter)
+	admin.Get("/me", handler.StaffMe)
 	admin.Get("/users", h.Admin.GetAllUsers)
 	admin.Get("/userreflections/:id", h.Admin.GetUserWithReflections)
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)

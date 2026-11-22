@@ -189,6 +189,7 @@ func main() {
 		Wellbeing:    container.WellbeingHandler,
 		CohortAdmin:  container.CohortAdminHandler,
 		Activity:     container.ActivityHandler,
+		StaffGuard:   container.StaffGuard,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
