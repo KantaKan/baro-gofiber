@@ -276,3 +276,33 @@ func (h *WellbeingViewsHandler) SupportRows(users []domain.User, recs []domain.A
 	acks, _ := h.care.AcksFor(ctx, ids(users), time.Now())
 	return wellbeing.BuildSupportList(users, recs, items, acks, h.classNights(2), wellbeing.DefaultWords)
 }
+
+// Weeks: rough nights (overwhelmed or panic) per week for the Weekly summary, newest first.
+// @Summary  Reflections by week  @Tags admin  @Security BearerAuth  @Router /admin/reflections/weeks [get]
+func (h *WellbeingViewsHandler) Weeks(c *fiber.Ctx) error {
+	n := c.QueryInt("weeks", 6)
+	if n < 1 || n > 20 {
+		return utils.SendError(c, fiber.StatusBadRequest, "weeks must be between 1 and 20")
+	}
+	users, _, ok, err := h.cohortUsers(c)
+	if !ok {
+		return err
+	}
+	now := h.now()
+	today := utils.FormatDate(now)
+	d := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	monday := d.AddDate(0, 0, -((int(d.Weekday()) + 6) % 7))
+	mondays := make([]string, n)
+	holidays := map[string]bool{}
+	for i := 0; i < n; i++ {
+		m := monday.AddDate(0, 0, -7*i)
+		mondays[i] = m.Format("2006-01-02")
+		for j := 0; j < 5; j++ {
+			day := m.AddDate(0, 0, j).Format("2006-01-02")
+			if hol, _, err := h.holidays.IsHoliday(day); err == nil && hol {
+				holidays[day] = true
+			}
+		}
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "ok", wellbeing.WeeklyRough(users, mondays, today, holidays))
+}

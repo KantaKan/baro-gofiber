@@ -35,6 +35,8 @@ func TestAllowed(t *testing.T) {
 		{Owner, "POST", "/admin/cohorts", true},
 		{"", "GET", "/admin/today", false},
 		{TA, "POST", "/admin/nudges/ping", true},
+		{Viewer, "GET", "/admin/cohorts", true},
+		{Viewer, "GET", "/admin/reflections/weeks", true},
 		{Viewer, "GET", "/admin/calendar", true},
 		{TA, "POST", "/admin/calendar/import", false},
 		{Admin, "POST", "/admin/calendar/import", true},

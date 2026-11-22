@@ -31,6 +31,7 @@ type Handlers struct {
 	Slack        *handler.SlackHandler
 	Report       *handler.ReportHandler
 	Calendar     *handler.CalendarHandler
+	CohortList   *handler.CohortListHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -178,6 +179,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/settings/slack/match", h.Slack.Match)
 	admin.Get("/settings/slack/log", h.Slack.Log)
 	admin.Post("/nudges/ping", h.Slack.Ping)
+	admin.Get("/cohorts", h.CohortList.List)
 	admin.Get("/calendar", h.Calendar.Get)
 	admin.Post("/calendar/import", h.Calendar.Import)
 	admin.Put("/calendar/weeks/:n/publish", h.Calendar.Publish)
@@ -230,6 +232,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/attendance/mark", h.AdminMark.Mark)
 	admin.Post("/attendance/:id/restore", h.AdminMark.Restore)
 	admin.Get("/reflections/board", h.Wellbeing.Board)
+	admin.Get("/reflections/weeks", h.Wellbeing.Weeks)
 	admin.Get("/learners", h.Wellbeing.Learners)
 	admin.Get("/learners/:id/overview", h.Wellbeing.Overview)
 	admin.Get("/support", h.Wellbeing.Support)

@@ -113,6 +113,7 @@ type Container struct {
 	ReportHandler       *handler.ReportHandler
 	CalendarRepo        *repository.CalendarRepository
 	CalendarHandler     *handler.CalendarHandler
+	CohortListHandler   *handler.CohortListHandler
 	TeamHandler         *handler.TeamHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
@@ -234,6 +235,7 @@ func (c *Container) initHandlers() {
 	c.ReportService = report.NewService(c.ReportRepo, handler.ReportSource{WB: c.WellbeingHandler, Holidays: c.HolidayService, Cup: c.CupService}, c.SlackService).WithAppURL(slack.AppURL())
 	c.ReportHandler = handler.NewReportHandler(c.ReportService)
 	c.CalendarRepo = repository.NewCalendarRepository(c.DB)
+	c.CohortListHandler = handler.NewCohortListHandler(repository.NewCohortListRepository(c.DB))
 	c.CalendarHandler = handler.NewCalendarHandler(calendar.NewService(c.CalendarRepo), func(cohortNo int) (string, error) {
 		st, err := c.CohortService.Get(cohortNo)
 		return st.StartDate, err
