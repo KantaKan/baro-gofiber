@@ -48,6 +48,9 @@ func TestUpdateRejects(t *testing.T) {
 	if s.Update(13, domain.CohortSettings{Rules: domain.DefaultRules(), StartDate: "29/06/2026"}) == nil {
 		t.Error("bad start date accepted")
 	}
+	if s.Update(13, domain.CohortSettings{Rules: domain.DefaultRules(), CheckinRegion: "mars"}) == nil {
+		t.Error("unknown check-in region accepted")
+	}
 	if len(r.m) != 0 {
 		t.Fatal("nothing should be stored after rejects")
 	}

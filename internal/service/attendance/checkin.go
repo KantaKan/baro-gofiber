@@ -3,6 +3,7 @@ package attendance
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -16,7 +17,7 @@ var (
 	ErrNotOpenYet        = errors.New("check-in is not open yet")
 	ErrCheckInClosed     = errors.New("check-in is closed for this session")
 	ErrCoveredByLeave    = errors.New("you have approved leave for this session")
-	ErrNetworkNotAllowed = errors.New("check-in is not allowed from this network")
+	ErrNetworkNotAllowed = errors.New("check-in is limited to Thailand for this cohort")
 )
 
 type CheckInInput struct {
@@ -141,7 +142,14 @@ func IsClassDay(now time.Time, holidays HolidayChecker) (bool, error) {
 	return !h, nil
 }
 
-func (s *CheckinService) CheckIn(userID primitive.ObjectID, ip, style string) (*domain.AttendanceRecord, error) {
+// RegionAllowed: "thailand" rejects only a known non-TH country; an unknown country is allowed.
+func RegionAllowed(region, country string) bool {
+	return region != "thailand" || country == "" || strings.EqualFold(country, "TH")
+}
+
+// CheckIn records a self check-in. Learners study from home, so the old network allowlist no
+// longer blocks; only the optional Thailand-only setting does.
+func (s *CheckinService) CheckIn(userID primitive.ObjectID, ip, country, style string) (*domain.AttendanceRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	now := s.now()
@@ -170,7 +178,7 @@ func (s *CheckinService) CheckIn(userID primitive.ObjectID, ip, style string) (*
 	}
 	d, err := DecideCheckIn(CheckInInput{
 		Now: now, Rules: settings.Rules, IsClassDay: classDay, AlreadyCheckedIn: n > 0,
-		IPAllowed: s.ipAllowed(settings.AllowedNetworks, ip), Leave: LeaveStatusFor(leaves, date, session),
+		IPAllowed: RegionAllowed(settings.CheckinRegion, country), Leave: LeaveStatusFor(leaves, date, session),
 	})
 	if err != nil {
 		return nil, err

@@ -36,7 +36,7 @@ func TestCheckIn_RaceBecomesAlreadySubmitted(t *testing.T) {
 	s := NewCheckinService(fakeCheckinRecords{inserted: false}, noLeaves{}, oneUser{domain.User{CohortNumber: 13}},
 		fakeSettings{}, fakeHolidays{}, func([]string, string) bool { return true })
 	s.now = func() time.Time { return at(9, 5, 0) }
-	_, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "slide")
+	_, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "", "slide")
 	if !errors.Is(err, ErrAlreadySubmitted) {
 		t.Errorf("want ErrAlreadySubmitted when a live record already exists, got %v", err)
 	}
@@ -46,7 +46,7 @@ func TestCheckIn_Inserts(t *testing.T) {
 	s := NewCheckinService(fakeCheckinRecords{inserted: true}, noLeaves{}, oneUser{domain.User{CohortNumber: 13}},
 		fakeSettings{}, fakeHolidays{}, func([]string, string) bool { return true })
 	s.now = func() time.Time { return at(9, 5, 0) }
-	rec, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "cat")
+	rec, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "", "cat")
 	if err != nil || rec.Status != domain.StatusPresent || rec.CheckinStyle != "cat" {
 		t.Errorf("got %+v, %v", rec, err)
 	}
@@ -95,5 +95,35 @@ func TestSummaryChampion(t *testing.T) {
 	p.SetChampionCheck(func(u domain.User) bool { return u.GenmateGroup == "A" })
 	if sum, _ = p.Summary(primitive.NewObjectID()); !sum.Champion {
 		t.Error("summary should report champion from the Cup")
+	}
+}
+
+type regionSettings struct{ region string }
+
+func (r regionSettings) Get(int) (domain.CohortSettings, error) {
+	return domain.CohortSettings{Rules: domain.DefaultRules(), AllowedNetworks: []string{"10.0.0.0/8"}, CheckinRegion: r.region}, nil
+}
+
+func TestCheckInFromHomeIgnoresOldAllowlist(t *testing.T) {
+	s := NewCheckinService(fakeCheckinRecords{inserted: true}, noLeaves{}, oneUser{domain.User{CohortNumber: 13}},
+		regionSettings{"anywhere"}, fakeHolidays{}, func([]string, string) bool { return false })
+	s.now = func() time.Time { return at(9, 5, 0) }
+	if _, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "", "slide"); err != nil {
+		t.Errorf("home network must be allowed even with an old allowlist, got %v", err)
+	}
+}
+
+func TestCheckInThailandOnly(t *testing.T) {
+	s := NewCheckinService(fakeCheckinRecords{inserted: true}, noLeaves{}, oneUser{domain.User{CohortNumber: 13}},
+		regionSettings{"thailand"}, fakeHolidays{}, func([]string, string) bool { return true })
+	s.now = func() time.Time { return at(9, 5, 0) }
+	if _, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "US", "slide"); !errors.Is(err, ErrNetworkNotAllowed) {
+		t.Errorf("US with Thailand-only → ErrNetworkNotAllowed, got %v", err)
+	}
+	if _, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "", "slide"); err != nil {
+		t.Errorf("no country header → allowed, got %v", err)
+	}
+	if _, err := s.CheckIn(primitive.NewObjectID(), "1.2.3.4", "th", "slide"); err != nil {
+		t.Errorf("TH → allowed, got %v", err)
 	}
 }
