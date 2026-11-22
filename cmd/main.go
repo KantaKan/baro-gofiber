@@ -85,6 +85,9 @@ func main() {
 	}
 	cancelIndexes()
 	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.CareRepo.EnsureIndexes(indexCtx); err != nil {
+		log.Fatal("Failed to ensure care indexes:", err)
+	}
 	if err := container.CupRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure GenMate Cup indexes:", err)
 	}
@@ -180,6 +183,10 @@ func main() {
 		Notification: container.NotificationHandler,
 		Cohort:       container.CohortHandler,
 		Cup:          container.CupHandler,
+		AdminViews:   container.AdminViewsHandler,
+		AdminMark:    container.AdminMarkHandler,
+		Care:         container.CareHandler,
+		Wellbeing:    container.WellbeingHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
