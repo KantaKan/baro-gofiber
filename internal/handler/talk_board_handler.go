@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"gofiber-baro/internal/service/staff"
 	"html"
 	"log"
 	"time"
@@ -29,21 +30,14 @@ func NewTalkBoardHandler(repo domain.TalkBoardRepository, userService *user.Serv
 
 func (h *TalkBoardHandler) GetPosts(c *fiber.Ctx) error {
 	ctx := c.Context()
-	cohort := c.QueryInt("cohort", 0)
-
-	// Security: If not admin, enforce user's own cohort
-	userID := c.Locals("userID")
-	userRole := ""
-	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
+	// Learners always get their own cohort; staff only cohorts in their scope.
+	a, ok := h.actor(c)
+	if !ok {
+		return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
 	}
-
-	if userRole != "admin" {
-		userData, err := h.userService.GetUserByID(userID.(string))
-		if err != nil {
-			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
-		}
-		cohort = userData.CohortNumber
+	cohort, allowed := boardCohortForRead(a, c.QueryInt("cohort", 0))
+	if !allowed {
+		return utils.SendError(c, fiber.StatusForbidden, "You don't have access to this cohort's board")
 	}
 
 	filter := domain.PostFilter{Cohort: cohort}
@@ -101,6 +95,7 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 
 	type RequestBody struct {
 		Content string `json:"content"`
+		Cohort  int    `json:"cohort"` // staff only: which cohort's board (learners always post to their own)
 	}
 
 	var body RequestBody
@@ -116,13 +111,17 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
+	target, allowed := boardCohortForPost(boardActor{role: staff.Effective(userData.Role, userData.StaffRole), cohorts: userData.StaffCohorts, ownCohort: userData.CohortNumber}, body.Cohort)
+	if !allowed {
+		return utils.SendError(c, fiber.StatusForbidden, "You can't post to that cohort's board")
+	}
 
 	userOID, _ := primitive.ObjectIDFromHex(userID.(string))
 
 	post := &domain.Post{
 		UserID:    userOID,
 		ZoomName:  userData.ZoomName,
-		Cohort:    userData.CohortNumber,
+		Cohort:    target,
 		Content:   body.Content,
 		Reactions: []domain.Reaction{},
 		Comments:  []domain.Comment{},
@@ -463,17 +462,15 @@ func (h *TalkBoardHandler) DeletePost(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
 	}
 
-	userRole := ""
 	currentUserID := ""
 	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
 		currentUserID = user.UserID
 	}
 
-	isAdmin := userRole == "admin"
+	a, _ := h.actor(c)
 	isOwner := post.UserID.Hex() == currentUserID
 
-	if !isAdmin && !isOwner {
+	if !isOwner && !boardMayModerate(a, post.Cohort) {
 		return utils.SendError(c, fiber.StatusForbidden, "You can only delete your own posts")
 	}
 
@@ -525,17 +522,15 @@ func (h *TalkBoardHandler) DeleteComment(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusNotFound, "Comment not found")
 	}
 
-	userRole := ""
 	currentUserID := ""
 	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
 		currentUserID = user.UserID
 	}
 
-	isAdmin := userRole == "admin"
+	a, _ := h.actor(c)
 	isOwner := commentFound.UserID.Hex() == currentUserID
 
-	if !isAdmin && !isOwner {
+	if !isOwner && !boardMayModerate(a, post.Cohort) {
 		return utils.SendError(c, fiber.StatusForbidden, "You can only delete your own comments")
 	}
 
