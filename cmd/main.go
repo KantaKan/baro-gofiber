@@ -127,6 +127,7 @@ func main() {
 	cancelIndexes()
 
 	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
+	go jobs.RunWeeklyReportJob(context.Background(), reportJob{slack: container.SlackService, rep: container.ReportService}, time.Minute)
 
 	// Close check-in sessions: once a minute, mark learners who didn't check in.
 	closer := attendance.NewSessionCloser(container.AttendanceRepo, container.LeaveRepo, container.UserService, container.CohortService, container.HolidayService)

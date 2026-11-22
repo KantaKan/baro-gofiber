@@ -300,3 +300,30 @@ func TestPostReport(t *testing.T) {
 		t.Errorf("log: %+v", e)
 	}
 }
+
+func TestReportAutoSettings(t *testing.T) {
+	s, _, _ := newSvc(t, map[string]string{"/auth.test": okAuth})
+	if auto, cohort, err := s.ReportAuto(); auto || cohort != 0 || err != nil {
+		t.Fatalf("not connected: %v %d %v", auto, cohort, err)
+	}
+	_ = s.Connect("xoxb-1")
+	if err := s.SaveSettings(Settings{ReportAuto: true, ReportCohort: 13}); err == nil {
+		t.Error("auto-send needs a report channel first")
+	}
+	if err := s.SaveSettings(Settings{Report: "CR", ReportAuto: true}); err == nil {
+		t.Error("auto-send needs a cohort")
+	}
+	if err := s.SaveSettings(Settings{Report: "CR", ReportAuto: true, ReportCohort: 13}); err != nil {
+		t.Fatal(err)
+	}
+	if auto, cohort, _ := s.ReportAuto(); !auto || cohort != 13 {
+		t.Errorf("round trip: %v %d", auto, cohort)
+	}
+	st, _ := s.Status()
+	if !st.ReportAuto || st.ReportCohort != 13 {
+		t.Errorf("status: %+v", st)
+	}
+	if err := s.SaveSettings(Settings{Report: "CR", ReportAuto: false}); err != nil {
+		t.Errorf("turning auto-send off needs nothing else: %v", err)
+	}
+}

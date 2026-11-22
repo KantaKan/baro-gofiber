@@ -127,6 +127,12 @@ func (s *Service) build(cohort int, week string, saved *Saved) (Report, error) {
 	return r, nil
 }
 
+// IsSent reports whether a week's report was already sent.
+func (s *Service) IsSent(cohort int, week string) (bool, error) {
+	saved, err := s.store.Get(cohort, week)
+	return saved != nil && saved.Status == StatusSent, err
+}
+
 // SaveNotes stores the team's notes; they lock when the report is sent.
 func (s *Service) SaveNotes(cohort int, week, notes string) error {
 	if err := s.check(cohort, week); err != nil {

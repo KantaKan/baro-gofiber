@@ -43,6 +43,9 @@ type Config struct {
 	AlertNewLeave bool   `bson:"alert_new_leave" json:"alert_new_leave"`
 	QuietFrom     string `bson:"quiet_from" json:"quiet_from"`
 	QuietTo       string `bson:"quiet_to" json:"quiet_to"`
+	// ReportAuto: post the weekly report for ReportCohort on Fridays at 17:00 Bangkok.
+	ReportAuto   bool `bson:"report_auto" json:"report_auto"`
+	ReportCohort int  `bson:"report_cohort" json:"report_cohort"`
 }
 
 type LogEntry struct {
@@ -106,6 +109,8 @@ type Status struct {
 	AlertNewLeave bool   `json:"alert_new_leave"`
 	QuietFrom     string `json:"quiet_from"`
 	QuietTo       string `json:"quiet_to"`
+	ReportAuto    bool   `json:"report_auto"`
+	ReportCohort  int    `json:"report_cohort"`
 }
 
 func (s *Service) Status() (Status, error) {
@@ -113,7 +118,7 @@ func (s *Service) Status() (Status, error) {
 	if err != nil || c == nil {
 		return Status{}, err
 	}
-	return Status{true, c.Team, c.Bot, c.Alerts, c.Report, c.Announce, c.AlertNewLeave, c.QuietFrom, c.QuietTo}, nil
+	return Status{true, c.Team, c.Bot, c.Alerts, c.Report, c.Announce, c.AlertNewLeave, c.QuietFrom, c.QuietTo, c.ReportAuto, c.ReportCohort}, nil
 }
 
 // Connected tells other code whether posting is possible.
@@ -162,6 +167,8 @@ type Settings struct {
 	Alerts, Report, Announce string
 	AlertNewLeave            bool
 	QuietFrom, QuietTo       string
+	ReportAuto               bool
+	ReportCohort             int
 }
 
 func validClock(v string) bool { return v == "" || minutes(v, -1) >= 0 }
@@ -177,9 +184,22 @@ func (s *Service) SaveSettings(in Settings) error {
 	if !validClock(in.QuietFrom) || !validClock(in.QuietTo) {
 		return errors.New("quiet hours must look like 21:00")
 	}
+	if in.ReportAuto && (in.Report == "" || in.ReportCohort <= 0) {
+		return errors.New("to send the weekly report automatically, pick a report channel and a cohort first")
+	}
+	c.ReportAuto, c.ReportCohort = in.ReportAuto, in.ReportCohort
 	c.Alerts, c.Report, c.Announce = in.Alerts, in.Report, in.Announce
 	c.AlertNewLeave, c.QuietFrom, c.QuietTo = in.AlertNewLeave, in.QuietFrom, in.QuietTo
 	return s.store.SaveConfig(c)
+}
+
+// ReportAuto reports whether the Friday auto-send is on, and for which cohort.
+func (s *Service) ReportAuto() (bool, int, error) {
+	c, err := s.store.Config()
+	if err != nil || c == nil {
+		return false, 0, err
+	}
+	return c.ReportAuto, c.ReportCohort, nil
 }
 
 func (s *Service) Channels() ([]Channel, error) {
