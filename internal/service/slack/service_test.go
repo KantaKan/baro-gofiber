@@ -219,3 +219,62 @@ func TestAsyncAlertNeverBlocksOrFails(t *testing.T) {
 		t.Fatalf("failures should be logged, got %+v", st.log)
 	}
 }
+
+func postCount(calls *[]call) int {
+	n := 0
+	for _, c := range *calls {
+		if c.path == "/chat.postMessage" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestPingCooldownAndFailureStop(t *testing.T) {
+	a, b := primitive.NewObjectID(), primitive.NewObjectID()
+	s, st, calls := newSvc(t, map[string]string{"/auth.test": okAuth, "/chat.postMessage": `{"ok":true}`})
+	_ = s.Connect("xoxb-1")
+	st.learners = []Learner{{ID: a, Name: "Mint", SlackID: "U1"}, {ID: b, Name: "Fah", SlackID: "U2"}}
+	res, _ := s.Ping([]primitive.ObjectID{a, b})
+	if res.Sent != 2 {
+		t.Fatalf("first ping: %+v", res)
+	}
+	before := postCount(calls)
+	res, _ = s.Ping([]primitive.ObjectID{a, b})
+	if res.Sent != 0 || res.Recent != 2 || postCount(calls) != before {
+		t.Fatalf("a second ping inside the cooldown must send nothing: %+v", res)
+	}
+	later := s.now().Add(PingCooldown + time.Minute)
+	s.now = func() time.Time { return later }
+	if res, _ = s.Ping([]primitive.ObjectID{a}); res.Sent != 1 || res.Recent != 0 {
+		t.Fatalf("after the cooldown pings work again: %+v", res)
+	}
+
+	bad, bst, bcalls := newSvc(t, map[string]string{"/auth.test": okAuth, "/chat.postMessage": `{"ok":false,"error":"ratelimited"}`})
+	_ = bad.Connect("xoxb-1")
+	for i := 0; i < 6; i++ {
+		bst.learners = append(bst.learners, Learner{ID: primitive.NewObjectID(), SlackID: "U" + string(rune('A'+i))})
+	}
+	ids := []primitive.ObjectID{}
+	for _, l := range bst.learners {
+		ids = append(ids, l.ID)
+	}
+	res, _ = bad.Ping(ids)
+	if res.Sent != 0 || res.Failed != 6 || postCount(bcalls) != 3 {
+		t.Fatalf("must give up after 3 failures in a row (posts=%d): %+v", postCount(bcalls), res)
+	}
+}
+
+func TestMatchClearsAStaleSlackID(t *testing.T) {
+	a := primitive.NewObjectID()
+	s, st, _ := newSvc(t, map[string]string{"/auth.test": okAuth, "/users.lookupByEmail": `{"ok":false,"error":"users_not_found"}`})
+	_ = s.Connect("xoxb-1")
+	st.learners = []Learner{{ID: a, Name: "Mint", Email: "mint@x.co", SlackID: "UOLD"}}
+	st.slackIDs[a] = "UOLD"
+	if _, err := s.Match(13); err != nil {
+		t.Fatal(err)
+	}
+	if st.slackIDs[a] != "" {
+		t.Errorf("a learner who is no longer found must not keep a Slack id, has %q", st.slackIDs[a])
+	}
+}

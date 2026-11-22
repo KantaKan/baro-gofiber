@@ -46,6 +46,8 @@ type CreateNotificationRequest struct {
 	RecipientIDs []string `json:"recipient_ids"`
 	// PostToSlack also posts the title and message to the announcements channel.
 	PostToSlack bool `json:"post_to_slack"`
+	// Audience is "everyone", "groups" or "people"; Slack posting needs "everyone".
+	Audience string `json:"audience"`
 }
 
 func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
@@ -98,6 +100,13 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 			ids = append(ids, id)
 		}
 		data["recipient_ids"] = ids
+	}
+	role := ""
+	if s, ok := StaffFrom(c); ok {
+		role = s.Role
+	}
+	if err := checkSlackPost(body.PostToSlack, role, body.Audience); err != nil {
+		return utils.SendError(c, fiber.StatusForbidden, err.Error())
 	}
 	if s, ok := StaffFrom(c); ok && s.Role == staff.TA {
 		var recips []*domain.User

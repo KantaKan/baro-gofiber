@@ -7,10 +7,17 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+// PingCooldown: a learner who was pinged is skipped for this long.
+const PingCooldown = 30 * time.Minute
+
+// maxFailsInARow: stop a Ping after this many consecutive Slack failures (an outage or bad token).
+const maxFailsInARow = 3
 
 const (
 	KindNewLeave = "new_leave"
@@ -69,6 +76,9 @@ type Service struct {
 	key    []byte
 	now    func() time.Time
 	appURL string
+
+	mu       sync.Mutex
+	lastPing map[string]time.Time // learner id -> last Ping, so nobody gets nagged repeatedly
 }
 
 func NewService(st Store, c *Client, key []byte) *Service {
@@ -76,7 +86,7 @@ func NewService(st Store, c *Client, key []byte) *Service {
 	if app == "" {
 		app = strings.TrimSpace(strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",")[0])
 	}
-	return &Service{store: st, client: c, key: key, now: time.Now, appURL: strings.TrimRight(app, "/")}
+	return &Service{store: st, client: c, key: key, now: time.Now, appURL: strings.TrimRight(app, "/"), lastPing: map[string]time.Time{}}
 }
 
 // Status is what the settings page may see: no token, ever.
@@ -243,6 +253,11 @@ func (s *Service) Match(cohort int) (MatchResult, error) {
 		}
 		if !found {
 			res.Missing = append(res.Missing, l)
+			if l.SlackID != "" { // they left the workspace or changed email: don't keep DMing an old id
+				if err := s.store.SetSlackID(l.ID, ""); err != nil {
+					return res, err
+				}
+			}
 			continue
 		}
 		if id != l.SlackID {
@@ -259,6 +274,7 @@ type PingResult struct {
 	Sent    int      `json:"sent"`
 	NoSlack []string `json:"no_slack"`
 	Failed  int      `json:"failed"`
+	Recent  int      `json:"recent"` // skipped: pinged within the cooldown
 	Quiet   bool     `json:"quiet"`
 }
 
@@ -281,18 +297,46 @@ func (s *Service) Ping(ids []primitive.ObjectID) (PingResult, error) {
 	if s.appURL != "" {
 		text += " " + s.appURL
 	}
-	for _, l := range ls {
+	fails := 0
+	for i, l := range ls {
 		if l.SlackID == "" {
 			res.NoSlack = append(res.NoSlack, l.ID.Hex())
 			continue
 		}
-		if err := s.post(KindPing, l.SlackID, text); err != nil {
-			res.Failed++
+		if s.recentlyPinged(l.ID.Hex()) {
+			res.Recent++
 			continue
 		}
+		if err := s.post(KindPing, l.SlackID, text); err != nil {
+			res.Failed++
+			if fails++; fails >= maxFailsInARow {
+				for _, rest := range ls[i+1:] {
+					if rest.SlackID != "" && !s.recentlyPinged(rest.ID.Hex()) {
+						res.Failed++
+					}
+				}
+				break
+			}
+			continue
+		}
+		fails = 0
+		s.markPinged(l.ID.Hex())
 		res.Sent++
 	}
 	return res, nil
+}
+
+func (s *Service) recentlyPinged(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.lastPing[id]
+	return ok && s.now().Sub(t) < PingCooldown
+}
+
+func (s *Service) markPinged(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastPing[id] = s.now()
 }
 
 // alertNow posts an admin alert if Slack is connected, the channel is set and the toggle for kind is on.

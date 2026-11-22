@@ -79,6 +79,9 @@ func (h *LeaveHandler) CreateLeaveRequest(c *fiber.Ctx) error {
 	if body.Type == "" || body.Date == "" || body.Reason == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Type, date, and reason are required")
 	}
+	if !validLeaveInput(body.Type, body.Date) {
+		return utils.SendError(c, fiber.StatusBadRequest, "That leave type or date isn't valid")
+	}
 
 	oid, err := primitive.ObjectIDFromHex(userID.(string))
 	if err != nil {

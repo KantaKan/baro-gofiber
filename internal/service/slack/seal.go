@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -18,6 +19,10 @@ func KeyFromEnv() []byte {
 	if k, err := base64.StdEncoding.DecodeString(os.Getenv("SLACK_ENC_KEY")); err == nil && len(k) == 32 {
 		return k
 	}
+	if os.Getenv("SLACK_ENC_KEY") != "" {
+		log.Println("WARNING: SLACK_ENC_KEY is not a base64 32-byte key; falling back to a key derived from JWT_SECRET_KEY")
+	}
+	// Note: rotating JWT_SECRET_KEY changes this key, and the stored Slack token must then be re-entered.
 	h := sha256.Sum256([]byte("baro-slack:" + os.Getenv("JWT_SECRET_KEY")))
 	return h[:]
 }
