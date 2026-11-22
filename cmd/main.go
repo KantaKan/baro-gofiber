@@ -186,6 +186,7 @@ func main() {
 		AdminViews:   container.AdminViewsHandler,
 		AdminMark:    container.AdminMarkHandler,
 		Care:         container.CareHandler,
+		Wellbeing:    container.WellbeingHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
