@@ -24,6 +24,7 @@ type Handlers struct {
 	AdminMark    *handler.AdminMarkHandler
 	Care         *handler.LearnerCareHandler
 	Wellbeing    *handler.WellbeingViewsHandler
+	CohortAdmin  *handler.CohortAdminHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -218,6 +219,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 
 	admin.Get("/cohorts/:cohort/settings", h.Cohort.GetSettings)
 	admin.Put("/cohorts/:cohort/settings", h.Cohort.UpdateSettings)
+	admin.Put("/cohorts/:cohort/groups", h.CohortAdmin.MoveGroups)
+	admin.Post("/cohorts", h.CohortAdmin.Create)
 
 	admin.Post("/cup/awards", h.Cup.Award)
 	admin.Delete("/cup/awards/:id", h.Cup.DeleteAward)

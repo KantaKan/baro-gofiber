@@ -1,6 +1,7 @@
 package cohort
 
 import (
+	"errors"
 	"testing"
 
 	"gofiber-baro/internal/domain"
@@ -60,5 +61,21 @@ func TestUpdateRejects(t *testing.T) {
 	}
 	if r.m[13].CohortNumber != 13 || len(r.m[13].AllowedNetworks) != 2 {
 		t.Errorf("stored wrong: %+v", r.m[13])
+	}
+}
+
+func TestCreate(t *testing.T) {
+	s, r := newSvc()
+	if err := s.Create(14, "2026-12-01", 75); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if r.m[14].StartDate != "2026-12-01" || r.m[14].CourseDays != 75 || r.m[14].Rules.Morning.LateAfter.H != 9 {
+		t.Errorf("stored %+v", r.m[14])
+	}
+	if err := s.Create(14, "2027-01-01", 60); !errors.Is(err, ErrCohortExists) || r.m[14].StartDate != "2026-12-01" {
+		t.Errorf("existing cohort must give ErrCohortExists and stay unchanged, got %v %+v", err, r.m[14])
+	}
+	if s.Create(0, "2026-12-01", 75) == nil || s.Create(15, "bad", 75) == nil || s.Create(15, "2026-12-01", 0) == nil {
+		t.Error("bad input accepted")
 	}
 }
