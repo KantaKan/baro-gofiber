@@ -59,6 +59,7 @@ func slackApp(s *stubSlack) *fiber.App {
 	app.Post("/admin/settings/slack/match", h.Match)
 	app.Get("/admin/settings/slack/log", h.Log)
 	app.Post("/admin/nudges/ping", h.Ping)
+	app.Get("/admin/nudges/status", h.Available)
 	return app
 }
 
@@ -95,6 +96,19 @@ func TestSlackHandler(t *testing.T) {
 	}
 	if code, _ := slackCall(app, "POST", "/admin/settings/slack/match", `{"cohort":13}`); code != 200 {
 		t.Errorf("match %d", code)
+	}
+}
+
+func TestAvailableShowsOnlyWhetherConnected(t *testing.T) {
+	s := &stubSlack{}
+	app := slackApp(s)
+	code, body := slackCall(app, "GET", "/admin/nudges/status", "")
+	if code != 200 || !strings.Contains(body, `"connected":false`) || strings.Contains(body, "Generation") || strings.Contains(body, "manifest") {
+		t.Errorf("not connected: %d %s", code, body)
+	}
+	s.connected = true
+	if _, body := slackCall(app, "GET", "/admin/nudges/status", ""); !strings.Contains(body, `"connected":true`) || strings.Contains(body, "Generation") {
+		t.Errorf("connected: %s", body)
 	}
 }
 

@@ -175,6 +175,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/settings/slack/match", h.Slack.Match)
 	admin.Get("/settings/slack/log", h.Slack.Log)
 	admin.Post("/nudges/ping", h.Slack.Ping)
+	admin.Get("/nudges/status", h.Slack.Available)
 	admin.Get("/users", h.Admin.GetAllUsers)
 	admin.Get("/userreflections/:id", h.Admin.GetUserWithReflections)
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)

@@ -40,6 +40,16 @@ func (h *SlackHandler) Status(c *fiber.Ctx) error {
 	})
 }
 
+// Available tells any staff member whether Slack is connected (so Ping can show), nothing more.
+// @Summary  Is Slack connected  @Tags admin  @Security BearerAuth  @Router /admin/nudges/status [get]
+func (h *SlackHandler) Available(c *fiber.Ctx) error {
+	st, err := h.svc.Status()
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Couldn't check Slack")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "ok", fiber.Map{"connected": st.Connected})
+}
+
 // Connect verifies and stores a bot token.
 // @Summary  Connect Slack  @Tags admin  @Security BearerAuth  @Router /admin/settings/slack/connect [post]
 func (h *SlackHandler) Connect(c *fiber.Ctx) error {
