@@ -469,17 +469,29 @@ func (r *userRepository) hasProtectedDate(ctx context.Context, userID primitive.
 	return count > 0, nil
 }
 
-func (r *userRepository) UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error {
+// reflectionFeedbackUpdate sets the reply with who wrote it and when; a blank reply clears all of it.
+func reflectionFeedbackUpdate(feedback string, author domain.FeedbackAuthor) bson.M {
+	if strings.TrimSpace(feedback) == "" {
+		return bson.M{
+			"$set":   bson.M{"reflections.$.admin_feedback": ""},
+			"$unset": bson.M{"reflections.$.admin_feedback_by": "", "reflections.$.admin_feedback_name": "", "reflections.$.admin_feedback_at": ""},
+		}
+	}
+	return bson.M{"$set": bson.M{
+		"reflections.$.admin_feedback":      feedback,
+		"reflections.$.admin_feedback_by":   author.ID,
+		"reflections.$.admin_feedback_name": author.Name,
+		"reflections.$.admin_feedback_at":   author.At,
+	}}
+}
+
+func (r *userRepository) UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string, author domain.FeedbackAuthor) error {
 	c := ctx.(context.Context)
 	filter := bson.M{
 		"_id":             userID,
 		"reflections._id": reflectionID,
 	}
-	update := bson.M{
-		"$set": bson.M{
-			"reflections.$.admin_feedback": feedback,
-		},
-	}
+	update := reflectionFeedbackUpdate(feedback, author)
 	result, err := r.collection.UpdateOne(c, filter, update)
 	if err != nil {
 		return err

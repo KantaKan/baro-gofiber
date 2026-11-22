@@ -54,8 +54,12 @@ type Reflection struct {
 	CreatedAt      time.Time          `bson:"createdAt" json:"createdAt"`
 	ReflectionData ReflectionContent  `bson:"reflection" json:"reflection"`
 	AdminFeedback  string             `bson:"admin_feedback,omitempty" json:"admin_feedback,omitempty"`
-	RewardBoxes    []TeacherGiftBox   `bson:"-" json:"reward_boxes,omitempty"`
-	RewardWarning  string             `bson:"-" json:"reward_warning,omitempty"`
+	// who wrote the reply (user id and their Zoom name or first name) and when
+	AdminFeedbackBy   string           `bson:"admin_feedback_by,omitempty" json:"admin_feedback_by,omitempty"`
+	AdminFeedbackName string           `bson:"admin_feedback_name,omitempty" json:"admin_feedback_name,omitempty"`
+	AdminFeedbackAt   *time.Time       `bson:"admin_feedback_at,omitempty" json:"admin_feedback_at,omitempty"`
+	RewardBoxes       []TeacherGiftBox `bson:"-" json:"reward_boxes,omitempty"`
+	RewardWarning     string           `bson:"-" json:"reward_warning,omitempty"`
 }
 
 func (r Reflection) MarshalJSON() ([]byte, error) {
@@ -70,6 +74,13 @@ func (r Reflection) MarshalJSON() ([]byte, error) {
 		CreatedAt: r.CreatedAt.In(thailandLoc).Format(time.RFC3339),
 		Alias:     (*Alias)(&r),
 	})
+}
+
+// FeedbackAuthor is the staff member replying to a reflection.
+type FeedbackAuthor struct {
+	ID   string
+	Name string
+	At   time.Time
 }
 
 type ReflectionContent struct {
@@ -300,7 +311,7 @@ type UserRepository interface {
 	UseCareEnergyCharacter(ctx interface{}, userID primitive.ObjectID, effect string) error
 	GiftCareEnergy(ctx interface{}, giverID, recipientID primitive.ObjectID, quantity, points int, note string) error
 	RescueCareEnergy(ctx interface{}, giverID, recipientID primitive.ObjectID, dateStr, note string) error
-	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string) error
+	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string, author FeedbackAuthor) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
 	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error
 	DeleteProfileComment(ctx interface{}, userID primitive.ObjectID, commentID primitive.ObjectID) error

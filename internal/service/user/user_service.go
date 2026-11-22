@@ -98,9 +98,9 @@ func (s *Service) AwardBadge(userID primitive.ObjectID, badgeType, badgeName, em
 	return s.repo.AddBadge(ctx, userID, badge)
 }
 
-func (s *Service) UpdateReflectionFeedback(userID, reflectionID primitive.ObjectID, feedback string) error {
+func (s *Service) UpdateReflectionFeedback(userID, reflectionID primitive.ObjectID, feedback string, author domain.FeedbackAuthor) error {
 	ctx := context.Background()
-	return s.repo.UpdateReflectionFeedback(ctx, userID, reflectionID, feedback)
+	return s.repo.UpdateReflectionFeedback(ctx, userID, reflectionID, feedback, author)
 }
 
 func (s *Service) CreateReflection(userID primitive.ObjectID, reflection domain.Reflection) (*domain.Reflection, error) {

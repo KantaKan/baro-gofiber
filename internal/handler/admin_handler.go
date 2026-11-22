@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"time"
+
+	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/reflection"
 	"gofiber-baro/internal/service/user"
 	"gofiber-baro/pkg/middleware"
@@ -388,7 +391,11 @@ func (h *AdminHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reflection ID")
 	}
 
-	if err := h.userService.UpdateReflectionFeedback(userID, reflectionID, body.Feedback); err != nil {
+	var replier *domain.User
+	if id, ok := c.Locals("userID").(string); ok {
+		replier, _ = h.userService.GetUserByID(id)
+	}
+	if err := h.userService.UpdateReflectionFeedback(userID, reflectionID, body.Feedback, feedbackAuthor(replier, time.Now())); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating feedback")
 	}
 
