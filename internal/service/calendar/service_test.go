@@ -273,3 +273,16 @@ func TestZoomLink(t *testing.T) {
 		t.Errorf("clearing the link: %v", err)
 	}
 }
+
+func TestAdminSetZoomLinkSurvivesAReimport(t *testing.T) {
+	s, st := newSvc()
+	data := bookBytes(t, fixture(t))
+	_, _ = s.Import(13, start, data, sheet, true, "kan")
+	_ = s.SetZoom(13, "https://zoom.us/j/ADMIN")
+	if _, err := s.Import(13, start, data, sheet, true, "kan"); err != nil {
+		t.Fatal(err)
+	}
+	if st.cal.ZoomURL != "https://zoom.us/j/ADMIN" {
+		t.Errorf("a link the admin set must not be replaced by the sheet's: %q", st.cal.ZoomURL)
+	}
+}

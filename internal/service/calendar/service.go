@@ -126,7 +126,7 @@ func (s *Service) ImportAt(cohort int, startDate string, data []byte, sheet stri
 	var old []Week
 	if existing != nil {
 		old = existing.Weeks
-		if pv.ZoomURL == "" {
+		if existing.ZoomURL != "" { // a link the admin set (or kept) wins over the sheet's
 			pv.ZoomURL = existing.ZoomURL
 		}
 		// Published state is the admin's decision, not the file's: carry it over per week.

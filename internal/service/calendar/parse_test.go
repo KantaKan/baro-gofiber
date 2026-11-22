@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -252,6 +253,88 @@ func TestColourWarningsAreGroupedPerColour(t *testing.T) {
 	for _, w := range p.Warnings {
 		if strings.Contains(strings.ToLower(w.Message), "febf00") && w.Level != "warn" {
 			t.Errorf("a near-miss colour (likely a slip) stays a warning: %+v", w)
+		}
+	}
+}
+
+func TestHugeMergedRangesCannotExhaustMemory(t *testing.T) {
+	f := fixture(t)
+	b := &book{t: t, f: f}
+	// A crafted file can claim a session spans a million rows; only the week's 32 slots matter.
+	b.session("B100", "B1000100", "T-BIG Enormous session - (Kan)", "3BCAFD")
+	began := time.Now()
+	p, err := ParseSheet(f, sheet, "2026-06-29")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(began) > 3*time.Second {
+		t.Fatalf("parsing took %s; ranges must be clamped to the grid", time.Since(began))
+	}
+	for _, d := range p.Weeks[1].Days {
+		for _, s := range d.Sessions {
+			if s.End > "17:00" {
+				t.Errorf("a clamped session must not run past the grid: %+v", s)
+			}
+		}
+	}
+}
+
+func TestTooManyMergedCellsIsRefused(t *testing.T) {
+	f := fixture(t)
+	b := &book{t: t, f: f}
+	for i := 0; i < maxMerges+5; i++ {
+		_ = f.MergeCell(sheet, fmt.Sprintf("N%d", 2*i+1), fmt.Sprintf("N%d", 2*i+2))
+	}
+	_ = b
+	if _, err := ParseSheet(f, sheet, "2026-06-29"); err == nil || !strings.Contains(err.Error(), "merged") {
+		t.Errorf("an absurd number of merged cells must be refused: %v", err)
+	}
+}
+
+func TestWeekZeroAndDuplicateWeeksAreFlagged(t *testing.T) {
+	f := fixture(t)
+	b := &book{t: t, f: f}
+	b.header(200, "WEEK 0", 0, [5]string{"22-Jun", "23-Jun", "24-Jun", "25-Jun", "26-Jun"}, "Facilitator")
+	b.session("B203", "B203", "T-ORI Orientation - (Kan)", "C9DAF8")
+	b.header(240, "WEEK 2", 6, [5]string{"6-Jul", "7-Jul", "8-Jul", "9-Jul", "10-Jul"}, "Facilitator")
+	b.session("B243", "B243", "T-DUP Duplicate - (Kan)", "3BCAFD")
+	p, err := ParseSheet(f, sheet, "2026-06-29")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[int]int{}
+	for _, w := range p.Weeks {
+		seen[w.N]++
+		if w.N <= 0 {
+			t.Errorf("a week numbered %d can never be published", w.N)
+		}
+	}
+	for n, c := range seen {
+		if c > 1 {
+			t.Errorf("week %d appears %d times", n, c)
+		}
+	}
+	if !hasWarning(p, 0, "week 0") || !hasWarning(p, 2, "twice") {
+		t.Errorf("both problems are reported: %+v", p.Warnings)
+	}
+}
+
+func TestContentOutsideTheGridIsReported(t *testing.T) {
+	f := fixture(t)
+	b := &book{t: t, f: f}
+	b.session("B79", "B79", "Weekly Chat - (Kan)", "") // the 17:00–18:00 row of week 1
+	p, err := ParseSheet(f, sheet, "2026-06-29")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasWarning(p, 1, "below the 17:00") {
+		t.Errorf("text below the 09:00–17:00 grid must not vanish silently: %+v", p.Warnings)
+	}
+	b.session("C79", "C79", "Holiday", "")
+	p, _ = ParseSheet(f, sheet, "2026-06-29")
+	for _, w := range p.Warnings {
+		if strings.Contains(w.Message, "Holiday") {
+			t.Errorf("a repeated Holiday marker below the grid is not worth a note: %+v", w)
 		}
 	}
 }

@@ -21,6 +21,7 @@ const (
 	dayStart    = 9 * 60
 	dayEnd      = dayStart + slotsPerDay*slotMinutes
 	maxRows     = 6000
+	maxMerges   = 20000
 )
 
 type Session struct {
@@ -289,11 +290,17 @@ func ParseSheet(f *excelize.File, sheet, startDate string) (Parsed, error) {
 	info := map[[2]int]cellInfo{}
 	covered := map[[2]int]bool{}
 	merges, _ := f.GetMergeCells(sheet)
+	if len(merges) > maxMerges {
+		return Parsed{}, fmt.Errorf("sheet %q has too many merged cells (%d)", sheet, len(merges))
+	}
 	for _, m := range merges {
 		sc, sr, e1 := excelize.CellNameToCoordinates(m.GetStartAxis())
 		ec, er, e2 := excelize.CellNameToCoordinates(m.GetEndAxis())
 		if e1 != nil || e2 != nil || sc > 6 || ec < 2 {
 			continue
+		}
+		if er > sr+slotsPerDay { // only a day's 32 slots matter; a crafted file may claim millions of rows
+			er = sr + slotsPerDay
 		}
 		anchor := m.GetStartAxis()
 		ci := cellInfo{rows: er - sr + 1, text: strings.TrimSpace(m.GetCellValue()), fill: rd.fill(anchor)}
@@ -312,6 +319,7 @@ func ParseSheet(f *excelize.File, sheet, startDate string) (Parsed, error) {
 	}
 
 	colours := colourStats{}
+	seenWeeks := map[int]bool{}
 	prevFirstDay := 0
 	for i, row := range rows {
 		if len(row) < 2 {
@@ -323,6 +331,15 @@ func ParseSheet(f *excelize.File, sheet, startDate string) (Parsed, error) {
 			continue // the template block ("DATE") and everything else
 		}
 		n, _ := strconv.Atoi(wm[1])
+		if n <= 0 {
+			warn(0, "", "Week 0 was skipped: weeks are numbered from 1, so it can't be published. Add it as week 1 or leave it out.")
+			continue
+		}
+		if seenWeeks[n] {
+			warn(n, "", fmt.Sprintf("Week %d appears twice in the sheet; only the first one is used.", n))
+			continue
+		}
+		seenWeeks[n] = true
 		firstDay, _ := strconv.Atoi(dm[1])
 		header := i + 1
 		dateRow := header + 2
@@ -377,10 +394,26 @@ func ParseSheet(f *excelize.File, sheet, startDate string) (Parsed, error) {
 				}
 				if endMin > dayEnd {
 					warn(n, day.Date, fmt.Sprintf("%s %s ends after 17:00 (%s); check the merged cells in the sheet.", day.Label, strings.TrimSpace(s.Code+" "+s.Title), s.End))
+					s.End = hhmm(dayEnd) // never show a session running past the end of the grid
 				}
 				day.Sessions = append(day.Sessions, s)
 			}
 			w.Days = append(w.Days, day)
+		}
+		// Anything just below the 17:00 row isn't imported; say so instead of dropping it silently.
+		var stray []string
+		for r := first + slotsPerDay; r < first+slotsPerDay+4 && len(stray) < 3; r++ {
+			for c := 2; c <= 6 && len(stray) < 3; c++ {
+				if v := rd.value(cellName(c, r)); v != "" && !strings.HasPrefix(strings.ToLower(v), "holiday") { // holidays are repeated down the column; already handled
+					if len(v) > 40 {
+						v = v[:40] + "…"
+					}
+					stray = append(stray, fmt.Sprintf("%s: %q", cellName(c, r), strings.ReplaceAll(v, "\n", " ")))
+				}
+			}
+		}
+		if len(stray) > 0 {
+			out.Warnings = append(out.Warnings, Warning{"info", n, "", "Text below the 17:00 row was not imported (" + strings.Join(stray, "; ") + ")."})
 		}
 		out.Weeks = append(out.Weeks, w)
 	}
