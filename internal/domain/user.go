@@ -97,15 +97,19 @@ type ProfileComment struct {
 }
 
 type User struct {
-	ID                 primitive.ObjectID   `bson:"_id,omitempty" json:"_id"`
-	JSDNumber          string               `bson:"jsd_number" json:"jsd_number"`
-	FirstName          string               `bson:"first_name" json:"first_name"`
-	LastName           string               `bson:"last_name" json:"last_name"`
-	Email              string               `bson:"email" json:"email"`
-	CohortNumber       int                  `bson:"cohort_number" json:"cohort_number"`
-	Reflections        []Reflection         `bson:"reflections" json:"reflections"`
-	Password           string               `bson:"password,omitempty" json:"password,omitempty"`
-	Role               string               `bson:"role" json:"role"`
+	ID           primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	JSDNumber    string             `bson:"jsd_number" json:"jsd_number"`
+	FirstName    string             `bson:"first_name" json:"first_name"`
+	LastName     string             `bson:"last_name" json:"last_name"`
+	Email        string             `bson:"email" json:"email"`
+	CohortNumber int                `bson:"cohort_number" json:"cohort_number"`
+	Reflections  []Reflection       `bson:"reflections" json:"reflections"`
+	Password     string             `bson:"password,omitempty" json:"password,omitempty"`
+	Role         string             `bson:"role" json:"role"`
+	// Staff only (role "admin"): owner | admin | ta | viewer; empty = owner (accounts from before roles).
+	StaffRole          string               `bson:"staff_role,omitempty" json:"staff_role,omitempty"`
+	StaffCohorts       []int                `bson:"staff_cohorts,omitempty" json:"staff_cohorts,omitempty"`
+	StaffGroups        []string             `bson:"staff_groups,omitempty" json:"staff_groups,omitempty"`
 	StartupStoryOptOut bool                 `bson:"startup_story_opt_out,omitempty" json:"startup_story_opt_out,omitempty"`
 	ProjectGroup       string               `bson:"project_group" json:"project_group"`
 	GenmateGroup       string               `bson:"genmate_group" json:"genmate_group"`

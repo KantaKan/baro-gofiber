@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"gofiber-baro/config"
+	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/jobs"
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/cup"
+	"gofiber-baro/pkg/middleware"
 	"gofiber-baro/pkg/utils"
 	"log"
 	"net/url"
@@ -72,6 +75,17 @@ func main() {
 	log.Println("Successfully connected to MongoDB")
 
 	container := NewContainer(config.DB)
+	// A removed team member's token stays valid for days; check staff tokens against the database.
+	middleware.StaffStillActive = func(id string) (bool, error) {
+		u, err := container.UserService.GetUserByID(id)
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		return u.Role == "admin", nil
+	}
 	indexCtx, cancelIndexes := context.WithTimeout(context.Background(), 10*time.Second)
 	if err := container.CharacterRepo.EnsureIndexes(indexCtx); err != nil {
 		cancelIndexes()
@@ -87,6 +101,9 @@ func main() {
 	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
 	if err := container.CareRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure care indexes:", err)
+	}
+	if err := container.StaffRepo.EnsureIndexes(indexCtx); err != nil {
+		log.Fatal("Failed to ensure staff invite indexes:", err)
 	}
 	if err := container.CupRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure GenMate Cup indexes:", err)
@@ -189,6 +206,8 @@ func main() {
 		Wellbeing:    container.WellbeingHandler,
 		CohortAdmin:  container.CohortAdminHandler,
 		Activity:     container.ActivityHandler,
+		StaffGuard:   container.StaffGuard,
+		Team:         container.TeamHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,

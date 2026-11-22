@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"gofiber-baro/internal/service/staff"
 	"html"
 	"log"
 	"strings"
@@ -336,9 +337,19 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusForbidden, "Only admins can update general user information. Learners should use the personal-details endpoint.")
 	}
 
+	// The JWT only says "admin"; ask the database what this person may do now.
+	caller, cerr := h.userService.GetUserByID(claims.UserID)
+	if cerr != nil || !mayEditUsers(caller) {
+		return utils.SendError(c, fiber.StatusForbidden, "Your role can't edit users")
+	}
+
 	var body map[string]interface{}
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	body, ok = cleanUserUpdate(body)
+	if !ok {
+		return utils.SendError(c, fiber.StatusBadRequest, "Roles and team access are changed on the Team page, not here")
 	}
 
 	if err := h.userService.UpdateUser(id, body); err != nil {
@@ -1129,13 +1140,40 @@ func (h *UserHandler) GetDomainUserByID(id string) (*domain.User, error) {
 	return h.userService.GetUserByID(id)
 }
 
+// mayEditUsers: only an Owner or Admin may use the general user update.
+func mayEditUsers(u *domain.User) bool {
+	if u == nil {
+		return false
+	}
+	return staff.Can(staff.Effective(u.Role, u.StaffRole), staff.CapCohortAdmin)
+}
+
+// cleanUserUpdate refuses an update that touches role or team fields (or the id) and an empty one.
+func cleanUserUpdate(body map[string]interface{}) (map[string]interface{}, bool) {
+	if len(body) == 0 {
+		return nil, false
+	}
+	for k := range body {
+		switch strings.ToLower(k) {
+		case "role", "staff_role", "staff_cohorts", "staff_groups", "_id", "id":
+			return nil, false
+		}
+	}
+	return body, true
+}
+
+// canLogIn: right password, and not a removed team member.
+func canLogIn(u *domain.User, password string) bool {
+	return u.Role != "disabled" && utils.CheckPasswordHash(password, u.Password)
+}
+
 func (h *UserHandler) authenticateUser(email, password string) (string, string, string, error) {
 	user, err := h.userService.GetUserByEmail(email)
 	if err != nil {
 		return "", "", "", errors.New("invalid credentials")
 	}
 
-	if !utils.CheckPasswordHash(password, user.Password) {
+	if !canLogIn(user, password) {
 		return "", "", "", errors.New("invalid credentials")
 	}
 

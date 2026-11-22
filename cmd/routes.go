@@ -26,6 +26,8 @@ type Handlers struct {
 	Wellbeing    *handler.WellbeingViewsHandler
 	CohortAdmin  *handler.CohortAdminHandler
 	Activity     *handler.ActivityHandler
+	StaffGuard   fiber.Handler
+	Team         *handler.TeamHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -53,6 +55,8 @@ func setupRoutes(app *fiber.App, h Handlers) {
 		},
 	})
 	app.Post("/login", loginLimiter, h.User.LoginUser)
+	app.Get("/invites/:token", loginLimiter, h.Team.Lookup)
+	app.Post("/invites/:token/accept", loginLimiter, h.Team.Accept)
 	app.Get("/api/verify-token", middleware.AuthMiddleware, h.User.VerifyToken)
 
 	notifications := app.Group("/api/notifications", middleware.AuthMiddleware)
@@ -153,7 +157,14 @@ func setupRoutes(app *fiber.App, h Handlers) {
 		},
 	})
 
-	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole, adminLimiter)
+	admin := app.Group("/admin", middleware.AuthMiddleware, middleware.CheckAdminRole, h.StaffGuard, adminLimiter)
+	admin.Get("/me", handler.StaffMe)
+	admin.Get("/team", h.Team.List)
+	admin.Post("/team/invites", h.Team.Invite)
+	admin.Post("/team/invites/:id/renew", h.Team.Renew)
+	admin.Delete("/team/invites/:id", h.Team.CancelInvite)
+	admin.Patch("/team/:id", h.Team.Update)
+	admin.Delete("/team/:id", h.Team.Remove)
 	admin.Get("/users", h.Admin.GetAllUsers)
 	admin.Get("/userreflections/:id", h.Admin.GetUserWithReflections)
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)

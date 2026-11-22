@@ -3,6 +3,7 @@ package handler
 import (
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/notification"
+	"gofiber-baro/internal/service/staff"
 	"gofiber-baro/pkg/utils"
 	"time"
 
@@ -12,6 +13,13 @@ import (
 
 type NotificationHandler struct {
 	notificationService *notification.Service
+	users               staffLookup // for the TA own-groups rule; nil = no check
+}
+
+// WithUsers enables the TA own-groups check on new announcements.
+func (h *NotificationHandler) WithUsers(u staffLookup) *NotificationHandler {
+	h.users = u
+	return h
 }
 
 func NewNotificationHandler(notificationService *notification.Service) *NotificationHandler {
@@ -81,6 +89,19 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 			ids = append(ids, id)
 		}
 		data["recipient_ids"] = ids
+	}
+	if s, ok := StaffFrom(c); ok && s.Role == staff.TA {
+		var recips []*domain.User
+		for _, id := range body.RecipientIDs {
+			var u *domain.User
+			if h.users != nil {
+				u, _ = h.users.GetUserByID(id)
+			}
+			recips = append(recips, u)
+		}
+		if !taMayAnnounce(s, recips) {
+			return utils.SendError(c, fiber.StatusForbidden, "TAs can only send to learners in their own groups")
+		}
 	}
 
 	notif, err := h.notificationService.CreateNotification(data)
