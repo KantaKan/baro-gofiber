@@ -29,6 +29,7 @@ type Handlers struct {
 	StaffGuard   fiber.Handler
 	Team         *handler.TeamHandler
 	Slack        *handler.SlackHandler
+	Report       *handler.ReportHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -175,6 +176,9 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/settings/slack/match", h.Slack.Match)
 	admin.Get("/settings/slack/log", h.Slack.Log)
 	admin.Post("/nudges/ping", h.Slack.Ping)
+	admin.Get("/report", h.Report.Get)
+	admin.Put("/report/notes", h.Report.SaveNotes)
+	admin.Post("/report/send", h.Report.Send)
 	admin.Get("/nudges/status", h.Slack.Available)
 	admin.Get("/users", h.Admin.GetAllUsers)
 	admin.Get("/userreflections/:id", h.Admin.GetUserWithReflections)

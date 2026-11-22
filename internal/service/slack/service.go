@@ -24,6 +24,7 @@ const (
 	KindAnnounce = "announcement"
 	KindPing     = "ping"
 	KindTest     = "test"
+	KindReport   = "weekly_report"
 )
 
 var (
@@ -81,12 +82,17 @@ type Service struct {
 	lastPing map[string]time.Time // learner id -> last Ping, so nobody gets nagged repeatedly
 }
 
-func NewService(st Store, c *Client, key []byte) *Service {
+// AppURL is the public address of the app: APP_URL, else the first CORS origin. Used for links in Slack.
+func AppURL() string {
 	app := strings.TrimSpace(os.Getenv("APP_URL"))
 	if app == "" {
 		app = strings.TrimSpace(strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",")[0])
 	}
-	return &Service{store: st, client: c, key: key, now: time.Now, appURL: strings.TrimRight(app, "/"), lastPing: map[string]time.Time{}}
+	return strings.TrimRight(app, "/")
+}
+
+func NewService(st Store, c *Client, key []byte) *Service {
+	return &Service{store: st, client: c, key: key, now: time.Now, appURL: AppURL(), lastPing: map[string]time.Time{}}
 }
 
 // Status is what the settings page may see: no token, ever.
@@ -370,6 +376,19 @@ func (s *Service) PostAnnouncement(title, message string) error {
 		return nil
 	}
 	return s.post(KindAnnounce, c.Announce, "*"+title+"*\n"+message)
+}
+
+// PostReport posts the weekly report to the report channel. posted=false with no error means
+// Slack isn't connected or no report channel is set.
+func (s *Service) PostReport(text string) (bool, error) {
+	c, err := s.store.Config()
+	if err != nil || c == nil || c.Report == "" {
+		return false, nil
+	}
+	if err := s.post(KindReport, c.Report, text); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // AnnounceAsync is the fire-and-forget form used by the announcement handler.

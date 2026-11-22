@@ -102,6 +102,9 @@ func main() {
 	if err := container.CareRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure care indexes:", err)
 	}
+	if err := container.ReportRepo.EnsureIndexes(indexCtx); err != nil {
+		log.Fatal("Failed to ensure weekly report indexes:", err)
+	}
 	if err := container.SlackRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure Slack log indexes:", err)
 	}
@@ -212,6 +215,7 @@ func main() {
 		StaffGuard:   container.StaffGuard,
 		Team:         container.TeamHandler,
 		Slack:        container.SlackHandler,
+		Report:       container.ReportHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
