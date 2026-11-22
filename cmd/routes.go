@@ -28,6 +28,7 @@ type Handlers struct {
 	Activity     *handler.ActivityHandler
 	StaffGuard   fiber.Handler
 	Team         *handler.TeamHandler
+	Slack        *handler.SlackHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -165,6 +166,15 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Delete("/team/invites/:id", h.Team.CancelInvite)
 	admin.Patch("/team/:id", h.Team.Update)
 	admin.Delete("/team/:id", h.Team.Remove)
+	admin.Get("/settings/slack", h.Slack.Status)
+	admin.Post("/settings/slack/connect", h.Slack.Connect)
+	admin.Delete("/settings/slack", h.Slack.Disconnect)
+	admin.Put("/settings/slack/settings", h.Slack.SaveSettings)
+	admin.Get("/settings/slack/channels", h.Slack.Channels)
+	admin.Post("/settings/slack/test", h.Slack.Test)
+	admin.Post("/settings/slack/match", h.Slack.Match)
+	admin.Get("/settings/slack/log", h.Slack.Log)
+	admin.Post("/nudges/ping", h.Slack.Ping)
 	admin.Get("/users", h.Admin.GetAllUsers)
 	admin.Get("/userreflections/:id", h.Admin.GetUserWithReflections)
 	admin.Post("/users/:id/badges", h.Admin.AwardBadge)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gofiber-baro/internal/service/slack"
 	"gofiber-baro/internal/service/staff"
 	"gofiber-baro/pkg/utils"
 	"log"
@@ -102,6 +103,9 @@ type Container struct {
 	StaffGuard          fiber.Handler
 	CareRepo            *repository.CareRepository
 	StaffRepo           *repository.StaffRepository
+	SlackRepo           *repository.SlackRepository
+	SlackService        *slack.Service
+	SlackHandler        *handler.SlackHandler
 	TeamHandler         *handler.TeamHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
@@ -213,6 +217,9 @@ func (c *Container) initHandlers() {
 	c.AdminMarkHandler = handler.NewAdminMarkHandler(c.AttendanceSubmissionService, c.AttendanceRepo)
 	c.CareRepo = repository.NewCareRepository(c.DB)
 	c.StaffRepo = repository.NewStaffRepository(c.DB)
+	c.SlackRepo = repository.NewSlackRepository(c.DB)
+	c.SlackService = slack.NewService(c.SlackRepo, slack.NewClient(), slack.KeyFromEnv())
+	c.SlackHandler = handler.NewSlackHandler(c.SlackService)
 	c.TeamHandler = handler.NewTeamHandler(staff.NewTeam(c.StaffRepo))
 	c.CareHandler = handler.NewLearnerCareHandler(c.CareRepo, c.UserService)
 	c.WellbeingHandler = handler.NewWellbeingViewsHandler(c.UserService, c.AttendanceRepo, c.HolidayService, c.CareRepo)
