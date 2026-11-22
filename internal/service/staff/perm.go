@@ -76,6 +76,7 @@ var writes = []struct {
 	{"/reflections/", CapCare},
 	{"/notes", CapCare},
 	{"/support", CapCare},
+	{"/nudges", CapMark},
 	{"/attendance/mark", CapMark},
 	{"/attendance/manual", CapMark},
 	{"/attendance/bulk", CapMark},

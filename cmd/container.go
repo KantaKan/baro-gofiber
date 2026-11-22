@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gofiber-baro/internal/service/slack"
 	"gofiber-baro/internal/service/staff"
 	"gofiber-baro/pkg/utils"
 	"log"
@@ -102,6 +103,9 @@ type Container struct {
 	StaffGuard          fiber.Handler
 	CareRepo            *repository.CareRepository
 	StaffRepo           *repository.StaffRepository
+	SlackRepo           *repository.SlackRepository
+	SlackService        *slack.Service
+	SlackHandler        *handler.SlackHandler
 	TeamHandler         *handler.TeamHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
@@ -203,16 +207,19 @@ func (c *Container) initHandlers() {
 		c.CheckinService,
 		c.ProgressService,
 	)
-	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService).WithLeaveProjection(handler.LeaveProjection{Records: c.AttendanceRepo}.Project)
+	c.SlackRepo = repository.NewSlackRepository(c.DB)
+	c.SlackService = slack.NewService(c.SlackRepo, slack.NewClient(), slack.KeyFromEnv())
+	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService).WithLeaveProjection(handler.LeaveProjection{Records: c.AttendanceRepo}.Project).WithAlerts(c.SlackService)
 	c.HolidayHandler = handler.NewHolidayHandler(c.HolidayService)
 	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo, c.UserService)
-	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService).WithUsers(c.UserService)
+	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService).WithUsers(c.UserService).WithSlack(c.SlackService)
 	c.CohortHandler = handler.NewCohortHandler(c.CohortService)
 	c.CupHandler = handler.NewCupHandler(c.CupService, c.UserService)
 	c.AdminViewsHandler = handler.NewAdminViewsHandler(c.UserService, c.AttendanceRepo, c.CohortService, c.HolidayService)
 	c.AdminMarkHandler = handler.NewAdminMarkHandler(c.AttendanceSubmissionService, c.AttendanceRepo)
 	c.CareRepo = repository.NewCareRepository(c.DB)
 	c.StaffRepo = repository.NewStaffRepository(c.DB)
+	c.SlackHandler = handler.NewSlackHandler(c.SlackService)
 	c.TeamHandler = handler.NewTeamHandler(staff.NewTeam(c.StaffRepo))
 	c.CareHandler = handler.NewLearnerCareHandler(c.CareRepo, c.UserService)
 	c.WellbeingHandler = handler.NewWellbeingViewsHandler(c.UserService, c.AttendanceRepo, c.HolidayService, c.CareRepo)

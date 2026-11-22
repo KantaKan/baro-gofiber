@@ -114,6 +114,7 @@ type User struct {
 	ProjectGroup       string               `bson:"project_group" json:"project_group"`
 	GenmateGroup       string               `bson:"genmate_group" json:"genmate_group"`
 	ZoomName           string               `bson:"zoom_name" json:"zoom_name"`
+	SlackID            string               `bson:"slack_id,omitempty" json:"slack_id,omitempty"`
 	Badges             []Badge              `bson:"badges,omitempty" json:"badges,omitempty"`
 	SalesforceID       string               `bson:"salesforce_id,omitempty" json:"salesforce_id,omitempty"`
 	AttendanceStatus   string               `bson:"attendance_status,omitempty" json:"attendance_status,omitempty"`

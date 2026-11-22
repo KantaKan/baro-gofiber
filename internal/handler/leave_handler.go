@@ -3,6 +3,7 @@ package handler
 import (
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/leave"
+	"gofiber-baro/internal/service/slack"
 	"gofiber-baro/internal/service/staff"
 	"gofiber-baro/internal/service/user"
 	"gofiber-baro/pkg/utils"
@@ -16,6 +17,13 @@ type LeaveHandler struct {
 	userService  *user.Service
 	// project gives the leave count if a request were approved (TA limit); nil = no check.
 	project func(userID primitive.ObjectID, date string) (int, error)
+	alerts  alerter // Slack alerts; nil = none
+}
+
+// WithAlerts enables Slack alerts for new leave requests.
+func (h *LeaveHandler) WithAlerts(a alerter) *LeaveHandler {
+	h.alerts = a
+	return h
 }
 
 // WithLeaveProjection enables the TA approval limit.
@@ -71,6 +79,9 @@ func (h *LeaveHandler) CreateLeaveRequest(c *fiber.Ctx) error {
 	if body.Type == "" || body.Date == "" || body.Reason == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Type, date, and reason are required")
 	}
+	if !validLeaveInput(body.Type, body.Date) {
+		return utils.SendError(c, fiber.StatusBadRequest, "That leave type or date isn't valid")
+	}
 
 	oid, err := primitive.ObjectIDFromHex(userID.(string))
 	if err != nil {
@@ -94,6 +105,18 @@ func (h *LeaveHandler) CreateLeaveRequest(c *fiber.Ctx) error {
 	)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error creating leave request")
+	}
+
+	if h.alerts != nil {
+		after := 0
+		if h.project != nil {
+			after, _ = h.project(oid, body.Date)
+		}
+		name := "A learner"
+		if u, uerr := h.getUserByID(userID.(string)); uerr == nil && u != nil {
+			name = u.FirstName
+		}
+		h.alerts.Alert(slack.KindNewLeave, leaveAlertText(name, body.Type, body.Date, after))
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Leave request created", request)

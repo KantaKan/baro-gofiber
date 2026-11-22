@@ -34,6 +34,15 @@ func TestAllowed(t *testing.T) {
 		{Owner, "GET", "/admin/team", true},
 		{Owner, "POST", "/admin/cohorts", true},
 		{"", "GET", "/admin/today", false},
+		{TA, "POST", "/admin/nudges/ping", true},
+		{Viewer, "GET", "/admin/nudges/status", true},
+		{Viewer, "POST", "/admin/nudges/ping", false},
+		{Admin, "GET", "/admin/settings/slack", false},
+		{Admin, "PUT", "/admin/settings/slack/settings", false},
+		{Admin, "POST", "/admin/settings/slack/connect", false},
+		{TA, "DELETE", "/admin/settings/slack", false},
+		{Owner, "POST", "/admin/settings/slack/connect", true},
+		{Owner, "GET", "/admin/settings/slack/log", true},
 	}
 	for _, c := range cases {
 		if got := Can(c.role, RequiredCap(c.method, c.path)); got != c.ok {
