@@ -301,6 +301,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	board.Post("/posts/:postId/reactions", h.TalkBoard.AddReactionToPost)
 	board.Delete("/posts/:postId/reactions", h.TalkBoard.RemoveReactionFromPost)
 	board.Post("/posts/:postId/comments/:commentId/reactions", h.TalkBoard.AddReactionToComment)
+	board.Delete("/posts/:postId/comments/:commentId/reactions", h.TalkBoard.RemoveReactionFromComment)
 
 	stamps := app.Group("/stamps", middleware.AuthMiddleware)
 	stamps.Post("/", h.Stamp.CreateStamp)

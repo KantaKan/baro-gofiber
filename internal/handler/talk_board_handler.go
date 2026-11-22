@@ -18,7 +18,7 @@ import (
 
 type TalkBoardHandler struct {
 	repo        domain.TalkBoardRepository
-	userService *user.Service
+	userService boardUsers
 }
 
 func NewTalkBoardHandler(repo domain.TalkBoardRepository, userService *user.Service) *TalkBoardHandler {
@@ -50,39 +50,10 @@ func (h *TalkBoardHandler) GetPosts(c *fiber.Ctx) error {
 }
 
 func (h *TalkBoardHandler) GetPost(c *fiber.Ctx) error {
-	ctx := c.Context()
-	id := c.Params("postId")
-	if id == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
+	post, _, ok := h.postFor(c, false)
+	if !ok {
+		return nil
 	}
-
-	oid, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
-	}
-
-	post, err := h.repo.FindByID(ctx, oid)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
-	}
-
-	// Security: If not admin, check if post belongs to user's cohort
-	userID := c.Locals("userID")
-	userRole := ""
-	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
-	}
-
-	if userRole != "admin" {
-		userData, err := h.userService.GetUserByID(userID.(string))
-		if err != nil {
-			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
-		}
-		if post.Cohort != userData.CohortNumber {
-			return utils.SendError(c, fiber.StatusForbidden, "You cannot access posts from other cohorts")
-		}
-	}
-
 	return utils.SendResponse(c, fiber.StatusOK, "Post retrieved", post)
 }
 
@@ -120,7 +91,7 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 
 	post := &domain.Post{
 		UserID:    userOID,
-		ZoomName:  userData.ZoomName,
+		ZoomName:  boardName(userData),
 		Cohort:    target,
 		Content:   body.Content,
 		Reactions: []domain.Reaction{},
@@ -137,155 +108,71 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 }
 
 func (h *TalkBoardHandler) AddComment(c *fiber.Ctx) error {
-	ctx := c.Context()
-	userID := c.Locals("userID")
-	if userID == nil {
-		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
-	}
-
-	postID := c.Params("postId")
-	if postID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
-	}
-
-	postOID, err := primitive.ObjectIDFromHex(postID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
-	}
-
 	type RequestBody struct {
 		Content string `json:"content"`
 	}
-
 	var body RequestBody
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-
 	if body.Content == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Content is required")
 	}
 
-	userData, err := h.userService.GetUserByID(userID.(string))
+	post, _, ok := h.postFor(c, true)
+	if !ok {
+		return nil
+	}
+	userID, _ := c.Locals("userID").(string)
+	userData, err := h.userService.GetUserByID(userID)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
-
-	// Security Check: Verify post exists and belongs to user's cohort if not admin
-	post, err := h.repo.FindByID(ctx, postOID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
-	}
-
-	userRole := ""
-	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
-	}
-
-	if userRole != "admin" && post.Cohort != userData.CohortNumber {
-		return utils.SendError(c, fiber.StatusForbidden, "You cannot comment on posts from other cohorts")
-	}
-
-	userOID, _ := primitive.ObjectIDFromHex(userID.(string))
+	userOID, _ := primitive.ObjectIDFromHex(userID)
 
 	comment := domain.Comment{
-		ID:        primitive.NewObjectID(),
-		UserID:    userOID,
-		ZoomName:  userData.ZoomName,
-		Cohort:    userData.CohortNumber,
+		ID:       primitive.NewObjectID(),
+		UserID:   userOID,
+		ZoomName: boardName(userData),
+		// a reply starts with an empty list: MongoDB can't push a reaction onto null
+		Reactions: []domain.Reaction{},
+		// the reply belongs to the post's board (staff have no cohort of their own)
+		Cohort:    post.Cohort,
 		Content:   body.Content,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-
-	if err := h.repo.AddComment(ctx, postOID, comment); err != nil {
+	if err := h.repo.AddComment(c.Context(), post.ID, comment); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding comment")
 	}
-
 	return utils.SendResponse(c, fiber.StatusOK, "Comment added", comment)
 }
 
 func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
-	ctx := c.Context()
-	userID := c.Locals("userID")
-	if userID == nil {
-		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
-	}
-
-	postID := c.Params("postId")
-	if postID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
-	}
-
-	postOID, err := primitive.ObjectIDFromHex(postID)
-	if err != nil {
-		log.Printf("ERROR: Invalid post ID format: %v", err)
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
-	}
-
-	// Verify post exists
-	post, err := h.repo.FindByID(ctx, postOID)
-	if err != nil {
-		log.Printf("ERROR: Post not found: %s", postID)
-		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
-	}
-
-	// Security: If not admin, check if post belongs to user's cohort
-	userRole := ""
-	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
-	}
-
-	if userRole != "admin" {
-		userData, err := h.userService.GetUserByID(userID.(string))
-		if err != nil {
-			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
-		}
-		if post.Cohort != userData.CohortNumber {
-			return utils.SendError(c, fiber.StatusForbidden, "You cannot react to posts from other cohorts")
-		}
-	}
-
 	type RequestBody struct {
 		Reaction string `json:"reaction"`
 	}
-
 	var body RequestBody
 	if err := c.BodyParser(&body); err != nil {
-		log.Printf("ERROR: Body parser error: %v", err)
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-
 	if body.Reaction == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Reaction is required")
 	}
 
-	log.Printf("DEBUG: Adding reaction %s to post %s by user %s", body.Reaction, postID, userID.(string))
-
-	userOID, err := primitive.ObjectIDFromHex(userID.(string))
+	post, _, ok := h.postFor(c, true)
+	if !ok {
+		return nil
+	}
+	userOID, err := primitive.ObjectIDFromHex(c.Locals("userID").(string))
 	if err != nil {
-		log.Printf("ERROR: Invalid user ID format: %v, userID: %v", err, userID)
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
 	}
 
-	// First ensure reactions field exists and is an array
-	initUpdate := bson.M{
-		"$setOnInsert": bson.M{
-			"reactions": []domain.Reaction{},
-		},
+	// one reaction per person: drop their old one first
+	if err := h.repo.UpdatePost(c.Context(), post.ID, bson.M{"$pull": bson.M{"reactions": bson.M{"userId": userOID}}}); err != nil {
+		log.Printf("board: clearing old reaction on %s: %v", post.ID.Hex(), err)
 	}
-	err = h.repo.UpdatePost(ctx, postOID, initUpdate)
-	if err != nil {
-		log.Printf("DEBUG: initUpdate result: %v", err)
-	}
-
-	// Now remove any existing reaction by this user
-	pullUpdate := bson.M{"$pull": bson.M{"reactions": bson.M{"userId": userOID}}}
-	if err := h.repo.UpdatePost(ctx, postOID, pullUpdate); err != nil {
-		log.Printf("DEBUG: pullUpdate result: %v", err)
-		// Continue anyway - might be first reaction
-	}
-
 	reaction := domain.Reaction{
 		ID:        primitive.NewObjectID(),
 		UserID:    userOID,
@@ -293,138 +180,78 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 		Value:     html.EscapeString(body.Reaction),
 		CreatedAt: time.Now(),
 	}
-
-	log.Printf("DEBUG: Adding reaction to MongoDB: postID=%s, reaction=%+v", postOID.Hex(), reaction)
-	err = h.repo.AddReaction(ctx, postOID, reaction)
-	if err != nil {
-		log.Printf("ERROR: Error adding reaction: %v", err)
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction: "+err.Error())
+	if err := h.repo.AddReaction(c.Context(), post.ID, reaction); err != nil {
+		log.Printf("board: adding reaction to %s: %v", post.ID.Hex(), err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
-
 	return utils.SendResponse(c, fiber.StatusOK, "Reaction added", reaction)
 }
 
 func (h *TalkBoardHandler) RemoveReactionFromPost(c *fiber.Ctx) error {
-	ctx := c.Context()
-	userID := c.Locals("userID")
-	if userID == nil {
-		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	post, _, ok := h.postFor(c, true)
+	if !ok {
+		return nil
 	}
-
-	postID := c.Params("postId")
-	if postID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
-	}
-
-	postOID, err := primitive.ObjectIDFromHex(postID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
-	}
-
-	// Security Check: Verify post exists and belongs to user's cohort if not admin
-	post, err := h.repo.FindByID(ctx, postOID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
-	}
-
-	userRole := ""
-	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
-	}
-
-	if userRole != "admin" {
-		userData, err := h.userService.GetUserByID(userID.(string))
-		if err != nil {
-			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
-		}
-		if post.Cohort != userData.CohortNumber {
-			return utils.SendError(c, fiber.StatusForbidden, "You cannot interact with posts from other cohorts")
-		}
-	}
-
-	userOID, err := primitive.ObjectIDFromHex(userID.(string))
+	userOID, err := primitive.ObjectIDFromHex(c.Locals("userID").(string))
 	if err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
 	}
-
-	// Remove reaction where userId matches
-	update := bson.M{"$pull": bson.M{"reactions": bson.M{"userId": userOID}}}
-	if err := h.repo.UpdatePost(ctx, postOID, update); err != nil {
+	if err := h.repo.UpdatePost(c.Context(), post.ID, bson.M{"$pull": bson.M{"reactions": bson.M{"userId": userOID}}}); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error removing reaction")
 	}
-
 	return utils.SendResponse(c, fiber.StatusOK, "Reaction removed", nil)
 }
 
+// replyFor resolves :commentId on a post the caller may write to.
+func (h *TalkBoardHandler) replyFor(c *fiber.Ctx) (*domain.Post, primitive.ObjectID, primitive.ObjectID, bool) {
+	post, _, ok := h.postFor(c, true)
+	if !ok {
+		return nil, primitive.NilObjectID, primitive.NilObjectID, false
+	}
+	commentOID, err := primitive.ObjectIDFromHex(c.Params("commentId"))
+	if err != nil {
+		_ = utils.SendError(c, fiber.StatusBadRequest, "Invalid comment ID")
+		return nil, primitive.NilObjectID, primitive.NilObjectID, false
+	}
+	found := false
+	for _, cm := range post.Comments {
+		if cm.ID == commentOID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		_ = utils.SendError(c, fiber.StatusNotFound, "Comment not found")
+		return nil, primitive.NilObjectID, primitive.NilObjectID, false
+	}
+	userOID, err := primitive.ObjectIDFromHex(c.Locals("userID").(string))
+	if err != nil {
+		_ = utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
+		return nil, primitive.NilObjectID, primitive.NilObjectID, false
+	}
+	return post, commentOID, userOID, true
+}
+
 func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
-	userID := c.Locals("userID")
-	if userID == nil {
-		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
-	}
-
-	postID := c.Params("postId")
-	if postID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "Post ID is required")
-	}
-
-	commentID := c.Params("commentId")
-	if commentID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "Comment ID is required")
-	}
-
-	postOID, err := primitive.ObjectIDFromHex(postID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid post ID")
-	}
-
-	commentOID, err := primitive.ObjectIDFromHex(commentID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid comment ID")
-	}
-
-	// Security: Verify post exists and check cohort
-	post, err := h.repo.FindByID(c.Context(), postOID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusNotFound, "Post not found")
-	}
-
-	userRole := ""
-	if user, ok := c.Locals("user").(*middleware.Claims); ok {
-		userRole = user.Role
-	}
-
-	if userRole != "admin" {
-		userData, err := h.userService.GetUserByID(userID.(string))
-		if err != nil {
-			return utils.SendError(c, fiber.StatusUnauthorized, "User data not found")
-		}
-		if post.Cohort != userData.CohortNumber {
-			return utils.SendError(c, fiber.StatusForbidden, "You cannot react to comments from other cohorts")
-		}
-	}
-
 	type RequestBody struct {
 		Reaction string `json:"reaction"`
 	}
-
 	var body RequestBody
 	if err := c.BodyParser(&body); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-
 	if body.Reaction == "" {
 		return utils.SendError(c, fiber.StatusBadRequest, "Reaction is required")
 	}
 
-	userOID, err := primitive.ObjectIDFromHex(userID.(string))
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
+	post, commentOID, userOID, ok := h.replyFor(c)
+	if !ok {
+		return nil
 	}
-
-	// Remove existing reaction by this user on the same comment
-	pullUpdate := bson.M{"$pull": bson.M{"comments.$[c].reactions": bson.M{"userId": userOID}}}
-	_ = h.repo.UpdatePost(c.Context(), postOID, pullUpdate)
-
+	// one reaction per person on a reply: drop their old one first
+	if err := h.repo.RemoveCommentReaction(c.Context(), post.ID, commentOID, userOID); err != nil {
+		log.Printf("board: clearing old reply reaction on %s: %v", commentOID.Hex(), err)
+	}
 	reaction := domain.Reaction{
 		ID:        primitive.NewObjectID(),
 		UserID:    userOID,
@@ -432,12 +259,21 @@ func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
 		Value:     html.EscapeString(body.Reaction),
 		CreatedAt: time.Now(),
 	}
-
-	if err := h.repo.AddCommentReaction(c.Context(), postOID, commentOID, reaction); err != nil {
+	if err := h.repo.AddCommentReaction(c.Context(), post.ID, commentOID, reaction); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error adding reaction")
 	}
-
 	return utils.SendResponse(c, fiber.StatusOK, "Reaction added", reaction)
+}
+
+func (h *TalkBoardHandler) RemoveReactionFromComment(c *fiber.Ctx) error {
+	post, commentOID, userOID, ok := h.replyFor(c)
+	if !ok {
+		return nil
+	}
+	if err := h.repo.RemoveCommentReaction(c.Context(), post.ID, commentOID, userOID); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error removing reaction")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Reaction removed", nil)
 }
 
 func (h *TalkBoardHandler) DeletePost(c *fiber.Ctx) error {
