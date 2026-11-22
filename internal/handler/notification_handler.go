@@ -14,6 +14,13 @@ import (
 type NotificationHandler struct {
 	notificationService *notification.Service
 	users               staffLookup // for the TA own-groups rule; nil = no check
+	slackPoster         interface{ AnnounceAsync(title, message string) }
+}
+
+// WithSlack lets an announcement also be posted to Slack ("post_to_slack").
+func (h *NotificationHandler) WithSlack(p interface{ AnnounceAsync(title, message string) }) *NotificationHandler {
+	h.slackPoster = p
+	return h
 }
 
 // WithUsers enables the TA own-groups check on new announcements.
@@ -37,6 +44,8 @@ type CreateNotificationRequest struct {
 	EndDate   string `json:"end_date"`
 	// RecipientIDs limits the announcement to these learners (empty = everyone).
 	RecipientIDs []string `json:"recipient_ids"`
+	// PostToSlack also posts the title and message to the announcements channel.
+	PostToSlack bool `json:"post_to_slack"`
 }
 
 func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
@@ -107,6 +116,10 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 	notif, err := h.notificationService.CreateNotification(data)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error creating notification")
+	}
+
+	if body.PostToSlack && h.slackPoster != nil {
+		h.slackPoster.AnnounceAsync(body.Title, body.Message)
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Notification created", notif)

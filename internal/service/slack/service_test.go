@@ -201,3 +201,21 @@ func TestAlertsAndAnnouncements(t *testing.T) {
 		}
 	}
 }
+
+func TestAsyncAlertNeverBlocksOrFails(t *testing.T) {
+	s, st, _ := newSvc(t, map[string]string{"/auth.test": okAuth, "/chat.postMessage": `{"ok":false,"error":"is_archived"}`})
+	_ = s.Connect("xoxb-1")
+	_ = s.SaveSettings(Settings{Alerts: "CA", Announce: "CN", AlertNewLeave: true})
+	s.Alert(KindNewLeave, "Mint asked for leave") // returns nothing; Slack is failing
+	s.AnnounceAsync("Hi", "there")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(st.log) >= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(st.log) < 2 || st.log[0].OK || st.log[1].OK {
+		t.Fatalf("failures should be logged, got %+v", st.log)
+	}
+}
