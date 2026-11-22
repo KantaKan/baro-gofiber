@@ -112,6 +112,18 @@ func (r *talkBoardRepository) AddCommentReaction(ctx context.Context, postID pri
 	return nil
 }
 
+func (r *talkBoardRepository) RemoveCommentReaction(ctx context.Context, postID, commentID, userID primitive.ObjectID) error {
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": postID},
+		bson.M{"$pull": bson.M{"comments.$[c].reactions": bson.M{"userId": userID}}},
+		options.Update().SetArrayFilters(options.ArrayFilters{
+			Filters: []interface{}{bson.M{"c._id": commentID}},
+		}),
+	)
+	return err
+}
+
 func (r *talkBoardRepository) DeleteComment(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID) error {
 	filter := bson.M{"_id": postID}
 	update := bson.M{"$pull": bson.M{"comments": bson.M{"_id": commentID}}}
