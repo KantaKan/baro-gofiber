@@ -27,6 +27,8 @@ type CreateNotificationRequest struct {
 	Priority  string `json:"priority"`
 	StartDate string `json:"start_date"`
 	EndDate   string `json:"end_date"`
+	// RecipientIDs limits the announcement to these learners (empty = everyone).
+	RecipientIDs []string `json:"recipient_ids"`
 }
 
 func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
@@ -68,6 +70,17 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 		"priority":   body.Priority,
 		"start_date": startDate,
 		"end_date":   endDate,
+	}
+	if len(body.RecipientIDs) > 0 {
+		ids := make([]primitive.ObjectID, 0, len(body.RecipientIDs))
+		for _, s := range body.RecipientIDs {
+			id, err := primitive.ObjectIDFromHex(s)
+			if err != nil {
+				return utils.SendError(c, fiber.StatusBadRequest, "Invalid recipient ID")
+			}
+			ids = append(ids, id)
+		}
+		data["recipient_ids"] = ids
 	}
 
 	notif, err := h.notificationService.CreateNotification(data)

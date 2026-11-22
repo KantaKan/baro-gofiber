@@ -705,7 +705,11 @@ func (h *AttendanceHandler) CheckIn(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&body)
 
-	rec, err := h.checkinService.CheckIn(oid, c.IP(), body.Style)
+	country := c.Get("CF-IPCountry")
+	if country == "" {
+		country = c.Get("X-Country-Code")
+	}
+	rec, err := h.checkinService.CheckIn(oid, c.IP(), country, body.Style)
 	switch err {
 	case nil:
 		return utils.SendResponse(c, fiber.StatusCreated, "Checked in", rec)

@@ -30,6 +30,10 @@ func (s *Service) CreateNotification(data map[string]interface{}) (*domain.Notif
 	if notification.Priority == "" {
 		notification.Priority = "normal"
 	}
+	// Optional audience: only these learners see it (empty = everyone).
+	if ids, ok := data["recipient_ids"].([]primitive.ObjectID); ok {
+		notification.RecipientIDs = ids
+	}
 
 	if err := s.repo.Create(notification); err != nil {
 		return nil, err

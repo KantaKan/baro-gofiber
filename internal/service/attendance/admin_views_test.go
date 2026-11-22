@@ -33,7 +33,7 @@ func TestBuildTodayRoster(t *testing.T) {
 		{ID: primitive.NewObjectID(), UserID: a.ID, Date: "2026-09-07", Session: domain.SessionMorning, Status: domain.StatusLate, MarkedBy: domain.MarkedBySelf},
 		{ID: primitive.NewObjectID(), UserID: c.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusAbsentExcused, MarkedBy: domain.MarkedByAdmin, MarkedByUser: "system"},
 	}
-	v := BuildTodayRoster([]domain.User{a, b, c, d}, recs, bkkAt(today, 9, 10), domain.DefaultRules(), true)
+	v := BuildTodayRoster([]domain.User{a, b, c, d}, recs, bkkAt(today, 9, 10), domain.DefaultRules(), true, false)
 	if len(v.Learners) != 3 {
 		t.Fatalf("learners = %d, want 3 (dropout excluded)", len(v.Learners))
 	}
@@ -64,7 +64,7 @@ func TestBuildTodayRoster(t *testing.T) {
 
 func TestBuildTodayRosterWeekend(t *testing.T) {
 	a := learner("A", "F", "01")
-	v := BuildTodayRoster([]domain.User{a}, nil, bkkAt("2026-09-12", 10, 0), domain.DefaultRules(), false)
+	v := BuildTodayRoster([]domain.User{a}, nil, bkkAt("2026-09-12", 10, 0), domain.DefaultRules(), false, false)
 	if v.ClassToday || v.Counts[domain.SessionMorning].NotYet != 1 || v.Counts[domain.SessionAfternoon].Total != 1 {
 		t.Errorf("weekend view = %+v", v)
 	}
@@ -124,8 +124,25 @@ func TestCountsSkipNonClassStatuses(t *testing.T) {
 		{ID: primitive.NewObjectID(), UserID: a.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusHoliday},
 		{ID: primitive.NewObjectID(), UserID: b.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusPresent, MarkedBy: domain.MarkedBySelf},
 	}
-	v := BuildTodayRoster([]domain.User{a, b}, recs, bkkAt(today, 9, 0), domain.DefaultRules(), true)
+	v := BuildTodayRoster([]domain.User{a, b}, recs, bkkAt(today, 9, 0), domain.DefaultRules(), true, false)
 	if got := v.Counts[domain.SessionMorning]; got.Total != 1 || got.OnTime != 1 {
 		t.Errorf("holiday record must not count as checked in: %+v", got)
+	}
+}
+
+func TestSharedIPFlag(t *testing.T) {
+	a, b, c := learner("A", "F", "01"), learner("B", "F", "02"), learner("C", "F", "03")
+	today := "2026-09-08"
+	self := func(u domain.User, ip string) domain.AttendanceRecord {
+		return domain.AttendanceRecord{ID: primitive.NewObjectID(), UserID: u.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusPresent, MarkedBy: domain.MarkedBySelf, IPAddress: ip, SubmittedAt: bkkAt(today, 9, 0)}
+	}
+	recs := []domain.AttendanceRecord{self(a, "1.1.1.1"), self(b, "1.1.1.1"), self(c, "2.2.2.2")}
+	v := BuildTodayRoster([]domain.User{a, b, c}, recs, bkkAt(today, 9, 5), domain.DefaultRules(), true, true)
+	if v.Learners[0].Morning.Flag != "shared_ip" || v.Learners[1].Morning.Flag != "shared_ip" || v.Learners[2].Morning.Flag != "" {
+		t.Errorf("flags = %q %q %q", v.Learners[0].Morning.Flag, v.Learners[1].Morning.Flag, v.Learners[2].Morning.Flag)
+	}
+	off := BuildTodayRoster([]domain.User{a, b, c}, recs, bkkAt(today, 9, 5), domain.DefaultRules(), true, false)
+	if off.Learners[0].Morning.Flag != "" {
+		t.Error("flagging off → no flags")
 	}
 }

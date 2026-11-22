@@ -18,6 +18,8 @@ type SessionCell struct {
 	Style       string                  `json:"style,omitempty"`
 	MarkedBy    string                  `json:"marked_by,omitempty"` // self | admin | system
 	RecordID    string                  `json:"record_id,omitempty"`
+	Flag        string                  `json:"flag,omitempty"` // "shared_ip": another learner checked in from the same network
+	ip          string
 }
 
 type TodayLearner struct {
@@ -97,7 +99,7 @@ func activeLearners(users []domain.User) []domain.User {
 }
 
 func cellOf(r domain.AttendanceRecord) SessionCell {
-	c := SessionCell{Status: r.Status, Style: r.CheckinStyle, RecordID: r.ID.Hex()}
+	c := SessionCell{Status: r.Status, Style: r.CheckinStyle, RecordID: r.ID.Hex(), ip: r.IPAddress}
 	switch {
 	case r.MarkedBy == domain.MarkedBySelf:
 		c.MarkedBy = "self"
@@ -173,7 +175,7 @@ func last(days []DayResult, n int) []DayResult {
 }
 
 // BuildTodayRoster assembles the admin Today board for one cohort.
-func BuildTodayRoster(learners []domain.User, records []domain.AttendanceRecord, now time.Time, rules domain.CheckinRules, classToday bool) TodayView {
+func BuildTodayRoster(learners []domain.User, records []domain.AttendanceRecord, now time.Time, rules domain.CheckinRules, classToday, flagUnusual bool) TodayView {
 	now = now.In(bangkokLoc())
 	today := utils.FormatDate(now)
 	byUser := map[primitive.ObjectID][]domain.AttendanceRecord{}
@@ -207,6 +209,9 @@ func BuildTodayRoster(learners []domain.User, records []domain.AttendanceRecord,
 		countCell(&am, l.Morning.Status)
 		countCell(&pm, l.Afternoon.Status)
 		v.Learners = append(v.Learners, l)
+	}
+	if flagUnusual {
+		markSharedIP(v.Learners)
 	}
 	v.Counts[domain.SessionMorning] = am
 	v.Counts[domain.SessionAfternoon] = pm
@@ -355,4 +360,24 @@ func BuildRegister(learners []domain.User, records []domain.AttendanceRecord, we
 		}
 	}
 	return v
+}
+
+// markSharedIP flags self check-ins that share an IP with another learner in the same session.
+func markSharedIP(ls []TodayLearner) {
+	for _, pick := range []func(*TodayLearner) *SessionCell{
+		func(l *TodayLearner) *SessionCell { return &l.Morning },
+		func(l *TodayLearner) *SessionCell { return &l.Afternoon },
+	} {
+		count := map[string]int{}
+		for i := range ls {
+			if c := pick(&ls[i]); c.MarkedBy == "self" && c.ip != "" {
+				count[c.ip]++
+			}
+		}
+		for i := range ls {
+			if c := pick(&ls[i]); c.MarkedBy == "self" && c.ip != "" && count[c.ip] > 1 {
+				c.Flag = "shared_ip"
+			}
+		}
+	}
 }
