@@ -116,3 +116,16 @@ func TestBuildRegisterPreviousWeek(t *testing.T) {
 		t.Errorf("kpis %+v previous %+v", v.KPIs, v.Previous)
 	}
 }
+
+func TestCountsSkipNonClassStatuses(t *testing.T) {
+	a, b := learner("A", "F", "01"), learner("B", "F", "02")
+	today := "2026-09-08"
+	recs := []domain.AttendanceRecord{
+		{ID: primitive.NewObjectID(), UserID: a.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusHoliday},
+		{ID: primitive.NewObjectID(), UserID: b.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusPresent, MarkedBy: domain.MarkedBySelf},
+	}
+	v := BuildTodayRoster([]domain.User{a, b}, recs, bkkAt(today, 9, 0), domain.DefaultRules(), true)
+	if got := v.Counts[domain.SessionMorning]; got.Total != 1 || got.OnTime != 1 {
+		t.Errorf("holiday record must not count as checked in: %+v", got)
+	}
+}

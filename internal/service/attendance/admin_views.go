@@ -144,6 +144,10 @@ func moodBefore(refls []domain.Reflection, today string) string {
 }
 
 func countCell(c *SessionCounts, s domain.AttendanceStatus) {
+	switch s {
+	case domain.StatusHoliday, domain.StatusNoClass, domain.StatusDropout, domain.StatusDismissed:
+		return // not a class session for this learner
+	}
 	c.Total++
 	switch s {
 	case domain.StatusPresent:

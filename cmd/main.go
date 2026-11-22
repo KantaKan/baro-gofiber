@@ -181,6 +181,7 @@ func main() {
 		Cohort:       container.CohortHandler,
 		Cup:          container.CupHandler,
 		AdminViews:   container.AdminViewsHandler,
+		AdminMark:    container.AdminMarkHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
