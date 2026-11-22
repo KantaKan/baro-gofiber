@@ -132,7 +132,7 @@ func TestLearnerCareSupport(t *testing.T) {
 	if s, _ := send(app, "PATCH", "/admin/support/"+m.items[0].ID.Hex(), `{"done":true}`); s != 200 || !m.items[0].Done {
 		t.Errorf("toggle done → %d %+v", s, m.items[0])
 	}
-	if s, _ := send(app, "POST", "/admin/learners/"+learner.Hex()+"/support/ack", `{"reason_key":"leave"}`); s != 201 || len(m.acks) != 1 || m.acks[0].Until.Before(time.Now().Add(6*24*time.Hour)) {
+	if s, _ := send(app, "POST", "/admin/learners/"+learner.Hex()+"/support/ack", `{"reason_key":"leave","reason_text":"Leave 6/8"}`); s != 201 || len(m.acks) != 1 || m.acks[0].Until.Before(time.Now().Add(6*24*time.Hour)) {
 		t.Errorf("ack → %d %+v", s, m.acks)
 	}
 }

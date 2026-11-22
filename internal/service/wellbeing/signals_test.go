@@ -84,3 +84,30 @@ func TestSupportReasons(t *testing.T) {
 		t.Errorf("pattern + plan, got %+v", r)
 	}
 }
+
+func TestWatchWordsNoFalsePositives(t *testing.T) {
+	recent := []string{"2026-09-10", "2026-09-11"}
+	for _, txt := range []string{"เหนื่อยแต่สนุกมาก", "ปวดท้องนิดหน่อย ท้องฟ้าสวย", "I can't wait for demo day", "behind the scenes of React"} {
+		n := Nights([]domain.Reflection{refl("2026-09-10", E, ""), refl("2026-09-11", E, txt)})
+		if keys(WorthALook(n, recent, DefaultWords))["words"] {
+			t.Errorf("ordinary text flagged: %q", txt)
+		}
+	}
+	esc := Nights([]domain.Reflection{refl("2026-09-10", E, ""), refl("2026-09-11", E, "I can&#39;t keep up, I want to give up")})
+	if !keys(WorthALook(esc, recent, DefaultWords))["words"] || esc[1].Text != "I can't keep up, I want to give up" {
+		t.Errorf("stored HTML-escaped text must be unescaped and matched: %q", esc[1].Text)
+	}
+}
+
+func TestPatternsAreTiedToRecentClassNights(t *testing.T) {
+	// panic Mon, nothing Tue-Thu, panic Fri: not "two nights in a row"
+	gap := Nights([]domain.Reflection{refl("2026-09-07", P, ""), refl("2026-09-11", P, "")})
+	if keys(WorthALook(gap, []string{"2026-09-10", "2026-09-11"}, DefaultWords))["panic_run"] {
+		t.Error("panic on non-consecutive class nights must not be a run")
+	}
+	// worrying words from weeks ago don't count as last night
+	old := Nights([]domain.Reflection{refl("2026-08-20", E, "I want to quit")})
+	if keys(WorthALook(old, []string{"2026-09-10", "2026-09-11"}, DefaultWords))["words"] {
+		t.Error("old words must not show as last night's")
+	}
+}

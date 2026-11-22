@@ -47,9 +47,29 @@ func TestBuildSupportList(t *testing.T) {
 	b := user("B", "F", refl("2026-09-08", C, ""), refl("2026-09-09", C, ""))
 	c := user("C", "C", refl("2026-09-08", C, ""), refl("2026-09-09", C, ""))
 	items := []domain.SupportItem{{UserID: c.ID, Text: "1:1"}, {UserID: c.ID, Text: "done", Done: true}}
-	acks := []domain.SupportAck{{UserID: a.ID, ReasonKey: "pattern:panic_run", Until: time.Now().Add(time.Hour)}}
+	acks := []domain.SupportAck{{UserID: a.ID, ReasonKey: "pattern:panic_run", ReasonText: "Panic 2 nights in a row", Until: time.Now().Add(time.Hour)}}
 	list := BuildSupportList([]domain.User{a, b, c}, nil, items, acks, nights10[8:], DefaultWords)
 	if len(list) != 1 || list[0].Learner.FirstName != "C" || list[0].OpenItems != 1 || list[0].DoneItems != 1 {
 		t.Fatalf("support list = %+v (A acked, B fine, C has an open step)", list)
+	}
+}
+
+func TestAckHidesOnlyTheSameReason(t *testing.T) {
+	a := user("A", "F")
+	day := func(d string, s domain.AttendanceStatus) domain.AttendanceRecord {
+		return domain.AttendanceRecord{UserID: a.ID, Date: d, Session: domain.SessionMorning, Status: s}
+	}
+	var recs []domain.AttendanceRecord
+	for _, d := range []string{"2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09"} {
+		recs = append(recs, day(d, domain.StatusAbsent))
+	}
+	acks := []domain.SupportAck{{UserID: a.ID, ReasonKey: "leave", ReasonText: "Leave 6/8", Until: time.Now().Add(time.Hour)}}
+	rs, _, _ := ReasonsFor(a, recs, nil, acks, nil, DefaultWords)
+	if len(rs) != 1 || rs[0].Text != "Leave 7/8" {
+		t.Errorf("acknowledging 6/8 must not hide 7/8: %+v", rs)
+	}
+	acks[0].ReasonText = "Leave 7/8"
+	if rs, _, _ := ReasonsFor(a, recs, nil, acks, nil, DefaultWords); len(rs) != 0 {
+		t.Errorf("same reason stays hidden: %+v", rs)
 	}
 }

@@ -1,6 +1,7 @@
 package wellbeing
 
 import (
+	"html"
 	"sort"
 	"time"
 
@@ -150,9 +151,11 @@ func BuildBoard(users []domain.User, nights []string, rng string, words []string
 			for _, r := range u.Reflections {
 				if dayOf(r) == b.Date {
 					d := r.ReflectionData
+					un := html.UnescapeString
 					b.Entries = append(b.Entries, Entry{Learner: ref, ReflectionID: r.ID.Hex(), Day: b.Date, Zone: x.Zone,
-						TechHappy: d.TechSessions.Happy, TechImprove: d.TechSessions.Improve, NonTechHappy: d.NonTechSessions.Happy, NonTechImprove: d.NonTechSessions.Improve,
-						AdminFeedback: r.AdminFeedback, Words: Highlight(joinText(r), words)})
+						TechHappy: un(d.TechSessions.Happy), TechImprove: un(d.TechSessions.Improve), NonTechHappy: un(d.NonTechSessions.Happy), NonTechImprove: un(d.NonTechSessions.Improve),
+						AdminFeedback: un(r.AdminFeedback), Words: Highlight(joinText(r), words)})
+					break // one entry per learner per night (the last one written wins in Nights)
 				}
 			}
 		} else {
@@ -253,13 +256,13 @@ func ReasonsFor(u domain.User, recs []domain.AttendanceRecord, items []domain.Su
 	acked := map[string]bool{}
 	for _, a := range acks {
 		if a.UserID == u.ID {
-			acked[a.ReasonKey] = true
+			acked[a.ReasonKey+"|"+a.ReasonText] = true
 		}
 	}
 	days := attendance.BuildDays(recs)
 	all := SupportReasons(attendance.LeaveDaysUsed(days), days, WorthALook(Nights(u.Reflections), recentClassDays, words), open)
 	for _, r := range all {
-		if !acked[r.Key] {
+		if !acked[r.Key+"|"+r.Text] {
 			reasons = append(reasons, r)
 		}
 	}

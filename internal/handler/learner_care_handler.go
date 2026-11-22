@@ -217,13 +217,14 @@ func (h *LearnerCareHandler) Ack(c *fiber.Ctx) error {
 		return err
 	}
 	var b struct {
-		ReasonKey string `json:"reason_key"`
+		ReasonKey  string `json:"reason_key"`
+		ReasonText string `json:"reason_text"`
 	}
-	if e := c.BodyParser(&b); e != nil || strings.TrimSpace(b.ReasonKey) == "" || b.ReasonKey == "plan" {
-		return utils.SendError(c, fiber.StatusBadRequest, "A reason key is required")
+	if e := c.BodyParser(&b); e != nil || strings.TrimSpace(b.ReasonKey) == "" || b.ReasonKey == "plan" || strings.TrimSpace(b.ReasonText) == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "reason_key and reason_text are required")
 	}
 	_, name := h.me(c)
-	a := &domain.SupportAck{UserID: id, ReasonKey: b.ReasonKey, Until: time.Now().Add(7 * 24 * time.Hour), By: name}
+	a := &domain.SupportAck{UserID: id, ReasonKey: b.ReasonKey, ReasonText: b.ReasonText, Until: time.Now().Add(7 * 24 * time.Hour), By: name}
 	ctx, cancel := careCtx()
 	defer cancel()
 	if e := h.store.Ack(ctx, a); e != nil {

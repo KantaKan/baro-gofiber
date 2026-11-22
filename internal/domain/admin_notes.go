@@ -29,9 +29,10 @@ type SupportItem struct {
 
 // SupportAck hides an automatic support reason for a learner until Until.
 type SupportAck struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	UserID    primitive.ObjectID `bson:"user_id" json:"user_id"`
-	ReasonKey string             `bson:"reason_key" json:"reason_key"`
-	Until     time.Time          `bson:"until" json:"until"`
-	By        string             `bson:"by" json:"by"`
+	ID         primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID     primitive.ObjectID `bson:"user_id" json:"user_id"`
+	ReasonKey  string             `bson:"reason_key" json:"reason_key"`
+	ReasonText string             `bson:"reason_text" json:"reason_text"` // the exact reason seen; a changed reason shows again
+	Until      time.Time          `bson:"until" json:"until"`
+	By         string             `bson:"by" json:"by"`
 }

@@ -3,6 +3,7 @@ package wellbeing
 
 import (
 	"fmt"
+	"html"
 	"sort"
 	"strings"
 
@@ -29,7 +30,8 @@ type Reason struct {
 }
 
 // DefaultWords are matched case-insensitively as substrings (works for Thai without spaces).
-var DefaultWords = []string{"quit", "give up", "lost", "can't", "cannot", "behind", "hopeless", "ลาออก", "ไม่ไหว", "ท้อ", "เหนื่อย"}
+// Kept narrow on purpose: everyday words like "tired"/เหนื่อย would flood the list.
+var DefaultWords = []string{"quit", "give up", "feel lost", "so lost", "hopeless", "drop out", "want to stop", "ลาออก", "ไม่ไหว", "ท้อแท้", "หมดไฟ", "ยอมแพ้", "เลิกเรียน"}
 
 func dayOf(r domain.Reflection) string {
 	if r.Day != "" {
@@ -43,7 +45,8 @@ func dayOf(r domain.Reflection) string {
 
 func joinText(r domain.Reflection) string {
 	d := r.ReflectionData
-	return strings.Join([]string{d.TechSessions.Happy, d.TechSessions.Improve, d.NonTechSessions.Happy, d.NonTechSessions.Improve}, "\n")
+	// Reflections are stored HTML-escaped (can&#39;t); match and show the real text.
+	return strings.TrimSpace(html.UnescapeString(strings.Join([]string{d.TechSessions.Happy, d.TechSessions.Improve, d.NonTechSessions.Happy, d.NonTechSessions.Improve}, "\n")))
 }
 
 // Nights sorts reflections by day, keeping the last one written for each day.
@@ -81,7 +84,17 @@ func hard(z string) bool { return z == "stretch-overwhelmed" || z == "panic" }
 // WorthALook finds patterns (not single bad days). recentClassDays = the last 2 class dates, newest last.
 func WorthALook(n []Night, recentClassDays []string, words []string) []Pattern {
 	var out []Pattern
-	if len(n) >= 2 && n[len(n)-1].Zone == "panic" && n[len(n)-2].Zone == "panic" {
+	by := map[string]Night{}
+	for _, x := range n {
+		by[x.Day] = x
+	}
+	// lastIsRecent: the newest written night is the latest class night (when we know the class nights).
+	lastIsRecent := len(n) > 0 && (len(recentClassDays) == 0 || n[len(n)-1].Day == recentClassDays[len(recentClassDays)-1])
+	panicBoth := len(n) >= 2 && n[len(n)-1].Zone == "panic" && n[len(n)-2].Zone == "panic"
+	if len(recentClassDays) >= 2 {
+		panicBoth = by[recentClassDays[len(recentClassDays)-1]].Zone == "panic" && by[recentClassDays[len(recentClassDays)-2]].Zone == "panic"
+	}
+	if panicBoth {
 		run := 0
 		for i := len(n) - 1; i >= 0 && n[i].Zone == "panic"; i-- {
 			run++
@@ -101,7 +114,7 @@ func WorthALook(n []Night, recentClassDays []string, words []string) []Pattern {
 	if h >= 6 {
 		out = append(out, Pattern{"rough_stretch", fmt.Sprintf("Overwhelmed or panic %d of last %d", h, len(last10)), "A rough stretch, not a single bad day."})
 	}
-	if len(n) >= 2 && hard(n[len(n)-1].Zone) {
+	if len(n) >= 2 && lastIsRecent && hard(n[len(n)-1].Zone) {
 		prev := n[:len(n)-1]
 		if len(prev) > 5 {
 			prev = prev[len(prev)-5:]
@@ -131,7 +144,7 @@ func WorthALook(n []Night, recentClassDays []string, words []string) []Pattern {
 			out = append(out, Pattern{"silent", fmt.Sprintf("Hasn't written for %d nights", missing), "Usually a sign to check in."})
 		}
 	}
-	if len(n) > 0 {
+	if lastIsRecent {
 		if w := Highlight(n[len(n)-1].Text, words); len(w) > 0 {
 			out = append(out, Pattern{"words", "Wrote “" + w[0] + "”", "Worrying words in last night's reflection."})
 		}
