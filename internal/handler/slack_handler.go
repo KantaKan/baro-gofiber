@@ -36,6 +36,7 @@ func (h *SlackHandler) Status(c *fiber.Ctx) error {
 		"connected": st.Connected, "team": st.Team, "bot": st.Bot,
 		"alerts": st.Alerts, "report": st.Report, "announce": st.Announce,
 		"alert_new_leave": st.AlertNewLeave, "quiet_from": st.QuietFrom, "quiet_to": st.QuietTo,
+		"report_auto": st.ReportAuto, "report_cohort": st.ReportCohort,
 		"manifest": slack.Manifest(),
 	})
 }
@@ -82,11 +83,13 @@ func (h *SlackHandler) SaveSettings(c *fiber.Ctx) error {
 		AlertNewLeave bool   `json:"alert_new_leave"`
 		QuietFrom     string `json:"quiet_from"`
 		QuietTo       string `json:"quiet_to"`
+		ReportAuto    bool   `json:"report_auto"`
+		ReportCohort  int    `json:"report_cohort"`
 	}
 	if err := c.BodyParser(&b); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	if err := h.svc.SaveSettings(slack.Settings{Alerts: b.Alerts, Report: b.Report, Announce: b.Announce, AlertNewLeave: b.AlertNewLeave, QuietFrom: b.QuietFrom, QuietTo: b.QuietTo}); err != nil {
+	if err := h.svc.SaveSettings(slack.Settings{Alerts: b.Alerts, Report: b.Report, Announce: b.Announce, AlertNewLeave: b.AlertNewLeave, QuietFrom: b.QuietFrom, QuietTo: b.QuietTo, ReportAuto: b.ReportAuto, ReportCohort: b.ReportCohort}); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Saved", nil)

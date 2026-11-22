@@ -7,12 +7,12 @@ import (
 )
 
 const (
-	StartingDesks  = 2
-	DeskBasePrice  = 1500
-	DeskStepPrice  = 500
-	MaxDeskTier    = 5
-	DeskTierBonus  = 1
-	startDeskTier  = 1
+	StartingDesks = 2
+	DeskBasePrice = 1500
+	DeskStepPrice = 500
+	MaxDeskTier   = 5
+	DeskTierBonus = 1
+	startDeskTier = 1
 )
 
 var (

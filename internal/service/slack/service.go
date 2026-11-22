@@ -24,6 +24,7 @@ const (
 	KindAnnounce = "announcement"
 	KindPing     = "ping"
 	KindTest     = "test"
+	KindReport   = "weekly_report"
 )
 
 var (
@@ -42,6 +43,9 @@ type Config struct {
 	AlertNewLeave bool   `bson:"alert_new_leave" json:"alert_new_leave"`
 	QuietFrom     string `bson:"quiet_from" json:"quiet_from"`
 	QuietTo       string `bson:"quiet_to" json:"quiet_to"`
+	// ReportAuto: post the weekly report for ReportCohort on Fridays at 17:00 Bangkok.
+	ReportAuto   bool `bson:"report_auto" json:"report_auto"`
+	ReportCohort int  `bson:"report_cohort" json:"report_cohort"`
 }
 
 type LogEntry struct {
@@ -81,12 +85,17 @@ type Service struct {
 	lastPing map[string]time.Time // learner id -> last Ping, so nobody gets nagged repeatedly
 }
 
-func NewService(st Store, c *Client, key []byte) *Service {
+// AppURL is the public address of the app: APP_URL, else the first CORS origin. Used for links in Slack.
+func AppURL() string {
 	app := strings.TrimSpace(os.Getenv("APP_URL"))
 	if app == "" {
 		app = strings.TrimSpace(strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",")[0])
 	}
-	return &Service{store: st, client: c, key: key, now: time.Now, appURL: strings.TrimRight(app, "/"), lastPing: map[string]time.Time{}}
+	return strings.TrimRight(app, "/")
+}
+
+func NewService(st Store, c *Client, key []byte) *Service {
+	return &Service{store: st, client: c, key: key, now: time.Now, appURL: AppURL(), lastPing: map[string]time.Time{}}
 }
 
 // Status is what the settings page may see: no token, ever.
@@ -100,6 +109,8 @@ type Status struct {
 	AlertNewLeave bool   `json:"alert_new_leave"`
 	QuietFrom     string `json:"quiet_from"`
 	QuietTo       string `json:"quiet_to"`
+	ReportAuto    bool   `json:"report_auto"`
+	ReportCohort  int    `json:"report_cohort"`
 }
 
 func (s *Service) Status() (Status, error) {
@@ -107,7 +118,7 @@ func (s *Service) Status() (Status, error) {
 	if err != nil || c == nil {
 		return Status{}, err
 	}
-	return Status{true, c.Team, c.Bot, c.Alerts, c.Report, c.Announce, c.AlertNewLeave, c.QuietFrom, c.QuietTo}, nil
+	return Status{true, c.Team, c.Bot, c.Alerts, c.Report, c.Announce, c.AlertNewLeave, c.QuietFrom, c.QuietTo, c.ReportAuto, c.ReportCohort}, nil
 }
 
 // Connected tells other code whether posting is possible.
@@ -156,6 +167,8 @@ type Settings struct {
 	Alerts, Report, Announce string
 	AlertNewLeave            bool
 	QuietFrom, QuietTo       string
+	ReportAuto               bool
+	ReportCohort             int
 }
 
 func validClock(v string) bool { return v == "" || minutes(v, -1) >= 0 }
@@ -171,9 +184,22 @@ func (s *Service) SaveSettings(in Settings) error {
 	if !validClock(in.QuietFrom) || !validClock(in.QuietTo) {
 		return errors.New("quiet hours must look like 21:00")
 	}
+	if in.ReportAuto && (in.Report == "" || in.ReportCohort <= 0) {
+		return errors.New("to send the weekly report automatically, pick a report channel and a cohort first")
+	}
+	c.ReportAuto, c.ReportCohort = in.ReportAuto, in.ReportCohort
 	c.Alerts, c.Report, c.Announce = in.Alerts, in.Report, in.Announce
 	c.AlertNewLeave, c.QuietFrom, c.QuietTo = in.AlertNewLeave, in.QuietFrom, in.QuietTo
 	return s.store.SaveConfig(c)
+}
+
+// ReportAuto reports whether the Friday auto-send is on, and for which cohort.
+func (s *Service) ReportAuto() (bool, int, error) {
+	c, err := s.store.Config()
+	if err != nil || c == nil {
+		return false, 0, err
+	}
+	return c.ReportAuto, c.ReportCohort, nil
 }
 
 func (s *Service) Channels() ([]Channel, error) {
@@ -370,6 +396,19 @@ func (s *Service) PostAnnouncement(title, message string) error {
 		return nil
 	}
 	return s.post(KindAnnounce, c.Announce, "*"+title+"*\n"+message)
+}
+
+// PostReport posts the weekly report to the report channel. posted=false with no error means
+// Slack isn't connected or no report channel is set.
+func (s *Service) PostReport(text string) (bool, error) {
+	c, err := s.store.Config()
+	if err != nil || c == nil || c.Report == "" {
+		return false, nil
+	}
+	if err := s.post(KindReport, c.Report, text); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // AnnounceAsync is the fire-and-forget form used by the announcement handler.

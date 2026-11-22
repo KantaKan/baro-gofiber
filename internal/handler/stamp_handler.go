@@ -165,9 +165,9 @@ func (h *StampHandler) SetCohortLockAt(c *fiber.Ctx) error {
 	}
 
 	type RequestBody struct {
-		Name      *string    `json:"name"`
-		LockAt    *time.Time `json:"lockAt"`
-		IsLocked  *bool      `json:"isLocked"`
+		Name     *string    `json:"name"`
+		LockAt   *time.Time `json:"lockAt"`
+		IsLocked *bool      `json:"isLocked"`
 	}
 
 	var body RequestBody

@@ -278,3 +278,52 @@ func TestMatchClearsAStaleSlackID(t *testing.T) {
 		t.Errorf("a learner who is no longer found must not keep a Slack id, has %q", st.slackIDs[a])
 	}
 }
+
+func TestPostReport(t *testing.T) {
+	s, st, calls := newSvc(t, map[string]string{"/auth.test": okAuth, "/chat.postMessage": `{"ok":true}`})
+	if posted, err := s.PostReport("hello"); posted || err != nil {
+		t.Fatalf("not connected is a quiet no-op: %v %v", posted, err)
+	}
+	_ = s.Connect("xoxb-1")
+	_ = s.SaveSettings(Settings{Alerts: "CA"})
+	if posted, err := s.PostReport("hello"); posted || err != nil {
+		t.Fatalf("no report channel is a quiet no-op: %v %v", posted, err)
+	}
+	_ = s.SaveSettings(Settings{Alerts: "CA", Report: "CR"})
+	n := len(*calls)
+	posted, err := s.PostReport("the report")
+	last := (*calls)[len(*calls)-1]
+	if err != nil || !posted || len(*calls) != n+1 || last.body["channel"] != "CR" || last.body["text"] != "the report" {
+		t.Fatalf("report post: %v %v %+v", posted, err, last)
+	}
+	if e := st.log[len(st.log)-1]; e.Kind != KindReport || !e.OK {
+		t.Errorf("log: %+v", e)
+	}
+}
+
+func TestReportAutoSettings(t *testing.T) {
+	s, _, _ := newSvc(t, map[string]string{"/auth.test": okAuth})
+	if auto, cohort, err := s.ReportAuto(); auto || cohort != 0 || err != nil {
+		t.Fatalf("not connected: %v %d %v", auto, cohort, err)
+	}
+	_ = s.Connect("xoxb-1")
+	if err := s.SaveSettings(Settings{ReportAuto: true, ReportCohort: 13}); err == nil {
+		t.Error("auto-send needs a report channel first")
+	}
+	if err := s.SaveSettings(Settings{Report: "CR", ReportAuto: true}); err == nil {
+		t.Error("auto-send needs a cohort")
+	}
+	if err := s.SaveSettings(Settings{Report: "CR", ReportAuto: true, ReportCohort: 13}); err != nil {
+		t.Fatal(err)
+	}
+	if auto, cohort, _ := s.ReportAuto(); !auto || cohort != 13 {
+		t.Errorf("round trip: %v %d", auto, cohort)
+	}
+	st, _ := s.Status()
+	if !st.ReportAuto || st.ReportCohort != 13 {
+		t.Errorf("status: %+v", st)
+	}
+	if err := s.SaveSettings(Settings{Report: "CR", ReportAuto: false}); err != nil {
+		t.Errorf("turning auto-send off needs nothing else: %v", err)
+	}
+}

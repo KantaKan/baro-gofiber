@@ -102,6 +102,9 @@ func main() {
 	if err := container.CareRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure care indexes:", err)
 	}
+	if err := container.ReportRepo.EnsureIndexes(indexCtx); err != nil {
+		log.Fatal("Failed to ensure weekly report indexes:", err)
+	}
 	if err := container.SlackRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure Slack log indexes:", err)
 	}
@@ -124,6 +127,7 @@ func main() {
 	cancelIndexes()
 
 	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
+	go jobs.RunWeeklyReportJob(context.Background(), reportJob{slack: container.SlackService, rep: container.ReportService}, time.Minute)
 
 	// Close check-in sessions: once a minute, mark learners who didn't check in.
 	closer := attendance.NewSessionCloser(container.AttendanceRepo, container.LeaveRepo, container.UserService, container.CohortService, container.HolidayService)
@@ -212,6 +216,7 @@ func main() {
 		StaffGuard:   container.StaffGuard,
 		Team:         container.TeamHandler,
 		Slack:        container.SlackHandler,
+		Report:       container.ReportHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,

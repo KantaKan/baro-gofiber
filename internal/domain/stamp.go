@@ -8,13 +8,13 @@ import (
 )
 
 type Cohort struct {
-	CohortNumber int        `bson:"cohort_number" json:"cohortNumber"`
-	Name         string     `bson:"name" json:"name"`
-	StartDate    time.Time  `bson:"start_date" json:"startDate"`
-	LockAt       time.Time  `bson:"lock_at" json:"lockAt"`
-	IsLocked     bool       `bson:"is_locked" json:"isLocked"`
-	PosterURL    string     `bson:"poster_url,omitempty" json:"posterUrl,omitempty"`
-	CreatedAt    time.Time  `bson:"created_at" json:"createdAt"`
+	CohortNumber int       `bson:"cohort_number" json:"cohortNumber"`
+	Name         string    `bson:"name" json:"name"`
+	StartDate    time.Time `bson:"start_date" json:"startDate"`
+	LockAt       time.Time `bson:"lock_at" json:"lockAt"`
+	IsLocked     bool      `bson:"is_locked" json:"isLocked"`
+	PosterURL    string    `bson:"poster_url,omitempty" json:"posterUrl,omitempty"`
+	CreatedAt    time.Time `bson:"created_at" json:"createdAt"`
 }
 
 type Stamp struct {

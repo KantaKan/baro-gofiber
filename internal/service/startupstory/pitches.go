@@ -29,11 +29,11 @@ var themeEmoji = map[string]string{
 }
 
 var memePitchTitles = map[string]string{
-	ComboKey("LINE Bot", "Street Food"):           "Street-food LINE bot",
-	ComboKey("Dev Tool/CLI", "Government/Tax"):     "Tax calculator nobody asked for",
-	ComboKey("Mobile App", "Pets"):                 "Tinder for dogs",
-	ComboKey("Web3 dApp", "Crypto"):                "DAO that does nothing",
-	ComboKey("VR Game", "K-pop/Idols"):             "Front-row idol concert in VR",
+	ComboKey("LINE Bot", "Street Food"):        "Street-food LINE bot",
+	ComboKey("Dev Tool/CLI", "Government/Tax"): "Tax calculator nobody asked for",
+	ComboKey("Mobile App", "Pets"):             "Tinder for dogs",
+	ComboKey("Web3 dApp", "Crypto"):            "DAO that does nothing",
+	ComboKey("VR Game", "K-pop/Idols"):         "Front-row idol concert in VR",
 }
 
 var pitchTitleTemplates = []string{

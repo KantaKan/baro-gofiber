@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gofiber-baro/internal/service/report"
 	"gofiber-baro/internal/service/slack"
 	"gofiber-baro/internal/service/staff"
 	"gofiber-baro/pkg/utils"
@@ -106,6 +107,9 @@ type Container struct {
 	SlackRepo           *repository.SlackRepository
 	SlackService        *slack.Service
 	SlackHandler        *handler.SlackHandler
+	ReportRepo          *repository.ReportRepository
+	ReportService       *report.Service
+	ReportHandler       *handler.ReportHandler
 	TeamHandler         *handler.TeamHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
@@ -223,6 +227,9 @@ func (c *Container) initHandlers() {
 	c.TeamHandler = handler.NewTeamHandler(staff.NewTeam(c.StaffRepo))
 	c.CareHandler = handler.NewLearnerCareHandler(c.CareRepo, c.UserService)
 	c.WellbeingHandler = handler.NewWellbeingViewsHandler(c.UserService, c.AttendanceRepo, c.HolidayService, c.CareRepo)
+	c.ReportRepo = repository.NewReportRepository(c.DB)
+	c.ReportService = report.NewService(c.ReportRepo, handler.ReportSource{WB: c.WellbeingHandler, Holidays: c.HolidayService, Cup: c.CupService}, c.SlackService).WithAppURL(slack.AppURL())
+	c.ReportHandler = handler.NewReportHandler(c.ReportService)
 	c.ActivityHandler = handler.NewActivityHandler(c.AuditLogRepo, c.UserService)
 	c.StaffGuard = handler.StaffGuard(c.UserService)
 	c.CohortAdminHandler = handler.NewCohortAdminHandler(c.CohortService, handler.GroupStore{Lookup: c.UserService, Setter: repository.NewUserGroupsRepository(c.DB)})

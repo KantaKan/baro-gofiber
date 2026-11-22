@@ -265,10 +265,14 @@ func (h *WellbeingViewsHandler) Support(c *fiber.Ctx) error {
 	if e != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
 	}
+	return utils.SendResponse(c, fiber.StatusOK, "Needs support", h.SupportRows(users, recs))
+}
+
+// SupportRows is the Needs support list for a cohort's learners (shared with the weekly report).
+func (h *WellbeingViewsHandler) SupportRows(users []domain.User, recs []domain.AttendanceRecord) []wellbeing.SupportRow {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	items, _ := h.care.ItemsFor(ctx, ids(users))
 	acks, _ := h.care.AcksFor(ctx, ids(users), time.Now())
-	nights := h.classNights(2)
-	return utils.SendResponse(c, fiber.StatusOK, "Needs support", wellbeing.BuildSupportList(users, recs, items, acks, nights, wellbeing.DefaultWords))
+	return wellbeing.BuildSupportList(users, recs, items, acks, h.classNights(2), wellbeing.DefaultWords)
 }
