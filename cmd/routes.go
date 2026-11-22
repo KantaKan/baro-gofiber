@@ -25,6 +25,7 @@ type Handlers struct {
 	Care         *handler.LearnerCareHandler
 	Wellbeing    *handler.WellbeingViewsHandler
 	CohortAdmin  *handler.CohortAdminHandler
+	Activity     *handler.ActivityHandler
 	Stamp        *handler.StampHandler
 	History      *handler.HistoryHandler
 	Cosmetic     *handler.CosmeticHandler
@@ -184,6 +185,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Get("/reflections/weekly", h.Admin.GetWeeklySummary)
 	admin.Get("/emoji-zone-table", h.Admin.GetEmojiZoneTableData)
 	admin.Get("/history", h.History.GetHistory)
+	admin.Get("/activity", h.Activity.List)
 
 	admin.Post("/attendance/generate-code", h.Attendance.GenerateAttendanceCode)
 	admin.Get("/attendance/active-code", h.Attendance.GetActiveAttendanceCode)
