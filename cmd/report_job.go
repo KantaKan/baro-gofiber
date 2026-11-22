@@ -11,8 +11,7 @@ type reportJob struct {
 	rep   *report.Service
 }
 
-func (r reportJob) AutoSettings() (bool, int, error)             { return r.slack.ReportAuto() }
-func (r reportJob) IsSent(cohort int, week string) (bool, error) { return r.rep.IsSent(cohort, week) }
-func (r reportJob) Send(cohort int, week string) (report.SendResult, error) {
-	return r.rep.Send(cohort, week)
+func (r reportJob) AutoSettings() (bool, int, error) { return r.slack.ReportAuto() }
+func (r reportJob) AutoSend(cohort int, week string) (report.SendResult, error) {
+	return r.rep.AutoSend(cohort, week)
 }

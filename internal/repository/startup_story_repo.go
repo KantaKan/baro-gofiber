@@ -163,11 +163,11 @@ func (r *StartupStoryRepository) CountRankedRuns(ctx context.Context, ownerID pr
 
 func genmateFilter(cohort int, excludeID primitive.ObjectID) bson.M {
 	return bson.M{
-		"cohort_number":            cohort,
-		"role":                     bson.M{"$ne": "admin"},
-		"_id":                      bson.M{"$ne": excludeID},
-		"startup_story_opt_out":    bson.M{"$ne": true},
-		"deleted":                  bson.M{"$ne": true},
+		"cohort_number":         cohort,
+		"role":                  bson.M{"$ne": "admin"},
+		"_id":                   bson.M{"$ne": excludeID},
+		"startup_story_opt_out": bson.M{"$ne": true},
+		"deleted":               bson.M{"$ne": true},
 	}
 }
 

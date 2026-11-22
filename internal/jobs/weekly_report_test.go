@@ -52,53 +52,56 @@ func TestMondayOf(t *testing.T) {
 type fakeReporter struct {
 	auto    bool
 	cohort  int
-	sent    map[string]bool
-	sends   int
+	calls   int
 	sendErr error
+	res     report.SendResult
 }
 
 func (f *fakeReporter) AutoSettings() (bool, int, error) { return f.auto, f.cohort, nil }
-func (f *fakeReporter) IsSent(c int, w string) (bool, error) {
-	return f.sent[w], nil
-}
-func (f *fakeReporter) Send(c int, w string) (report.SendResult, error) {
-	f.sends++
-	if f.sendErr != nil {
-		return report.SendResult{}, f.sendErr
-	}
-	f.sent[w] = true
-	return report.SendResult{Status: "sent", SentToSlack: true}, nil
+func (f *fakeReporter) AutoSend(c int, w string) (report.SendResult, error) {
+	f.calls++
+	return f.res, f.sendErr
 }
 
-func TestTickSendsOncePerWeek(t *testing.T) {
-	f := &fakeReporter{auto: true, cohort: 13, sent: map[string]bool{}}
-	for i := 0; i < 5; i++ {
-		_ = Tick(f, at(20, 17, 5+i))
+func TestTickOnlyActsOnFridayEvening(t *testing.T) {
+	f := &fakeReporter{auto: true, cohort: 13}
+	_ = Tick(f, at(19, 17, 5)) // Thursday
+	_ = Tick(f, at(20, 9, 0))  // Friday morning
+	_ = Tick(f, at(20, 18, 0)) // Friday 18:00
+	if f.calls != 0 {
+		t.Errorf("must not run outside Friday 17:xx (%d calls)", f.calls)
 	}
-	if f.sends != 1 {
-		t.Fatalf("the Friday job must send once, sent %d times", f.sends)
-	}
-	next := &fakeReporter{auto: true, cohort: 13, sent: map[string]bool{}}
-	_ = Tick(next, at(19, 17, 5)) // Thursday
-	_ = Tick(next, at(20, 9, 0))  // Friday morning
-	if next.sends != 0 {
-		t.Error("must not send outside Friday 17:xx")
+	_ = Tick(f, at(20, 17, 5))
+	if f.calls != 1 {
+		t.Errorf("runs on Friday 17:xx (%d calls)", f.calls)
 	}
 }
 
 func TestTickRespectsSettings(t *testing.T) {
-	off := &fakeReporter{auto: false, cohort: 13, sent: map[string]bool{}}
+	off := &fakeReporter{auto: false, cohort: 13}
 	_ = Tick(off, at(20, 17, 5))
-	none := &fakeReporter{auto: true, cohort: 0, sent: map[string]bool{}}
+	none := &fakeReporter{auto: true, cohort: 0}
 	_ = Tick(none, at(20, 17, 5))
-	if off.sends != 0 || none.sends != 0 {
-		t.Errorf("auto off or no cohort must send nothing: %d %d", off.sends, none.sends)
+	if off.calls != 0 || none.calls != 0 {
+		t.Errorf("auto off or no cohort must do nothing: %d %d", off.calls, none.calls)
 	}
-	failing := &fakeReporter{auto: true, cohort: 13, sent: map[string]bool{}, sendErr: errors.New("db down")}
+}
+
+func TestTickReportsProblemsSoTheyAreLogged(t *testing.T) {
+	failing := &fakeReporter{auto: true, cohort: 13, sendErr: errors.New("db down")}
 	if err := Tick(failing, at(20, 17, 5)); err == nil {
-		t.Error("a failed send must be reported so it is retried on the next tick")
+		t.Error("a failed send must be returned (and logged)")
 	}
-	if err := Tick(failing, at(20, 17, 6)); err == nil || failing.sends != 2 {
-		t.Errorf("a failed week is retried (sends=%d)", failing.sends)
+	slackDown := &fakeReporter{auto: true, cohort: 13, res: report.SendResult{Status: "sent", SlackError: "slack: not_in_channel"}}
+	if err := Tick(slackDown, at(20, 17, 5)); err == nil {
+		t.Error("a Slack failure on the Friday post must not be silent")
+	}
+	ok := &fakeReporter{auto: true, cohort: 13, res: report.SendResult{Status: "sent", SentToSlack: true}}
+	if err := Tick(ok, at(20, 17, 5)); err != nil {
+		t.Errorf("a clean send is not an error: %v", err)
+	}
+	already := &fakeReporter{auto: true, cohort: 13, res: report.SendResult{Status: "sent", AlreadySent: true}}
+	if err := Tick(already, at(20, 17, 5)); err != nil {
+		t.Errorf("already sent is not an error: %v", err)
 	}
 }

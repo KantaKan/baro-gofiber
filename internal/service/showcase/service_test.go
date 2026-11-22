@@ -305,7 +305,7 @@ func TestMoodLastsTwentyFourHoursAndLeavesCharacterStateAlone(t *testing.T) {
 			t.Fatalf("SetMood(%q) = %+v, %v", mood, state, err)
 		}
 	}
-	for _, invalid := range []string{"angry", "fight:someone", "quiet "+owner.Hex()} {
+	for _, invalid := range []string{"angry", "fight:someone", "quiet " + owner.Hex()} {
 		if _, err := service.SetMood(context.Background(), owner.Hex(), invalid); !errors.Is(err, ErrInvalidMood) {
 			t.Fatalf("SetMood(%q) err = %v", invalid, err)
 		}

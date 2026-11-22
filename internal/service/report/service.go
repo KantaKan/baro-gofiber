@@ -19,6 +19,7 @@ var (
 	ErrSent         = errors.New("this report was already sent, so its notes are locked")
 	ErrNotesTooLong = errors.New("notes are too long (4000 characters at most)")
 	ErrBadCohort    = errors.New("invalid cohort")
+	ErrTooOld       = errors.New("only this week or last week can be sent for the first time")
 )
 
 // Saved is the stored side of a week: the team's notes, and the frozen report once it's sent.
@@ -29,6 +30,8 @@ type Saved struct {
 	Status   string     `bson:"status"`
 	SentAt   *time.Time `bson:"sent_at,omitempty"`
 	Snapshot *Report    `bson:"snapshot,omitempty"`
+	// PostError is the last Slack failure for this report ("" = posted, or Slack wasn't set up).
+	PostError string `bson:"post_error,omitempty"`
 }
 
 type Store interface {
@@ -37,6 +40,8 @@ type Store interface {
 	SaveNotes(cohort int, week, notes string) (bool, error)
 	// MarkSent freezes a report; false (no error) when the week was already sent.
 	MarkSent(s *Saved) (bool, error)
+	// SetPost records the outcome of the Slack post ("" = fine).
+	SetPost(cohort int, week, errMsg string) error
 }
 
 // Source loads the live data for a week (learners, records, holidays, support, Cup).
@@ -67,6 +72,13 @@ func (s *Service) WithAppURL(u string) *Service {
 	return s
 }
 
+// currentMonday is this week's Monday in Bangkok.
+func (s *Service) currentMonday() time.Time {
+	bkk := s.now().In(time.FixedZone("BKK", 7*3600))
+	today := time.Date(bkk.Year(), bkk.Month(), bkk.Day(), 0, 0, 0, 0, time.UTC)
+	return today.AddDate(0, 0, -((int(today.Weekday()) + 6) % 7))
+}
+
 func (s *Service) check(cohort int, week string) error {
 	if cohort <= 0 {
 		return ErrBadCohort
@@ -75,10 +87,7 @@ func (s *Service) check(cohort int, week string) error {
 	if err != nil || t.Weekday() != time.Monday {
 		return ErrBadWeek
 	}
-	bkk := s.now().In(time.FixedZone("BKK", 7*3600))
-	today := time.Date(bkk.Year(), bkk.Month(), bkk.Day(), 0, 0, 0, 0, time.UTC)
-	monday := today.AddDate(0, 0, -((int(today.Weekday()) + 6) % 7))
-	if t.After(monday) {
+	if t.After(s.currentMonday()) {
 		return ErrFutureWeek
 	}
 	return nil
@@ -127,12 +136,6 @@ func (s *Service) build(cohort int, week string, saved *Saved) (Report, error) {
 	return r, nil
 }
 
-// IsSent reports whether a week's report was already sent.
-func (s *Service) IsSent(cohort int, week string) (bool, error) {
-	saved, err := s.store.Get(cohort, week)
-	return saved != nil && saved.Status == StatusSent, err
-}
-
 // SaveNotes stores the team's notes; they lock when the report is sent.
 func (s *Service) SaveNotes(cohort int, week, notes string) error {
 	if err := s.check(cohort, week); err != nil {
@@ -155,10 +158,23 @@ type SendResult struct {
 	Status      string `json:"status"`
 	SentToSlack bool   `json:"sent_to_slack"`
 	SlackError  string `json:"slack_error,omitempty"`
+	// AlreadySent: nothing was posted because the report had already gone out (or another sender won the race).
+	AlreadySent bool `json:"already_sent,omitempty"`
 }
 
-// Send freezes the week's report (first time only) and posts it to Slack. Sending again re-posts the saved report.
+// Send freezes the week's report (first time only) and posts it to Slack. Pressing Send on a week that was
+// already sent re-posts the saved report; the numbers never change.
 func (s *Service) Send(cohort int, week string) (SendResult, error) {
+	return s.send(cohort, week, false)
+}
+
+// AutoSend is the Friday job's send: it never re-posts a report that already went out, but does retry a
+// post that failed.
+func (s *Service) AutoSend(cohort int, week string) (SendResult, error) {
+	return s.send(cohort, week, true)
+}
+
+func (s *Service) send(cohort int, week string, auto bool) (SendResult, error) {
 	if err := s.check(cohort, week); err != nil {
 		return SendResult{}, err
 	}
@@ -166,31 +182,42 @@ func (s *Service) Send(cohort int, week string) (SendResult, error) {
 	if err != nil {
 		return SendResult{}, err
 	}
-	if saved == nil || saved.Status != StatusSent || saved.Snapshot == nil {
-		r, err := s.build(cohort, week, saved)
-		if err != nil {
-			return SendResult{}, err
+	if saved != nil && saved.Status == StatusSent && saved.Snapshot != nil {
+		if auto && saved.PostError == "" {
+			return SendResult{Status: StatusSent, AlreadySent: true}, nil
 		}
-		now := s.now()
-		r.Status, r.SentAt = StatusSent, &now
-		won, err := s.store.MarkSent(&Saved{Cohort: cohort, Week: week, Notes: r.Notes, Status: StatusSent, SentAt: &now, Snapshot: &r})
-		if err != nil {
-			return SendResult{}, err
-		}
-		if !won { // someone else (or the Friday job) sent it a moment ago: post theirs
-			if saved, err = s.store.Get(cohort, week); err != nil || saved == nil || saved.Snapshot == nil {
-				return SendResult{}, errors.New("couldn't load the sent report")
-			}
-		} else {
-			saved = &Saved{Snapshot: &r}
-		}
+		return s.post(cohort, week, saved.Snapshot)
 	}
+	// First send: freezes today's data as this week's report, so only recent weeks qualify.
+	if week < prevWeek(s.currentMonday().Format("2006-01-02")) {
+		return SendResult{}, ErrTooOld
+	}
+	r, err := s.build(cohort, week, saved)
+	if err != nil {
+		return SendResult{}, err
+	}
+	now := s.now()
+	r.Status, r.SentAt = StatusSent, &now
+	won, err := s.store.MarkSent(&Saved{Cohort: cohort, Week: week, Notes: r.Notes, Status: StatusSent, SentAt: &now, Snapshot: &r})
+	if err != nil {
+		return SendResult{}, err
+	}
+	if !won { // another sender (a double click, the Friday job, another server) got there first; they post
+		return SendResult{Status: StatusSent, AlreadySent: true}, nil
+	}
+	return s.post(cohort, week, &r)
+}
+
+// post sends the saved report to Slack and remembers whether that worked. A Slack problem never loses the report.
+func (s *Service) post(cohort int, week string, r *Report) (SendResult, error) {
 	res := SendResult{Status: StatusSent}
-	posted, err := s.poster.PostReport(SlackText(*saved.Snapshot, cohort, s.link(week)))
+	posted, err := s.poster.PostReport(SlackText(*r, cohort, s.link(week)))
 	if err != nil {
 		res.SlackError = err.Error()
+		_ = s.store.SetPost(cohort, week, err.Error())
 		return res, nil
 	}
+	_ = s.store.SetPost(cohort, week, "")
 	res.SentToSlack = posted
 	return res, nil
 }

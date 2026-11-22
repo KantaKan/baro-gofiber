@@ -25,7 +25,7 @@ func reportErr(c *fiber.Ctx, err error) error {
 	switch {
 	case errors.Is(err, report.ErrSent):
 		return utils.SendError(c, fiber.StatusConflict, err.Error())
-	case errors.Is(err, report.ErrBadWeek), errors.Is(err, report.ErrFutureWeek), errors.Is(err, report.ErrNotesTooLong), errors.Is(err, report.ErrBadCohort):
+	case errors.Is(err, report.ErrBadWeek), errors.Is(err, report.ErrFutureWeek), errors.Is(err, report.ErrNotesTooLong), errors.Is(err, report.ErrBadCohort), errors.Is(err, report.ErrTooOld):
 		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
 	}
 	return utils.SendError(c, fiber.StatusInternalServerError, "Couldn't load the report")

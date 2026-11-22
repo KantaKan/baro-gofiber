@@ -26,6 +26,7 @@ func (s *stubReport) SaveNotes(c int, w, n string) error {
 	s.gotCohort, s.gotWeek, s.notes = c, w, n
 	return s.err
 }
+func (s *stubReport) AutoSend(c int, w string) (report.SendResult, error) { return s.Send(c, w) }
 func (s *stubReport) Send(c int, w string) (report.SendResult, error) {
 	s.gotCohort, s.gotWeek = c, w
 	return report.SendResult{Status: "sent", SentToSlack: true}, s.err
@@ -64,7 +65,7 @@ func TestReportHandlerErrors(t *testing.T) {
 	cases := []struct {
 		err  error
 		want int
-	}{{report.ErrBadWeek, 400}, {report.ErrFutureWeek, 400}, {report.ErrNotesTooLong, 400}, {report.ErrBadCohort, 400}, {report.ErrSent, 409}, {errors.New("db down"), 500}}
+	}{{report.ErrBadWeek, 400}, {report.ErrFutureWeek, 400}, {report.ErrNotesTooLong, 400}, {report.ErrBadCohort, 400}, {report.ErrTooOld, 400}, {report.ErrSent, 409}, {errors.New("db down"), 500}}
 	for _, c := range cases {
 		s := &stubReport{err: c.err}
 		app := reportApp(s)

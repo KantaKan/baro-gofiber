@@ -4,11 +4,13 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/cup"
 	"gofiber-baro/internal/service/wellbeing"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -179,5 +181,52 @@ func TestSummary(t *testing.T) {
 	}
 	if strings.Contains(s, "A") && strings.Contains(s, "01_A") {
 		t.Error("summary must not name learners")
+	}
+}
+
+func TestBetterIgnoresDropouts(t *testing.T) {
+	in, a, b, _ := fixture()
+	for i := range in.Users {
+		if in.Users[i].ID == b.ID {
+			in.Users[i].AttendanceStatus = "dropout"
+		}
+	}
+	in.Support = []wellbeing.SupportRow{{Learner: wellbeing.Ref(a)}}
+	in.PrevSupport = map[string]bool{b.ID.Hex(): true}
+	for _, s := range Build(in).Support {
+		if s.Status == "better" {
+			t.Errorf("a learner who dropped out didn't get better: %+v", s)
+		}
+	}
+}
+
+func TestFutureDaysAreNotMissing(t *testing.T) {
+	in, _, _, _ := fixture()
+	in.Today = "2026-11-18" // Wednesday
+	r := Build(in)
+	if r.ByDay[3].AM.NotYet != 0 || r.ByDay[4].PM.NotYet != 0 {
+		t.Errorf("Thursday and Friday haven't happened yet: %+v %+v", r.ByDay[3], r.ByDay[4])
+	}
+	if r.ByDay[2].AM.NotYet != 3 {
+		t.Errorf("Wednesday (today) with no records still shows no record: %+v", r.ByDay[2])
+	}
+}
+
+func TestSavedSurvivesMongo(t *testing.T) {
+	in, a, _, _ := fixture()
+	in.Support = []wellbeing.SupportRow{{Learner: wellbeing.Ref(a), Reasons: []wellbeing.Reason{{Key: "x", Text: "Leave 6/8"}}}}
+	r := Build(in)
+	now := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
+	raw, err := bson.Marshal(Saved{Cohort: 13, Week: week, Notes: "n", Status: StatusSent, SentAt: &now, PostError: "x", Snapshot: &r})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var back Saved
+	if err := bson.Unmarshal(raw, &back); err != nil {
+		t.Fatal(err)
+	}
+	g := back.Snapshot
+	if g == nil || g.Summary != r.Summary || len(g.KPIs.Attendance.Trend) != 8 || len(g.Mood) != 5 || len(g.ByDay) != 5 || len(g.Support) != 1 || g.Support[0].Reasons[0] != "Leave 6/8" || back.PostError != "x" || back.SentAt == nil {
+		t.Fatalf("a sent report must read back the same from Mongo: %+v", g)
 	}
 }

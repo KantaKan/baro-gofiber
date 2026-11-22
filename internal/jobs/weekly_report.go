@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -10,14 +11,13 @@ import (
 
 var bangkok = time.FixedZone("BKK", 7*3600)
 
-// Reporter is what the Friday job needs: the auto-send setting, and the weekly report service.
+// Reporter is what the Friday job needs: the auto-send setting, and the weekly report's automatic send.
 type Reporter interface {
 	AutoSettings() (auto bool, cohort int, err error)
-	IsSent(cohort int, week string) (bool, error)
-	Send(cohort int, week string) (report.SendResult, error)
+	AutoSend(cohort int, week string) (report.SendResult, error)
 }
 
-// ReportDue: Friday 17:00–17:59 Bangkok, and the week's report not sent yet.
+// ReportDue: Friday 17:00–17:59 Bangkok (and the week's report not sent yet).
 func ReportDue(now time.Time, alreadySent bool) bool {
 	n := now.In(bangkok)
 	return !alreadySent && n.Weekday() == time.Friday && n.Hour() == 17
@@ -30,26 +30,25 @@ func MondayOf(now time.Time) string {
 	return d.AddDate(0, 0, -((int(d.Weekday()) + 6) % 7)).Format("2006-01-02")
 }
 
-// Tick sends this week's report if auto-send is on and it is due. It returns an error when a send
-// failed, so the next tick (a minute later, still inside the hour) tries again.
+// Tick runs the Friday send when auto-send is on and it is 17:xx Friday. AutoSend posts a given week once,
+// and retries only a failed Slack post, so ticking every minute is safe. Any problem is returned so it gets
+// logged (and, being a Slack failure, retried on the next tick).
 func Tick(r Reporter, now time.Time) error {
-	if n := now.In(bangkok); n.Weekday() != time.Friday || n.Hour() != 17 {
+	if !ReportDue(now, false) {
 		return nil // cheap exit: no database work except on Friday 17:xx
 	}
 	auto, cohort, err := r.AutoSettings()
 	if err != nil || !auto || cohort <= 0 {
 		return err
 	}
-	week := MondayOf(now)
-	sent, err := r.IsSent(cohort, week)
+	res, err := r.AutoSend(cohort, MondayOf(now))
 	if err != nil {
 		return err
 	}
-	if !ReportDue(now, sent) {
-		return nil
+	if res.SlackError != "" {
+		return fmt.Errorf("the weekly report is saved but the Slack post failed: %s", res.SlackError)
 	}
-	_, err = r.Send(cohort, week)
-	return err
+	return nil
 }
 
 // RunWeeklyReportJob checks every interval (a minute is fine) until ctx ends.

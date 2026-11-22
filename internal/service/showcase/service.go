@@ -38,16 +38,16 @@ type Viewer struct {
 }
 
 type Entry struct {
-	OwnerID   string               `json:"owner_id"`
-	Name      string               `json:"name"`
-	Cohort    int                  `json:"cohort"`
-	Team      string               `json:"team"`
-	Character domain.BaroCharacter `json:"character"`
-	Prop      string               `json:"prop,omitempty"`
-	Message   string               `json:"message"`
-	UpdatedAt time.Time            `json:"updated_at"`
-	Hidden    bool                 `json:"hidden,omitempty"`
-	Reactions []ReactionSummary    `json:"reactions"`
+	OwnerID     string               `json:"owner_id"`
+	Name        string               `json:"name"`
+	Cohort      int                  `json:"cohort"`
+	Team        string               `json:"team"`
+	Character   domain.BaroCharacter `json:"character"`
+	Prop        string               `json:"prop,omitempty"`
+	Message     string               `json:"message"`
+	UpdatedAt   time.Time            `json:"updated_at"`
+	Hidden      bool                 `json:"hidden,omitempty"`
+	Reactions   []ReactionSummary    `json:"reactions"`
 	Mood        string               `json:"mood,omitempty"`
 	MoodUntil   *time.Time           `json:"mood_until,omitempty"`
 	Emote       string               `json:"emote,omitempty"`

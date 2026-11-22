@@ -179,7 +179,10 @@ func buildMood(users []domain.User, monday, today string, hol map[string]bool) m
 	return w
 }
 
-func tally(t *Tally, st domain.AttendanceStatus) {
+func tally(t *Tally, st domain.AttendanceStatus, future bool) {
+	if st == "" && future {
+		return // the day hasn't happened yet, so nobody is missing
+	}
 	switch st {
 	case domain.StatusPresent:
 		t.OnTime++
@@ -239,8 +242,8 @@ func Build(in Input) Report {
 		row := DayRow{Day: day, Holiday: in.Holidays[day]}
 		if !row.Holiday {
 			for _, l := range cur.Learners {
-				tally(&row.AM, l.Days[d][0].Status)
-				tally(&row.PM, l.Days[d][1].Status)
+				tally(&row.AM, l.Days[d][0].Status, day > in.Today)
+				tally(&row.PM, l.Days[d][1].Status, day > in.Today)
 			}
 		}
 		r.ByDay[d] = row
@@ -290,7 +293,7 @@ func Build(in Input) Report {
 		}
 		r.Support = append(r.Support, SupportItem{Learner: row.Learner, Status: st, Reasons: reasons})
 	}
-	for _, u := range in.Users {
+	for _, u := range active { // learners who dropped out didn't "get better"
 		if id := u.ID.Hex(); in.PrevSupport[id] && !seen[id] {
 			r.Support = append(r.Support, SupportItem{Learner: wellbeing.Ref(u), Status: "better", Reasons: []string{}})
 		}

@@ -26,7 +26,7 @@ var (
 	ErrAllFieldsRequired  = errors.New("code and cohort are required")
 	ErrNoActiveCode       = errors.New("no active code for this session")
 	ErrRecordNotFound     = errors.New("attendance record not found")
-	ErrTooManyAttempts     = errors.New("too many failed attempts, try again later")
+	ErrTooManyAttempts    = errors.New("too many failed attempts, try again later")
 )
 
 // codeAttemptKey is the in-memory throttle entry for per-user code brute-force protection.

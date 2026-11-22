@@ -9,7 +9,10 @@ import (
 	"gofiber-baro/internal/service/wellbeing"
 )
 
-type memStore struct{ m map[string]*Saved }
+type memStore struct {
+	m    map[string]*Saved
+	lose bool // simulate another sender winning the race
+}
 
 func key(c int, w string) string { return w + "/" + string(rune('0'+c%10)) }
 
@@ -32,7 +35,18 @@ func (s *memStore) SaveNotes(c int, w, notes string) (bool, error) {
 	v.Notes = notes
 	return true, nil
 }
+func (s *memStore) SetPost(c int, w, errMsg string) error {
+	if v := s.m[key(c, w)]; v != nil {
+		v.PostError = errMsg
+	}
+	return nil
+}
 func (s *memStore) MarkSent(sv *Saved) (bool, error) {
+	if s.lose {
+		cp := *sv
+		s.m[key(sv.Cohort, sv.Week)] = &cp // the other sender's report is what's stored
+		return false, nil
+	}
 	if v := s.m[key(sv.Cohort, sv.Week)]; v != nil && v.Status == StatusSent {
 		return false, nil
 	}
@@ -181,5 +195,57 @@ func TestSupportBetterComesFromLastSentReport(t *testing.T) {
 	r, _ := s.Get(13, week)
 	if len(r.Support) != 1 || r.Support[0].Status != "still" {
 		t.Fatalf("A was in last week's list and still is: %+v", r.Support)
+	}
+}
+
+func TestRaceLoserDoesNotPostToSlack(t *testing.T) {
+	s, st, _, po := newSvc(t)
+	st.lose = true
+	res, err := s.Send(13, week)
+	if err != nil || !res.AlreadySent || res.SentToSlack || len(po.texts) != 0 {
+		t.Fatalf("the loser of a send race must not post: %v %+v posts=%d", err, res, len(po.texts))
+	}
+}
+
+func TestAutoSendPostsOnceAndRetriesOnlyFailures(t *testing.T) {
+	s, st, _, po := newSvc(t)
+	po.err = errors.New("slack: not_in_channel")
+	res, err := s.AutoSend(13, week)
+	if err != nil || res.SlackError == "" || res.SentToSlack {
+		t.Fatalf("first run records the failure: %v %+v", err, res)
+	}
+	if st.m[key(13, week)].PostError == "" || st.m[key(13, week)].Status != StatusSent {
+		t.Fatalf("report is saved as sent with the post error: %+v", st.m[key(13, week)])
+	}
+	po.err = nil
+	if res, _ = s.AutoSend(13, week); !res.SentToSlack || len(po.texts) != 1 || st.m[key(13, week)].PostError != "" {
+		t.Fatalf("the failed post is retried and the error cleared: %+v posts=%d", res, len(po.texts))
+	}
+	if res, _ = s.AutoSend(13, week); !res.AlreadySent || len(po.texts) != 1 {
+		t.Fatalf("after it is posted, the job never posts again: %+v posts=%d", res, len(po.texts))
+	}
+}
+
+func TestAutoSendWhenSlackIsNotSetUpDoesNotRetryForever(t *testing.T) {
+	s, _, _, po := newSvc(t)
+	po.on = false
+	_, _ = s.AutoSend(13, week)
+	if res, _ := s.AutoSend(13, week); !res.AlreadySent {
+		t.Errorf("no Slack configured is not a failure to retry: %+v", res)
+	}
+}
+
+func TestOldUnsentWeekCannotBeSent(t *testing.T) {
+	s, st, _, _ := newSvc(t) // "now" is Friday 20 Nov: this week 16 Nov, last week 9 Nov
+	if _, err := s.Send(13, "2026-10-26"); !errors.Is(err, ErrTooOld) {
+		t.Errorf("an old never-sent week would freeze today's data as that week: %v", err)
+	}
+	if _, err := s.Send(13, prev); err != nil {
+		t.Errorf("last week may still be sent: %v", err)
+	}
+	r := Build(Input{Week: "2026-10-26", Today: today})
+	st.m[key(13, "2026-10-26")] = &Saved{Cohort: 13, Week: "2026-10-26", Status: StatusSent, Snapshot: &r}
+	if _, err := s.Send(13, "2026-10-26"); err != nil {
+		t.Errorf("an already-sent old week can be re-posted: %v", err)
 	}
 }

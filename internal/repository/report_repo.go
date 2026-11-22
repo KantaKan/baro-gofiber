@@ -54,6 +54,13 @@ func (r *ReportRepository) SaveNotes(cohort int, week, notes string) (bool, erro
 	return err == nil, err
 }
 
+func (r *ReportRepository) SetPost(cohort int, week, errMsg string) error {
+	c, cancel := staffCtx()
+	defer cancel()
+	_, err := r.col.UpdateOne(c, bson.M{"cohort": cohort, "week": week}, bson.M{"$set": bson.M{"post_error": errMsg}})
+	return err
+}
+
 func (r *ReportRepository) MarkSent(s *report.Saved) (bool, error) {
 	c, cancel := staffCtx()
 	defer cancel()

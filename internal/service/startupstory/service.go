@@ -39,23 +39,23 @@ type Player struct {
 }
 
 type Overview struct {
-	Studio     *domain.StartupStudio `json:"studio"`
-	Run        *domain.StartupRun    `json:"run"`
-	RankedAttemptsLeft int           `json:"ranked_attempts_left"`
-	WeekKey    string                `json:"week_key"`
-	ServerTime time.Time             `json:"server_time"`
-	Types      []string              `json:"types"`
-	Themes     []string              `json:"themes"`
-	Items      []StartupItem         `json:"items"`
-	Unlocks    []UnlockInfo          `json:"unlocks"`
+	Studio             *domain.StartupStudio `json:"studio"`
+	Run                *domain.StartupRun    `json:"run"`
+	RankedAttemptsLeft int                   `json:"ranked_attempts_left"`
+	WeekKey            string                `json:"week_key"`
+	ServerTime         time.Time             `json:"server_time"`
+	Types              []string              `json:"types"`
+	Themes             []string              `json:"themes"`
+	Items              []StartupItem         `json:"items"`
+	Unlocks            []UnlockInfo          `json:"unlocks"`
 	Roles              []RoleInfo            `json:"roles"`
 	Perks              []PerkInfo            `json:"perks"`
 	OSSUnlocked        bool                  `json:"oss_unlocked"`
-	OptOut     bool                  `json:"opt_out"`
-	ComboRatings map[string]string     `json:"combo_ratings,omitempty"`
-	DeskPrices   DeskPrices            `json:"desk_prices"`
-	Infra        InfraPrices           `json:"infra"`
-	Offices      []OfficeInfo          `json:"offices"`
+	OptOut             bool                  `json:"opt_out"`
+	ComboRatings       map[string]string     `json:"combo_ratings,omitempty"`
+	DeskPrices         DeskPrices            `json:"desk_prices"`
+	Infra              InfraPrices           `json:"infra"`
+	Offices            []OfficeInfo          `json:"offices"`
 }
 
 type Service struct {
