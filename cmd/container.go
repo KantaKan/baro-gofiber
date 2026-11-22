@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gofiber-baro/internal/service/staff"
 	"gofiber-baro/pkg/utils"
 	"log"
 
@@ -100,6 +101,8 @@ type Container struct {
 	ActivityHandler     *handler.ActivityHandler
 	StaffGuard          fiber.Handler
 	CareRepo            *repository.CareRepository
+	StaffRepo           *repository.StaffRepository
+	TeamHandler         *handler.TeamHandler
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
 	CosmeticHandler     *handler.CosmeticHandler
@@ -209,6 +212,8 @@ func (c *Container) initHandlers() {
 	c.AdminViewsHandler = handler.NewAdminViewsHandler(c.UserService, c.AttendanceRepo, c.CohortService, c.HolidayService)
 	c.AdminMarkHandler = handler.NewAdminMarkHandler(c.AttendanceSubmissionService, c.AttendanceRepo)
 	c.CareRepo = repository.NewCareRepository(c.DB)
+	c.StaffRepo = repository.NewStaffRepository(c.DB)
+	c.TeamHandler = handler.NewTeamHandler(staff.NewTeam(c.StaffRepo))
 	c.CareHandler = handler.NewLearnerCareHandler(c.CareRepo, c.UserService)
 	c.WellbeingHandler = handler.NewWellbeingViewsHandler(c.UserService, c.AttendanceRepo, c.HolidayService, c.CareRepo)
 	c.ActivityHandler = handler.NewActivityHandler(c.AuditLogRepo, c.UserService)

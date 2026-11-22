@@ -1129,13 +1129,18 @@ func (h *UserHandler) GetDomainUserByID(id string) (*domain.User, error) {
 	return h.userService.GetUserByID(id)
 }
 
+// canLogIn: right password, and not a removed team member.
+func canLogIn(u *domain.User, password string) bool {
+	return u.Role != "disabled" && utils.CheckPasswordHash(password, u.Password)
+}
+
 func (h *UserHandler) authenticateUser(email, password string) (string, string, string, error) {
 	user, err := h.userService.GetUserByEmail(email)
 	if err != nil {
 		return "", "", "", errors.New("invalid credentials")
 	}
 
-	if !utils.CheckPasswordHash(password, user.Password) {
+	if !canLogIn(user, password) {
 		return "", "", "", errors.New("invalid credentials")
 	}
 

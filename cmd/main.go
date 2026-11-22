@@ -88,6 +88,9 @@ func main() {
 	if err := container.CareRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure care indexes:", err)
 	}
+	if err := container.StaffRepo.EnsureIndexes(indexCtx); err != nil {
+		log.Fatal("Failed to ensure staff invite indexes:", err)
+	}
 	if err := container.CupRepo.EnsureIndexes(indexCtx); err != nil {
 		log.Fatal("Failed to ensure GenMate Cup indexes:", err)
 	}
@@ -190,6 +193,7 @@ func main() {
 		CohortAdmin:  container.CohortAdminHandler,
 		Activity:     container.ActivityHandler,
 		StaffGuard:   container.StaffGuard,
+		Team:         container.TeamHandler,
 		Stamp:        container.StampHandler,
 		History:      container.HistoryHandler,
 		Cosmetic:     container.CosmeticHandler,
