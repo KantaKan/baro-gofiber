@@ -277,3 +277,18 @@ func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) 
 	}
 	return out, nil
 }
+
+// ProjectLeave is the leave count if a leave on date were approved (same counting as LeaveDaysUsed;
+// a date that already counts adds nothing).
+func ProjectLeave(days []DayResult, date string) int {
+	n := LeaveDaysUsed(days)
+	for _, d := range days {
+		if d.Date == date {
+			switch d.Status {
+			case domain.StatusAbsent, domain.StatusAbsentExcused, domain.StatusLate, domain.StatusLateExcused:
+				return n
+			}
+		}
+	}
+	return n + 1
+}

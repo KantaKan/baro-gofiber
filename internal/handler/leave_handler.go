@@ -3,6 +3,7 @@ package handler
 import (
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/internal/service/leave"
+	"gofiber-baro/internal/service/staff"
 	"gofiber-baro/internal/service/user"
 	"gofiber-baro/pkg/utils"
 
@@ -13,6 +14,14 @@ import (
 type LeaveHandler struct {
 	leaveService *leave.Service
 	userService  *user.Service
+	// project gives the leave count if a request were approved (TA limit); nil = no check.
+	project func(userID primitive.ObjectID, date string) (int, error)
+}
+
+// WithLeaveProjection enables the TA approval limit.
+func (h *LeaveHandler) WithLeaveProjection(f func(userID primitive.ObjectID, date string) (int, error)) *LeaveHandler {
+	h.project = f
+	return h
 }
 
 func NewLeaveHandler(leaveService *leave.Service, userService *user.Service) *LeaveHandler {
@@ -133,6 +142,23 @@ func (h *LeaveHandler) UpdateLeaveRequestStatus(c *fiber.Ctx) error {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid leave request ID")
+	}
+
+	if role := staffRole(c); role == staff.TA && body.Status == string(domain.LeaveStatusApproved) {
+		if h.project == nil {
+			return utils.SendError(c, fiber.StatusForbidden, "Needs an Admin to approve")
+		}
+		req, err := h.leaveService.GetLeaveRequestByID(oid)
+		if err != nil || req == nil {
+			return utils.SendError(c, fiber.StatusNotFound, "Leave request not found")
+		}
+		n, err := h.project(req.UserID, req.Date)
+		if err != nil {
+			return utils.SendError(c, fiber.StatusInternalServerError, "Error checking leave")
+		}
+		if !taMayApprove(role, body.Status, n) {
+			return utils.SendError(c, fiber.StatusForbidden, "Needs an Admin: this would take them past 6 of 8 leave days")
+		}
 	}
 
 	userID := c.Locals("userID")

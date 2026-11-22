@@ -203,10 +203,10 @@ func (c *Container) initHandlers() {
 		c.CheckinService,
 		c.ProgressService,
 	)
-	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService)
+	c.LeaveHandler = handler.NewLeaveHandler(c.LeaveService, c.UserService).WithLeaveProjection(handler.LeaveProjection{Records: c.AttendanceRepo}.Project)
 	c.HolidayHandler = handler.NewHolidayHandler(c.HolidayService)
 	c.TalkBoardHandler = handler.NewTalkBoardHandler(c.TalkBoardRepo, c.UserService)
-	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService)
+	c.NotificationHandler = handler.NewNotificationHandler(c.NotificationService).WithUsers(c.UserService)
 	c.CohortHandler = handler.NewCohortHandler(c.CohortService)
 	c.CupHandler = handler.NewCupHandler(c.CupService, c.UserService)
 	c.AdminViewsHandler = handler.NewAdminViewsHandler(c.UserService, c.AttendanceRepo, c.CohortService, c.HolidayService)

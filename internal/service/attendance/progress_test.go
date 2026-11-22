@@ -123,3 +123,16 @@ func TestCourseProgress(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectLeave(t *testing.T) {
+	days := []DayResult{{Date: "2026-11-02", Status: domain.StatusAbsent}, {Date: "2026-11-03", Status: domain.StatusLate}, {Date: "2026-11-04", Status: domain.StatusPresent}}
+	if ProjectLeave(days, "2026-11-10") != 3 {
+		t.Error("new day should add one")
+	}
+	if ProjectLeave(days, "2026-11-02") != 2 {
+		t.Error("a day already counted shouldn't add")
+	}
+	if ProjectLeave(days, "2026-11-04") != 3 {
+		t.Error("a present day becomes leave")
+	}
+}
