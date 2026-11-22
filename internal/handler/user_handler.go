@@ -145,6 +145,10 @@ func (h *UserHandler) CreateReflection(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid Barometer zone selected. Please choose from the provided options.")
 	}
 
+	if !reflectionAnswersComplete(reflection.ReflectionData) {
+		return utils.SendError(c, fiber.StatusBadRequest, "Please answer all four questions before sending your reflection.")
+	}
+
 	// Sanitize all text inputs to prevent XSS
 	reflection.ReflectionData.Barometer = html.EscapeString(reflection.ReflectionData.Barometer)
 
