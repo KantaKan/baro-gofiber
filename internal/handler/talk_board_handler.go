@@ -91,7 +91,7 @@ func (h *TalkBoardHandler) CreatePost(c *fiber.Ctx) error {
 
 	post := &domain.Post{
 		UserID:    userOID,
-		ZoomName:  userData.ZoomName,
+		ZoomName:  boardName(userData),
 		Cohort:    target,
 		Content:   body.Content,
 		Reactions: []domain.Reaction{},
@@ -133,7 +133,9 @@ func (h *TalkBoardHandler) AddComment(c *fiber.Ctx) error {
 	comment := domain.Comment{
 		ID:       primitive.NewObjectID(),
 		UserID:   userOID,
-		ZoomName: userData.ZoomName,
+		ZoomName: boardName(userData),
+		// a reply starts with an empty list: MongoDB can't push a reaction onto null
+		Reactions: []domain.Reaction{},
 		// the reply belongs to the post's board (staff have no cohort of their own)
 		Cohort:    post.Cohort,
 		Content:   body.Content,

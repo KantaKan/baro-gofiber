@@ -40,6 +40,7 @@ func TestBoardPostAccess(t *testing.T) {
 		{"Viewer can't write (read-only)", viewer13, 13, true, false},
 		{"Owner reads anywhere", owner, 14, false, true},
 		{"Owner writes anywhere", owner, 14, true, true},
+		{"learner with no cohort reads nothing", boardActor{ownCohort: 0}, 0, false, false},
 	}
 	for _, tc := range cases {
 		if got := boardPostAccess(tc.a, tc.post, tc.write); got != tc.ok {
@@ -115,7 +116,7 @@ func boardTestApp(repo *fakeBoardRepo) *fiber.App {
 	users := fakeUsers{
 		learner13ID.Hex(): {ID: learner13ID, Role: "learner", CohortNumber: 13, ZoomName: "01_Fah"},
 		learner14ID.Hex(): {ID: learner14ID, Role: "learner", CohortNumber: 14},
-		ta13ID.Hex():      {ID: ta13ID, Role: "admin", StaffRole: staff.TA, StaffCohorts: []int{13}, CohortNumber: 0, ZoomName: "TA Kan"},
+		ta13ID.Hex():      {ID: ta13ID, Role: "admin", StaffRole: staff.TA, StaffCohorts: []int{13}, CohortNumber: 0, FirstName: "Kan"},
 		viewerID.Hex():    {ID: viewerID, Role: "admin", StaffRole: staff.Viewer, StaffCohorts: []int{13}},
 		ownerID.Hex():     {ID: ownerID, Role: "admin", StaffRole: staff.Owner},
 	}
@@ -246,5 +247,26 @@ func TestReplyReactionOnMissingCommentIs404(t *testing.T) {
 	path := "/board/posts/" + repo.post.ID.Hex() + "/comments/" + primitive.NewObjectID().Hex() + "/reactions"
 	if got := call(t, app, http.MethodPost, path, learner13ID, map[string]string{"reaction": "👍"}); got != 404 {
 		t.Errorf("got %d, want 404", got)
+	}
+}
+
+func TestStaffReplyIsNamedAndReactable(t *testing.T) {
+	repo := &fakeBoardRepo{post: domain.Post{ID: primitive.NewObjectID(), Cohort: 13}}
+	app := boardTestApp(repo)
+	if got := call(t, app, http.MethodPost, "/board/posts/"+repo.post.ID.Hex()+"/comments", ta13ID, map[string]string{"content": "nice"}); got != 200 {
+		t.Fatalf("got %d", got)
+	}
+	c := repo.comments[0]
+	if c.ZoomName != "Kan" {
+		t.Errorf("a staff member without a Zoom name should reply as their first name, got %q", c.ZoomName)
+	}
+	if c.Reactions == nil {
+		t.Error("a new reply must start with an empty reactions list (null can't take a reaction)")
+	}
+}
+
+func TestBoardCohortForReadRefusesALearnerWithNoCohort(t *testing.T) {
+	if _, ok := boardCohortForRead(boardActor{ownCohort: 0}, 0); ok {
+		t.Error("a learner with no cohort must not get every cohort's posts")
 	}
 }

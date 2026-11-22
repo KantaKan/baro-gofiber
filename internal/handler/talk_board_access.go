@@ -20,7 +20,8 @@ type boardActor struct {
 // Owners asking for no cohort get every cohort (old pages); other staff get their first cohort.
 func boardCohortForRead(a boardActor, requested int) (int, bool) {
 	if a.role == "" {
-		return a.ownCohort, true
+		// cohort 0 would mean "every cohort" to the repo
+		return a.ownCohort, a.ownCohort > 0
 	}
 	if requested == 0 {
 		if a.role == staff.Owner {
@@ -79,12 +80,20 @@ func (h *TalkBoardHandler) actor(c *fiber.Ctx) (boardActor, bool) {
 // care capability, so a read-only Viewer can look but not take part.
 func boardPostAccess(a boardActor, postCohort int, write bool) bool {
 	if a.role == "" {
-		return postCohort == a.ownCohort
+		return a.ownCohort > 0 && postCohort == a.ownCohort
 	}
 	if !staff.InScope(a.role, a.cohorts, postCohort) {
 		return false
 	}
 	return !write || staff.Can(a.role, staff.CapCare)
+}
+
+// boardName is how a person shows on the board: their Zoom name, else first name (staff often have no Zoom name).
+func boardName(u *domain.User) string {
+	if u.ZoomName != "" {
+		return u.ZoomName
+	}
+	return u.FirstName
 }
 
 // boardUsers is the one thing the board needs from the user service.

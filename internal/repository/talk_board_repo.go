@@ -96,7 +96,17 @@ func (r *talkBoardRepository) AddReaction(ctx context.Context, postID primitive.
 	return err
 }
 
+// nullReplyReactionsRepair turns a reply's null reactions (older replies) into an empty list.
+func nullReplyReactionsRepair(commentID primitive.ObjectID) (bson.M, []interface{}) {
+	return bson.M{"$set": bson.M{"comments.$[c].reactions": bson.A{}}}, []interface{}{bson.M{"c._id": commentID, "c.reactions": nil}}
+}
+
 func (r *talkBoardRepository) AddCommentReaction(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID, reaction domain.Reaction) error {
+	repair, filters := nullReplyReactionsRepair(commentID)
+	if _, err := r.collection.UpdateOne(ctx, bson.M{"_id": postID}, repair, options.Update().SetArrayFilters(options.ArrayFilters{Filters: filters})); err != nil {
+		log.Printf("ERROR: AddCommentReaction repair: %v", err)
+		return err
+	}
 	_, err := r.collection.UpdateOne(
 		ctx,
 		bson.M{"_id": postID},
