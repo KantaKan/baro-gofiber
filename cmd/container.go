@@ -94,6 +94,8 @@ type Container struct {
 	CupHandler          *handler.CupHandler
 	AdminViewsHandler   *handler.AdminViewsHandler
 	AdminMarkHandler    *handler.AdminMarkHandler
+	CareHandler         *handler.LearnerCareHandler
+	CareRepo            *repository.CareRepository
 	StampHandler        *handler.StampHandler
 	HistoryHandler      *handler.HistoryHandler
 	CosmeticHandler     *handler.CosmeticHandler
@@ -202,6 +204,8 @@ func (c *Container) initHandlers() {
 	c.CupHandler = handler.NewCupHandler(c.CupService, c.UserService)
 	c.AdminViewsHandler = handler.NewAdminViewsHandler(c.UserService, c.AttendanceRepo, c.CohortService, c.HolidayService)
 	c.AdminMarkHandler = handler.NewAdminMarkHandler(c.AttendanceSubmissionService, c.AttendanceRepo)
+	c.CareRepo = repository.NewCareRepository(c.DB)
+	c.CareHandler = handler.NewLearnerCareHandler(c.CareRepo, c.UserService)
 	c.StampHandler = handler.NewStampHandler(c.StampRepo, c.CohortRepo, c.UserService, c.StampStorage)
 	c.HistoryHandler = handler.NewHistoryHandler(c.AuditLogRepo, c.UserRepo)
 	c.CosmeticHandler = handler.NewCosmeticHandler(c.CosmeticService)
