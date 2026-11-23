@@ -689,43 +689,6 @@ func (h *UserHandler) AwardBadge(c *fiber.Ctx) error {
 	return utils.SendResponse(c, fiber.StatusOK, "Badge awarded successfully", nil)
 }
 
-func (h *UserHandler) UpdateReflectionFeedback(c *fiber.Ctx) error {
-	type RequestBody struct {
-		UserID       string `json:"user_id"`
-		ReflectionID string `json:"reflection_id"`
-		Feedback     string `json:"feedback"`
-	}
-
-	var body RequestBody
-	if err := c.BodyParser(&body); err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
-	}
-
-	if body.UserID == "" || body.ReflectionID == "" {
-		return utils.SendError(c, fiber.StatusBadRequest, "User ID and reflection ID are required")
-	}
-
-	userID, err := primitive.ObjectIDFromHex(body.UserID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
-	}
-
-	reflectionID, err := primitive.ObjectIDFromHex(body.ReflectionID)
-	if err != nil {
-		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reflection ID")
-	}
-
-	var replier *domain.User
-	if id, ok := c.Locals("userID").(string); ok {
-		replier, _ = h.userService.GetUserByID(id)
-	}
-	if err := h.userService.UpdateReflectionFeedback(userID, reflectionID, body.Feedback, feedbackAuthor(replier, time.Now())); err != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error updating feedback")
-	}
-
-	return utils.SendResponse(c, fiber.StatusOK, "Feedback updated successfully", nil)
-}
-
 func (h *UserHandler) GetGenmateGarden(c *fiber.Ctx) error {
 	claims, ok := c.Locals("user").(*middleware.Claims)
 	if !ok {

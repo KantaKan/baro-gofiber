@@ -228,7 +228,7 @@ func TestStaffReplyTakesThePostsCohort(t *testing.T) {
 	}
 }
 
-func TestReplyReactionReplacesTheCallersOld(t *testing.T) {
+func TestReplyReactionIsSetInOneCall(t *testing.T) {
 	commentID := primitive.NewObjectID()
 	repo := &fakeBoardRepo{post: domain.Post{ID: primitive.NewObjectID(), Cohort: 13, Comments: []domain.Comment{{ID: commentID}}}}
 	app := boardTestApp(repo)
@@ -236,8 +236,9 @@ func TestReplyReactionReplacesTheCallersOld(t *testing.T) {
 	if got := call(t, app, http.MethodPost, path, learner13ID, map[string]string{"reaction": "👍"}); got != 200 {
 		t.Fatalf("got %d", got)
 	}
-	if !repo.pulledComment || repo.commentReacts != 1 {
-		t.Errorf("should pull the old reaction then add one, pulled=%v added=%d", repo.pulledComment, repo.commentReacts)
+	// the repo sets the caller's one reaction in place; the handler no longer pulls first
+	if repo.pulledComment || repo.commentReacts != 1 {
+		t.Errorf("should set the reaction once without a separate pull, pulled=%v set=%d", repo.pulledComment, repo.commentReacts)
 	}
 }
 

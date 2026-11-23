@@ -64,7 +64,10 @@ type Entry struct {
 	NonTechHappy   string     `json:"nontech_happy"`
 	NonTechImprove string     `json:"nontech_improve"`
 	AdminFeedback  string     `json:"admin_feedback"`
-	Words          []string   `json:"words"`
+	// who replied and when (empty for replies saved before this was recorded)
+	AdminFeedbackName string     `json:"admin_feedback_name,omitempty"`
+	AdminFeedbackAt   *time.Time `json:"admin_feedback_at,omitempty"`
+	Words             []string   `json:"words"`
 }
 type GroupSent struct {
 	Group string `json:"group"`
@@ -154,7 +157,7 @@ func BuildBoard(users []domain.User, nights []string, rng string, words []string
 					un := html.UnescapeString
 					b.Entries = append(b.Entries, Entry{Learner: ref, ReflectionID: r.ID.Hex(), Day: b.Date, Zone: x.Zone,
 						TechHappy: un(d.TechSessions.Happy), TechImprove: un(d.TechSessions.Improve), NonTechHappy: un(d.NonTechSessions.Happy), NonTechImprove: un(d.NonTechSessions.Improve),
-						AdminFeedback: un(r.AdminFeedback), Words: Highlight(joinText(r), words)})
+						AdminFeedback: un(r.AdminFeedback), AdminFeedbackName: r.AdminFeedbackName, AdminFeedbackAt: r.AdminFeedbackAt, Words: Highlight(joinText(r), words)})
 					break // one entry per learner per night (the last one written wins in Nights)
 				}
 			}

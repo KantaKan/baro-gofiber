@@ -26,13 +26,16 @@ func (s *Service) GetAllReflections() ([]domain.Reflection, error) {
 	pipeline := []bson.M{
 		{"$unwind": "$reflections"},
 		{"$project": bson.M{
-			"_id":            "$reflections._id",
-			"day":            "$reflections.day",
-			"user_id":        "$reflections.user_id",
-			"date":           "$reflections.date",
-			"created_at":     "$reflections.createdAt",
-			"reflection":     "$reflections.reflection",
-			"admin_feedback": "$reflections.admin_feedback",
+			"_id":                 "$reflections._id",
+			"day":                 "$reflections.day",
+			"user_id":             "$reflections.user_id",
+			"date":                "$reflections.date",
+			"created_at":          "$reflections.createdAt",
+			"reflection":          "$reflections.reflection",
+			"admin_feedback":      "$reflections.admin_feedback",
+			"admin_feedback_by":   "$reflections.admin_feedback_by",
+			"admin_feedback_name": "$reflections.admin_feedback_name",
+			"admin_feedback_at":   "$reflections.admin_feedback_at",
 		}},
 	}
 

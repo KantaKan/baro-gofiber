@@ -471,25 +471,26 @@ func (r *userRepository) hasProtectedDate(ctx context.Context, userID primitive.
 
 // reflectionFeedbackUpdate sets the reply with who wrote it and when; a blank reply clears all of it.
 func reflectionFeedbackUpdate(feedback string, author domain.FeedbackAuthor) bson.M {
+	const p = "reflections.$."
 	if strings.TrimSpace(feedback) == "" {
 		return bson.M{
-			"$set":   bson.M{"reflections.$.admin_feedback": ""},
-			"$unset": bson.M{"reflections.$.admin_feedback_by": "", "reflections.$.admin_feedback_name": "", "reflections.$.admin_feedback_at": ""},
+			"$set":   bson.M{p + "admin_feedback": ""},
+			"$unset": bson.M{p + "admin_feedback_by": "", p + "admin_feedback_name": "", p + "admin_feedback_at": "", p + "admin_feedback_avatar": ""},
 		}
 	}
 	if author.ID == "" {
-		// replier unknown: don't keep a previous replier's name on this reply
+		// replier unknown: don't keep a previous replier's name or face on this reply
 		return bson.M{
-			"$set":   bson.M{"reflections.$.admin_feedback": feedback, "reflections.$.admin_feedback_at": author.At},
-			"$unset": bson.M{"reflections.$.admin_feedback_by": "", "reflections.$.admin_feedback_name": ""},
+			"$set":   bson.M{p + "admin_feedback": feedback, p + "admin_feedback_at": author.At},
+			"$unset": bson.M{p + "admin_feedback_by": "", p + "admin_feedback_name": "", p + "admin_feedback_avatar": ""},
 		}
 	}
-	return bson.M{"$set": bson.M{
-		"reflections.$.admin_feedback":      feedback,
-		"reflections.$.admin_feedback_by":   author.ID,
-		"reflections.$.admin_feedback_name": author.Name,
-		"reflections.$.admin_feedback_at":   author.At,
-	}}
+	set := bson.M{p + "admin_feedback": feedback, p + "admin_feedback_by": author.ID, p + "admin_feedback_name": author.Name, p + "admin_feedback_at": author.At}
+	if author.Avatar != nil {
+		set[p+"admin_feedback_avatar"] = author.Avatar
+		return bson.M{"$set": set}
+	}
+	return bson.M{"$set": set, "$unset": bson.M{p + "admin_feedback_avatar": ""}}
 }
 
 func (r *userRepository) UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string, author domain.FeedbackAuthor) error {

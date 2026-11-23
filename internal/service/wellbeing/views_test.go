@@ -42,6 +42,19 @@ func TestBuildBoard(t *testing.T) {
 	}
 }
 
+func TestBoardEntryShowsWhoReplied(t *testing.T) {
+	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	r := refl("2026-09-09", P, "rough day")
+	r.AdminFeedback = "Let&#39;s pair"
+	r.AdminFeedbackName = "00_Kan(Kan/กัน)"
+	r.AdminFeedbackAt = &at
+	bd := BuildBoard([]domain.User{user("A", "F", r)}, nights10, "night", DefaultWords)
+	e := bd.Entries[0]
+	if e.AdminFeedback != "Let's pair" || e.AdminFeedbackName != "00_Kan(Kan/กัน)" || e.AdminFeedbackAt == nil || !e.AdminFeedbackAt.Equal(at) {
+		t.Errorf("entry should carry the reply, its author and time: %+v", e)
+	}
+}
+
 func TestBuildSupportList(t *testing.T) {
 	a := user("A", "F", refl("2026-09-08", P, ""), refl("2026-09-09", P, ""))
 	b := user("B", "F", refl("2026-09-08", C, ""), refl("2026-09-09", C, ""))

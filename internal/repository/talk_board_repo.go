@@ -76,24 +76,37 @@ func (r *talkBoardRepository) AddComment(ctx context.Context, postID primitive.O
 	return err
 }
 
+// AddReaction sets the caller's one reaction on a post: added if they have none, else replaced.
+// The add only matches when they have no reaction yet, so two quick taps can't leave two.
 func (r *talkBoardRepository) AddReaction(ctx context.Context, postID primitive.ObjectID, reaction domain.Reaction) error {
-	// First ensure reactions field exists as an array (not null)
-	_, err := r.collection.UpdateOne(
-		ctx,
-		bson.M{"_id": postID, "reactions": nil},
-		bson.M{"$set": bson.M{"reactions": []domain.Reaction{}}},
-	)
-	if err != nil {
+	if _, err := r.collection.UpdateOne(ctx, bson.M{"_id": postID, "reactions": nil}, bson.M{"$set": bson.M{"reactions": bson.A{}}}); err != nil {
 		return err
 	}
-
-	// Now push the reaction
-	_, err = r.collection.UpdateOne(
-		ctx,
-		bson.M{"_id": postID},
-		bson.M{"$push": bson.M{"reactions": reaction}},
-	)
+	f, u := postReactionAddIfNone(postID, reaction)
+	res, err := r.collection.UpdateOne(ctx, f, u)
+	if err != nil || res.MatchedCount > 0 {
+		return err
+	}
+	f, u, filters := postReactionReplace(postID, reaction)
+	_, err = r.collection.UpdateOne(ctx, f, u, options.Update().SetArrayFilters(options.ArrayFilters{Filters: filters}))
 	return err
+}
+
+func postReactionAddIfNone(postID primitive.ObjectID, r domain.Reaction) (bson.M, bson.M) {
+	return bson.M{"_id": postID, "reactions.userId": bson.M{"$ne": r.UserID}}, bson.M{"$push": bson.M{"reactions": r}}
+}
+
+func postReactionReplace(postID primitive.ObjectID, r domain.Reaction) (bson.M, bson.M, []interface{}) {
+	return bson.M{"_id": postID}, bson.M{"$set": bson.M{"reactions.$[r]": r}}, []interface{}{bson.M{"r.userId": r.UserID}}
+}
+
+func commentReactionAddIfNone(postID, commentID primitive.ObjectID, r domain.Reaction) (bson.M, bson.M) {
+	return bson.M{"_id": postID, "comments": bson.M{"$elemMatch": bson.M{"_id": commentID, "reactions.userId": bson.M{"$ne": r.UserID}}}},
+		bson.M{"$push": bson.M{"comments.$.reactions": r}}
+}
+
+func commentReactionReplace(postID, commentID primitive.ObjectID, r domain.Reaction) (bson.M, bson.M, []interface{}) {
+	return bson.M{"_id": postID}, bson.M{"$set": bson.M{"comments.$[c].reactions.$[r]": r}}, []interface{}{bson.M{"c._id": commentID}, bson.M{"r.userId": r.UserID}}
 }
 
 // nullReplyReactionsRepair turns a reply's null reactions (older replies) into an empty list.
@@ -101,25 +114,21 @@ func nullReplyReactionsRepair(commentID primitive.ObjectID) (bson.M, []interface
 	return bson.M{"$set": bson.M{"comments.$[c].reactions": bson.A{}}}, []interface{}{bson.M{"c._id": commentID, "c.reactions": nil}}
 }
 
+// AddCommentReaction sets the caller's one reaction on a reply, like AddReaction.
 func (r *talkBoardRepository) AddCommentReaction(ctx context.Context, postID primitive.ObjectID, commentID primitive.ObjectID, reaction domain.Reaction) error {
-	repair, filters := nullReplyReactionsRepair(commentID)
-	if _, err := r.collection.UpdateOne(ctx, bson.M{"_id": postID}, repair, options.Update().SetArrayFilters(options.ArrayFilters{Filters: filters})); err != nil {
+	repair, rf := nullReplyReactionsRepair(commentID)
+	if _, err := r.collection.UpdateOne(ctx, bson.M{"_id": postID}, repair, options.Update().SetArrayFilters(options.ArrayFilters{Filters: rf})); err != nil {
 		log.Printf("ERROR: AddCommentReaction repair: %v", err)
 		return err
 	}
-	_, err := r.collection.UpdateOne(
-		ctx,
-		bson.M{"_id": postID},
-		bson.M{"$push": bson.M{"comments.$[c].reactions": reaction}},
-		options.Update().SetArrayFilters(options.ArrayFilters{
-			Filters: []interface{}{bson.M{"c._id": commentID}},
-		}),
-	)
-	if err != nil {
-		log.Printf("ERROR: AddCommentReaction: %v", err)
+	f, u := commentReactionAddIfNone(postID, commentID, reaction)
+	res, err := r.collection.UpdateOne(ctx, f, u)
+	if err != nil || res.MatchedCount > 0 {
 		return err
 	}
-	return nil
+	f, u, filters := commentReactionReplace(postID, commentID, reaction)
+	_, err = r.collection.UpdateOne(ctx, f, u, options.Update().SetArrayFilters(options.ArrayFilters{Filters: filters}))
+	return err
 }
 
 func (r *talkBoardRepository) RemoveCommentReaction(ctx context.Context, postID, commentID, userID primitive.ObjectID) error {

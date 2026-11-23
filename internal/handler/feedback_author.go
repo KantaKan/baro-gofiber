@@ -14,6 +14,7 @@ func feedbackAuthor(u *domain.User, now time.Time) domain.FeedbackAuthor {
 		return a
 	}
 	a.ID = u.ID.Hex()
+	a.Avatar = u.Avatar
 	a.Name = u.ZoomName
 	if a.Name == "" {
 		a.Name = u.FirstName
