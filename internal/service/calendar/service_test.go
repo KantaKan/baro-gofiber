@@ -1,7 +1,10 @@
 package calendar
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"io"
 	"errors"
 	"strings"
 	"testing"
@@ -284,5 +287,37 @@ func TestAdminSetZoomLinkSurvivesAReimport(t *testing.T) {
 	}
 	if st.cal.ZoomURL != "https://zoom.us/j/ADMIN" {
 		t.Errorf("a link the admin set must not be replaced by the sheet's: %q", st.cal.ZoomURL)
+	}
+}
+
+// A tiny upload that unzips to a huge sheet (padded rows) is refused before it is parsed.
+func TestPaddedFileIsRefusedFast(t *testing.T) {
+	s, _ := newSvc()
+	src, err := zip.NewReader(bytes.NewReader(bookBytes(t, fixture(t))), int64(len(bookBytes(t, fixture(t)))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	w := zip.NewWriter(&out)
+	for _, f := range src.File {
+		r, _ := f.Open()
+		body, _ := io.ReadAll(r)
+		r.Close()
+		if strings.HasPrefix(f.Name, "xl/worksheets/sheet") {
+			body = bytes.Replace(body, []byte("</sheetData>"), append(bytes.Repeat([]byte("<row/>"), 6_000_000), []byte("</sheetData>")...), 1)
+		}
+		dst, _ := w.Create(f.Name)
+		dst.Write(body)
+	}
+	w.Close()
+	if out.Len() > 4<<20 {
+		t.Fatalf("the padded file should still pass the 4 MB upload check, got %d bytes", out.Len())
+	}
+	began := time.Now()
+	if _, err := s.Import(13, start, out.Bytes(), sheet, false, "kan"); !errors.Is(err, ErrBadFile) {
+		t.Fatalf("a file that unzips past the limit is a bad file, got %v", err)
+	}
+	if time.Since(began) > 3*time.Second {
+		t.Fatalf("refusing it took %s", time.Since(began))
 	}
 }
