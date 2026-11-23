@@ -96,6 +96,28 @@ var (
 
 func hhmm(min int) string { return fmt.Sprintf("%02d:%02d", min/60, min%60) }
 
+// readRows streams the sheet and stops after maxRows, so a file padded with a million rows
+// can't stall the parse. A real program calendar is well under a thousand rows.
+func readRows(f *excelize.File, sheet string) ([][]string, error) {
+	it, err := f.Rows(sheet)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't read sheet %q", sheet)
+	}
+	defer it.Close()
+	var rows [][]string
+	for len(rows) < maxRows && it.Next() {
+		cols, err := it.Columns()
+		if err != nil {
+			return nil, fmt.Errorf("couldn't read sheet %q", sheet)
+		}
+		rows = append(rows, cols)
+	}
+	for len(rows) > 0 && len(rows[len(rows)-1]) == 0 {
+		rows = rows[:len(rows)-1]
+	}
+	return rows, nil
+}
+
 func mondayOf(t time.Time) time.Time {
 	return t.AddDate(0, 0, -((int(t.Weekday()) + 6) % 7))
 }
@@ -267,12 +289,9 @@ func ParseSheet(f *excelize.File, sheet, startDate string) (Parsed, error) {
 	if idx, _ := f.GetSheetIndex(sheet); idx < 0 {
 		return Parsed{}, fmt.Errorf("sheet %q not found in this file", sheet)
 	}
-	rows, err := f.GetRows(sheet)
+	rows, err := readRows(f, sheet)
 	if err != nil {
-		return Parsed{}, fmt.Errorf("couldn't read sheet %q", sheet)
-	}
-	if len(rows) > maxRows {
-		return Parsed{}, fmt.Errorf("sheet %q is too large (%d rows)", sheet, len(rows))
+		return Parsed{}, err
 	}
 	rd := &reader{f: f, sheet: sheet, styles: map[int]string{}}
 	key := rd.readKey()
