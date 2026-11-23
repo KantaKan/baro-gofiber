@@ -97,7 +97,7 @@ func (s *Service) ImportAt(cohort int, startDate string, data []byte, sheet stri
 	if len(data) == 0 {
 		return Preview{}, ErrBadFile
 	}
-	f, err := excelize.OpenReader(bytes.NewReader(data), excelize.Options{UnzipSizeLimit: 150 << 20, UnzipXMLSizeLimit: 24 << 20})
+	f, err := excelize.OpenReader(bytes.NewReader(data), excelize.Options{UnzipSizeLimit: 30 << 20, UnzipXMLSizeLimit: 24 << 20})
 	if err != nil {
 		return Preview{}, ErrBadFile
 	}
