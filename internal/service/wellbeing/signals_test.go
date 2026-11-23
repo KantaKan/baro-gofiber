@@ -111,3 +111,10 @@ func TestPatternsAreTiedToRecentClassNights(t *testing.T) {
 		t.Error("old words must not show as last night's")
 	}
 }
+
+func TestHighlightWithNoMatchesIsEmptyNotNull(t *testing.T) {
+	got := Highlight("Hooks clicked today", []string{"lost"})
+	if got == nil || len(got) != 0 {
+		t.Fatalf("no watch words must encode as [] not null, got %#v", got)
+	}
+}

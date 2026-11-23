@@ -70,7 +70,7 @@ func Nights(refls []domain.Reflection) []Night {
 // Highlight returns the watch words found in text.
 func Highlight(text string, words []string) []string {
 	low := strings.ToLower(text)
-	var out []string
+	out := []string{}
 	for _, w := range words {
 		if w != "" && strings.Contains(low, strings.ToLower(w)) {
 			out = append(out, w)
