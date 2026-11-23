@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -69,6 +71,7 @@ func AuditMiddleware(repo domain.AuditLogRepository) fiber.Handler {
 			IPAddress: c.IP(),
 			CreatedAt: time.Now(),
 		}
+		entry.Targets, entry.Detail = auditTargets(c.AllParams(), c.Body())
 
 		// ponytail: fire-and-forget insert; add a buffered channel + batch
 		// writer if write volume ever shows up in latency or Mongo op counts.
@@ -80,4 +83,57 @@ func AuditMiddleware(repo domain.AuditLogRepository) fiber.Handler {
 
 		return handlerErr
 	}
+}
+
+// Only these body fields are kept, so free text (leave reasons, notes) and secrets never reach the log.
+var auditDetailKeys = []string{"date", "session", "status", "type", "group", "points", "category"}
+
+// auditTargets pulls who a request was for and a few safe facts about it, for the activity log.
+func auditTargets(params map[string]string, body []byte) ([]string, map[string]string) {
+	var targets []string
+	seen := map[string]bool{}
+	add := func(id string) {
+		if primitive.IsValidObjectID(id) && !seen[id] && len(targets) < 50 {
+			seen[id] = true
+			targets = append(targets, id)
+		}
+	}
+	for _, k := range []string{"userId", "id"} {
+		add(params[k])
+	}
+	var detail map[string]string
+	if len(body) == 0 || len(body) > 64<<10 {
+		return targets, detail
+	}
+	var m map[string]any
+	if json.Unmarshal(body, &m) != nil {
+		return targets, detail
+	}
+	if id, ok := m["user_id"].(string); ok {
+		add(id)
+	}
+	if ids, ok := m["user_ids"].([]any); ok {
+		for _, v := range ids {
+			if id, ok := v.(string); ok {
+				add(id)
+			}
+		}
+	}
+	for _, k := range auditDetailKeys {
+		switch v := m[k].(type) {
+		case string:
+			if v != "" && len(v) <= 40 {
+				if detail == nil {
+					detail = map[string]string{}
+				}
+				detail[k] = v
+			}
+		case float64:
+			if detail == nil {
+				detail = map[string]string{}
+			}
+			detail[k] = fmt.Sprint(v)
+		}
+	}
+	return targets, detail
 }

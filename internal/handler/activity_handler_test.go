@@ -38,17 +38,21 @@ type auditMem struct{ filter bson.M }
 func (a *auditMem) Insert(context.Context, *domain.AuditLog) error { return nil }
 func (a *auditMem) FindPage(_ context.Context, f bson.M, page, limit int) ([]domain.AuditLog, int64, error) {
 	a.filter = f
-	return []domain.AuditLog{{ActorID: primitive.NewObjectID(), ActorRole: "admin", Method: "POST", Route: "/admin/attendance/mark", Path: "/admin/attendance/mark", Status: 200, CreatedAt: time.Now()}}, 1, nil
+	return []domain.AuditLog{{ActorID: primitive.NewObjectID(), ActorRole: "admin", Method: "POST", Route: "/admin/attendance/mark", Path: "/admin/attendance/mark", Status: 200, CreatedAt: time.Now(),
+		Targets: []string{"6b0438bb46b0813c186aaf4b", "6b0000000000000000000000"}, Detail: map[string]string{"status": "late"}}}, 1, nil
 }
 
 func TestActivityFeed(t *testing.T) {
 	m := &auditMem{}
-	h := NewActivityHandler(m, careUsers{map[string]domain.User{}})
+	h := NewActivityHandler(m, careUsers{map[string]domain.User{"6b0438bb46b0813c186aaf4b": {FirstName: "Mint"}}})
 	app := fiber.New()
 	app.Get("/admin/activity", h.List)
 	code, body := send(app, "GET", "/admin/activity", "")
 	if code != 200 || !strings.Contains(body, `"action":"Marked attendance"`) {
 		t.Fatalf("→ %d %s", code, body)
+	}
+	if !strings.Contains(body, `"targets":["Mint"]`) || !strings.Contains(body, `"facts":{"status":"late"}`) {
+		t.Errorf("who it was for and what changed, only names that resolve: %s", body)
 	}
 	if m.filter["method"] == nil {
 		t.Error("only writes (non-GET) should be listed")
