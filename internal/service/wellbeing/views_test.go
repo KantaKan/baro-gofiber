@@ -86,3 +86,16 @@ func TestAckHidesOnlyTheSameReason(t *testing.T) {
 		t.Errorf("same reason stays hidden: %+v", rs)
 	}
 }
+
+func TestWorthQuotePrefersTheLineThatNeedsATA(t *testing.T) {
+	text := "Pair programming was fun\nStill lost on closures\nLoved standup\nSleep earlier"
+	if got := worthQuote(text, []string{"lost"}); got != "Still lost on closures" {
+		t.Errorf("a watch-word line comes first, got %q", got)
+	}
+	if got := worthQuote(text, nil); got != "Still lost on closures" {
+		t.Errorf("without watch words, the tech 'to improve' answer, got %q", got)
+	}
+	if got := worthQuote("Only one line", nil); got != "Only one line" {
+		t.Errorf("a single line is used as is, got %q", got)
+	}
+}
