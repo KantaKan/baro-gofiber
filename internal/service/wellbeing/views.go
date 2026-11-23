@@ -3,6 +3,7 @@ package wellbeing
 import (
 	"html"
 	"sort"
+	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -188,7 +189,7 @@ func BuildBoard(users []domain.User, nights []string, rng string, words []string
 			if x, ok := by[b.Date]; ok {
 				q = x.Text
 			}
-			b.Worth = append(b.Worth, Worth{Learner: ref, Patterns: ps, Strip: row.Nights, Quote: firstLine(q)})
+			b.Worth = append(b.Worth, Worth{Learner: ref, Patterns: ps, Strip: row.Nights, Quote: worthQuote(q, words)})
 		}
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].score > rows[j].score })
@@ -209,6 +210,21 @@ func BuildBoard(users []domain.User, nights []string, rng string, words []string
 	}
 	sort.Slice(b.ByGroup, func(i, j int) bool { return b.ByGroup[i].Group < b.ByGroup[j].Group })
 	return b
+}
+
+// worthQuote picks the line a TA most needs to see: one with a watch word, else the
+// tech "to improve" answer, else the first line.
+func worthQuote(text string, words []string) string {
+	lines := splitLines(text)
+	for _, l := range lines {
+		if len(Highlight(l, words)) > 0 {
+			return firstLine(l)
+		}
+	}
+	if len(lines) > 1 && strings.TrimSpace(lines[1]) != "" {
+		return firstLine(lines[1])
+	}
+	return firstLine(text)
 }
 
 func firstLine(s string) string {
