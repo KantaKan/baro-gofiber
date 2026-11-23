@@ -626,6 +626,13 @@ func (h *UserHandler) UpdatePersonalDetails(c *fiber.Ctx) error {
 	if len(body.Bio) > 1000 {
 		return utils.SendError(c, fiber.StatusBadRequest, "Bio must be under 1000 characters")
 	}
+	for _, l := range []*string{&body.SocialLinks.Instagram, &body.SocialLinks.LinkedIn, &body.SocialLinks.GitHub} {
+		clean, ok := webLink(*l)
+		if !ok {
+			return utils.SendError(c, fiber.StatusBadRequest, "Social links must be full web addresses starting with https://")
+		}
+		*l = clean
+	}
 
 	// ponytail: trusts the client's own tier check (getPlantVariant/getUnlockedPalettes in
 	// plant-variants.ts) — only sanity-checks the name here since this is a cosmetic,

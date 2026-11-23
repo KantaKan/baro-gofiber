@@ -235,7 +235,10 @@ func main() {
 
 	setupRoutes(app, handlers)
 
-	app.Get("/swagger/*", swagger.HandlerDefault)
+	// The full API map stays off the public internet.
+	if os.Getenv("ENVIRONMENT") != "production" {
+		app.Get("/swagger/*", swagger.HandlerDefault)
+	}
 
 	log.Printf("🚀 Server is running on http://localhost:%s", port)
 	log.Printf("Environment: %s", os.Getenv("ENVIRONMENT"))

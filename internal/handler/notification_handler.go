@@ -80,10 +80,14 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 		}
 	}
 
+	link, ok := webLink(body.Link)
+	if !ok {
+		return utils.SendError(c, fiber.StatusBadRequest, "The link must be a full web address starting with https://")
+	}
 	data := map[string]interface{}{
 		"title":      body.Title,
 		"message":    body.Message,
-		"link":       body.Link,
+		"link":       link,
 		"link_text":  body.LinkText,
 		"is_active":  body.IsActive,
 		"priority":   body.Priority,
