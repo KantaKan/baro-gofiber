@@ -169,10 +169,6 @@ func (h *TalkBoardHandler) AddReactionToPost(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID format")
 	}
 
-	// one reaction per person: drop their old one first
-	if err := h.repo.UpdatePost(c.Context(), post.ID, bson.M{"$pull": bson.M{"reactions": bson.M{"userId": userOID}}}); err != nil {
-		log.Printf("board: clearing old reaction on %s: %v", post.ID.Hex(), err)
-	}
 	reaction := domain.Reaction{
 		ID:        primitive.NewObjectID(),
 		UserID:    userOID,
@@ -247,10 +243,6 @@ func (h *TalkBoardHandler) AddReactionToComment(c *fiber.Ctx) error {
 	post, commentOID, userOID, ok := h.replyFor(c)
 	if !ok {
 		return nil
-	}
-	// one reaction per person on a reply: drop their old one first
-	if err := h.repo.RemoveCommentReaction(c.Context(), post.ID, commentOID, userOID); err != nil {
-		log.Printf("board: clearing old reply reaction on %s: %v", commentOID.Hex(), err)
 	}
 	reaction := domain.Reaction{
 		ID:        primitive.NewObjectID(),

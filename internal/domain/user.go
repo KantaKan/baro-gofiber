@@ -55,11 +55,13 @@ type Reflection struct {
 	ReflectionData ReflectionContent  `bson:"reflection" json:"reflection"`
 	AdminFeedback  string             `bson:"admin_feedback,omitempty" json:"admin_feedback,omitempty"`
 	// who wrote the reply (user id and their Zoom name or first name) and when
-	AdminFeedbackBy   string           `bson:"admin_feedback_by,omitempty" json:"admin_feedback_by,omitempty"`
-	AdminFeedbackName string           `bson:"admin_feedback_name,omitempty" json:"admin_feedback_name,omitempty"`
-	AdminFeedbackAt   *time.Time       `bson:"admin_feedback_at,omitempty" json:"admin_feedback_at,omitempty"`
-	RewardBoxes       []TeacherGiftBox `bson:"-" json:"reward_boxes,omitempty"`
-	RewardWarning     string           `bson:"-" json:"reward_warning,omitempty"`
+	AdminFeedbackBy   string     `bson:"admin_feedback_by,omitempty" json:"admin_feedback_by,omitempty"`
+	AdminFeedbackName string     `bson:"admin_feedback_name,omitempty" json:"admin_feedback_name,omitempty"`
+	AdminFeedbackAt   *time.Time `bson:"admin_feedback_at,omitempty" json:"admin_feedback_at,omitempty"`
+	// the replier's avatar when they replied, so learners see the face they chose
+	AdminFeedbackAvatar *Avatar          `bson:"admin_feedback_avatar,omitempty" json:"admin_feedback_avatar,omitempty"`
+	RewardBoxes         []TeacherGiftBox `bson:"-" json:"reward_boxes,omitempty"`
+	RewardWarning       string           `bson:"-" json:"reward_warning,omitempty"`
 }
 
 func (r Reflection) MarshalJSON() ([]byte, error) {
@@ -78,9 +80,10 @@ func (r Reflection) MarshalJSON() ([]byte, error) {
 
 // FeedbackAuthor is the staff member replying to a reflection.
 type FeedbackAuthor struct {
-	ID   string
-	Name string
-	At   time.Time
+	ID     string
+	Name   string
+	At     time.Time
+	Avatar *Avatar
 }
 
 type ReflectionContent struct {
