@@ -19,7 +19,10 @@ type AuditLog struct {
 	Route     string             `bson:"route" json:"route"`
 	Status    int                `bson:"status" json:"status"`
 	IPAddress string             `bson:"ip_address" json:"ip_address"`
-	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
+	// Who the change was for (user ids from the route or body) and a few safe fields of what changed.
+	Targets   []string          `bson:"targets,omitempty" json:"targets,omitempty"`
+	Detail    map[string]string `bson:"detail,omitempty" json:"detail,omitempty"`
+	CreatedAt time.Time         `bson:"createdAt" json:"createdAt"`
 }
 
 type AuditLogRepository interface {

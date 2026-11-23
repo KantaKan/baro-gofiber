@@ -65,13 +65,15 @@ func NewActivityHandler(a auditPager, u careUserLookup) *ActivityHandler {
 }
 
 type activityItem struct {
-	ID        string    `json:"id"`
-	ActorName string    `json:"actor_name"`
-	ActorRole string    `json:"actor_role"`
-	Action    string    `json:"action"`
-	Detail    string    `json:"detail"`
-	Status    int       `json:"status"`
-	At        time.Time `json:"at"`
+	ID        string            `json:"id"`
+	ActorName string            `json:"actor_name"`
+	ActorRole string            `json:"actor_role"`
+	Action    string            `json:"action"`
+	Detail    string            `json:"detail"`
+	Status    int               `json:"status"`
+	At        time.Time         `json:"at"`
+	Targets   []string          `json:"targets,omitempty"`
+	Facts     map[string]string `json:"facts,omitempty"`
 }
 
 // List is the readable admin activity log (writes only, newest first).
@@ -88,16 +90,29 @@ func (h *ActivityHandler) List(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading activity")
 	}
 	names := map[string]string{}
-	items := make([]activityItem, 0, len(logs))
-	for _, l := range logs {
-		id := l.ActorID.Hex()
+	name := func(id string) string {
 		if _, ok := names[id]; !ok {
-			names[id] = "Someone"
+			names[id] = ""
 			if u, e := h.users.GetUserByID(id); e == nil && u != nil {
 				names[id] = u.FirstName
 			}
 		}
-		items = append(items, activityItem{ID: l.ID.Hex(), ActorName: names[id], ActorRole: l.ActorRole, Action: DescribeAction(l.Method, l.Route), Detail: l.Path, Status: l.Status, At: l.CreatedAt})
+		return names[id]
+	}
+	items := make([]activityItem, 0, len(logs))
+	for _, l := range logs {
+		actor := name(l.ActorID.Hex())
+		if actor == "" {
+			actor = "Someone"
+		}
+		var targets []string
+		for _, t := range l.Targets {
+			// route ids can be records, not people; only names that resolve are shown
+			if n := name(t); n != "" {
+				targets = append(targets, n)
+			}
+		}
+		items = append(items, activityItem{ID: l.ID.Hex(), ActorName: actor, ActorRole: l.ActorRole, Action: DescribeAction(l.Method, l.Route), Detail: l.Path, Status: l.Status, At: l.CreatedAt, Targets: targets, Facts: l.Detail})
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Activity", fiber.Map{"items": items, "total": total, "page": page})
 }
