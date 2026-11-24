@@ -49,6 +49,11 @@ func (s *Service) Update(cohort int, in domain.CohortSettings) error {
 			return fmt.Errorf("start date must be YYYY-MM-DD")
 		}
 	}
+	if in.GraduatedOn != "" {
+		if _, err := time.Parse("2006-01-02", in.GraduatedOn); err != nil {
+			return fmt.Errorf("graduation date must be YYYY-MM-DD")
+		}
+	}
 	in.CohortNumber = cohort
 	if in.AllowedNetworks == nil {
 		in.AllowedNetworks = []string{}

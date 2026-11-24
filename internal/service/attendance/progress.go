@@ -245,6 +245,7 @@ func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) 
 	if out.ClassToday, err = IsClassDay(nowT, s.holidays); err != nil {
 		return out, err
 	}
+	out.ClassToday = out.ClassToday && settings.InSession(today)
 	for _, r := range recs {
 		if r.Date != today {
 			continue

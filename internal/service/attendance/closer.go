@@ -92,6 +92,9 @@ func (s *SessionCloser) CloseIfDue(now time.Time) error {
 			firstErr = errors.Join(firstErr, err)
 			continue
 		}
+		if !settings.InSession(date) {
+			continue
+		}
 		for _, session := range []domain.AttendanceSession{domain.SessionMorning, domain.SessionAfternoon} {
 			key := fmt.Sprintf("%d|%s|%s", cohort, date, session)
 			s.mu.Lock()

@@ -231,6 +231,7 @@ func (c *Container) initHandlers() {
 	c.TeamHandler = handler.NewTeamHandler(staff.NewTeam(c.StaffRepo))
 	c.CareHandler = handler.NewLearnerCareHandler(c.CareRepo, c.UserService)
 	c.WellbeingHandler = handler.NewWellbeingViewsHandler(c.UserService, c.AttendanceRepo, c.HolidayService, c.CareRepo)
+	c.WellbeingHandler.SetCohortSettings(c.CohortService.Get)
 	c.ReportRepo = repository.NewReportRepository(c.DB)
 	c.ReportService = report.NewService(c.ReportRepo, handler.ReportSource{WB: c.WellbeingHandler, Holidays: c.HolidayService, Cup: c.CupService}, c.SlackService).WithAppURL(slack.AppURL())
 	c.ReportHandler = handler.NewReportHandler(c.ReportService)

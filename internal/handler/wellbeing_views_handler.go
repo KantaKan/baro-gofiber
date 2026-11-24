@@ -33,6 +33,12 @@ type WellbeingViewsHandler struct {
 	holidays attendance.HolidayChecker
 	care     careReader
 	now      func() time.Time
+	settings func(cohort int) (domain.CohortSettings, error)
+}
+
+// SetCohortSettings lets the support list skip cohorts that have graduated.
+func (h *WellbeingViewsHandler) SetCohortSettings(fn func(cohort int) (domain.CohortSettings, error)) {
+	h.settings = fn
 }
 
 func NewWellbeingViewsHandler(users wbUsers, records adminViewRecords, holidays attendance.HolidayChecker, care careReader) *WellbeingViewsHandler {
@@ -260,6 +266,12 @@ func (h *WellbeingViewsHandler) Support(c *fiber.Ctx) error {
 	users, cohort, ok, err := h.cohortUsers(c)
 	if !ok {
 		return err
+	}
+	// A graduated cohort has no class nights left, so "hasn't written" nudges would never end.
+	if h.settings != nil {
+		if st, err := h.settings(cohort); err == nil && !st.InSession(utils.FormatDate(h.now())) {
+			return utils.SendResponse(c, fiber.StatusOK, "Needs support", []wellbeing.SupportRow{})
+		}
 	}
 	recs, e := h.cohortRecords(cohort)
 	if e != nil {

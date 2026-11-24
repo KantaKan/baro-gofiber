@@ -167,6 +167,7 @@ func (s *CheckinService) CheckIn(userID primitive.ObjectID, ip, country, style s
 	if err != nil {
 		return nil, err
 	}
+	classDay = classDay && settings.InSession(date)
 	session := settings.Rules.SessionAt(now)
 	n, err := s.records.CountRecords(ctx, domain.AttendanceRecordFilter{UserID: userID, Date: date, Session: session, NotDeleted: true})
 	if err != nil {
