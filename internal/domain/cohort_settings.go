@@ -8,10 +8,17 @@ type CohortSettings struct {
 	GroupChatURLs   map[string]string `bson:"group_chat_urls,omitempty" json:"group_chat_urls,omitempty"`
 	StartDate       string            `bson:"start_date,omitempty" json:"start_date,omitempty"`
 	CourseDays      int               `bson:"course_days,omitempty" json:"course_days,omitempty"`
+	// GraduatedOn is the cohort's last class day (YYYY-MM-DD); after it the cohort has no class.
+	GraduatedOn string `bson:"graduated_on,omitempty" json:"graduated_on,omitempty"`
 	// CheckinRegion: "anywhere" (default) or "thailand" (uses the proxy's country header; no header = allowed).
 	CheckinRegion string `bson:"checkin_region,omitempty" json:"checkin_region,omitempty"`
 	// FlagUnusual marks shared-network check-ins on the admin board (nil = on).
 	FlagUnusual *bool `bson:"flag_unusual,omitempty" json:"flag_unusual,omitempty"`
+}
+
+// InSession reports whether the cohort still has class on date (YYYY-MM-DD): true until it graduates.
+func (s CohortSettings) InSession(date string) bool {
+	return s.GraduatedOn == "" || date <= s.GraduatedOn
 }
 
 // FlagsOn reports whether unusual check-ins are flagged (default on).

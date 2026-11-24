@@ -70,6 +70,7 @@ func (h *AdminViewsHandler) Today(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading today")
 	}
+	classDay = classDay && st.InSession(utils.FormatDate(now))
 	return utils.SendResponse(c, fiber.StatusOK, "Today retrieved", attendance.BuildTodayRoster(users, recs, now, st.Rules, classDay, st.FlagsOn()))
 }
 
