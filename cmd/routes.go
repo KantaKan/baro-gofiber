@@ -59,6 +59,10 @@ func setupRoutes(app *fiber.App, h Handlers) {
 		},
 	})
 	app.Post("/login", loginLimiter, h.User.LoginUser)
+	app.Post("/logout", func(c *fiber.Ctx) error {
+		middleware.ClearSession(c)
+		return c.SendStatus(fiber.StatusNoContent)
+	})
 	app.Get("/invites/:token", loginLimiter, h.Team.Lookup)
 	app.Post("/invites/:token/accept", loginLimiter, h.Team.Accept)
 	app.Get("/calendar/me", middleware.AuthMiddleware, h.Calendar.Mine)

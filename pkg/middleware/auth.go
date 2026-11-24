@@ -39,12 +39,20 @@ func AuthMiddleware(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Secret key not configured")
 	}
 
-	// Extract token from the Authorization header
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+	// The httpOnly session cookie is the normal way in; a Bearer header still works for
+	// sessions from before the cookie (and for tools).
+	tokenString, fromCookie := "", false
+	if authHeader := c.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+		tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+	} else if v := c.Cookies(SessionCookie); v != "" {
+		tokenString, fromCookie = v, true
+	}
+	if tokenString == "" {
 		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: No token provided")
 	}
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	if fromCookie && !sameSiteWrite(c) {
+		return fiber.NewError(fiber.StatusForbidden, "This request didn't come from Baro")
+	}
 
 	// Parse and validate the token
 	claims := &Claims{}
@@ -77,6 +85,7 @@ func AuthMiddleware(c *fiber.Ctx) error {
 	// Store the claims in the context for later use
 	c.Locals("user", claims)
 	c.Locals("userID", claims.UserID)
+	c.Locals("token", tokenString)
 
 	return c.Next()
 }
