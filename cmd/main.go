@@ -251,7 +251,7 @@ func main() {
 // fiberConfig reads the client IP from proxyHeader when set. EnableIPValidation makes
 // c.IP() return the first valid address of a list like "203.0.113.5, 10.0.0.2".
 func fiberConfig(proxyHeader string) fiber.Config {
-	cfg := fiber.Config{}
+	cfg := fiber.Config{ErrorHandler: utils.ErrorHandler}
 	if proxyHeader != "" {
 		cfg.ProxyHeader = proxyHeader
 		cfg.EnableIPValidation = true
