@@ -152,7 +152,7 @@ func (h *AttendanceHandler) SubmitAttendance(c *fiber.Ctx) error {
 		case attendance.ErrSessionLocked:
 			return utils.SendError(c, fiber.StatusForbidden, "Attendance for this session has been locked. Contact admin.")
 		default:
-			return utils.SendError(c, fiber.StatusInternalServerError, err.Error())
+			return err
 		}
 	}
 
