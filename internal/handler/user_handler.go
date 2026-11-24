@@ -89,6 +89,7 @@ func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid credentials")
 	}
+	middleware.SetSession(c, token)
 
 	return utils.SendResponse(c, fiber.StatusOK, "Login successful", map[string]interface{}{
 		"token":  token,
@@ -103,6 +104,10 @@ func (h *UserHandler) VerifyToken(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
 	}
 
+	// Refresh the cookie; for a session from before cookies, this is where it moves into one.
+	if t, ok := c.Locals("token").(string); ok && t != "" {
+		middleware.SetSession(c, t)
+	}
 	return utils.SendResponse(c, fiber.StatusOK, "Token is valid", map[string]string{
 		"role":   claims.Role,
 		"userId": claims.UserID,
