@@ -138,6 +138,11 @@ func main() {
 	cupRunner := cup.NewRunner(container.CupService, container.CupRepo, container.AttendanceRepo, container.CohortService, container.GiftBoxService,
 		func(t time.Time) (bool, error) { return attendance.IsClassDay(t, container.HolidayService) })
 	go func() {
+		if err := container.StatsKeeper.RebuildActive(context.Background(), utils.GetThailandTime()); err != nil {
+			log.Printf("learner stats: startup rebuild: %v", err)
+		}
+	}()
+	go func() {
 		for range time.Tick(time.Minute) {
 			now := utils.GetThailandTime()
 			if err := closer.CloseIfDue(now); err != nil {
@@ -146,6 +151,13 @@ func main() {
 			// After the closer, so the showing-up bonus sees every learner's record.
 			if err := cupRunner.RunDue(now); err != nil {
 				log.Printf("cup runner: %v", err)
+			}
+			if container.StatsKeeper.DueForNightlyRebuild(now) {
+				go func() {
+					if err := container.StatsKeeper.RebuildActive(context.Background(), now); err != nil {
+						log.Printf("learner stats: nightly rebuild: %v", err)
+					}
+				}()
 			}
 		}
 	}()

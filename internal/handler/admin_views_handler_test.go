@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"bytes"
+	"context"
 	"io"
+	"log"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -173,5 +177,27 @@ func TestLoadCohortRecordsFullOnlyInRange(t *testing.T) {
 	}
 	if hist, _ := loadCohortRecords(src, 13, "", ""); len(hist) != 3 {
 		t.Errorf("history only: want 3, got %d", len(hist))
+	}
+}
+
+type avStats struct{ list []domain.LearnerStats }
+
+func (s avStats) FindByCohort(context.Context, int) ([]domain.LearnerStats, error) { return s.list, nil }
+
+func TestTodayLogsStatsDrift(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	defer log.SetOutput(os.Stderr)
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "A", Role: "learner"}
+	h := NewAdminViewsHandler(avUsers{[]domain.User{u}}, avRecords{}, avSettings{}, avHolidays{})
+	h.SetStatsDriftCheck(avStats{[]domain.LearnerStats{{UserID: u.ID, Streak: 9}}})
+	h.driftSync = true
+	app := fiber.New()
+	app.Get("/admin/today", h.Today)
+	if res, _ := app.Test(httptest.NewRequest("GET", "/admin/today?cohort=13", nil)); res.StatusCode != 200 {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	if !strings.Contains(buf.String(), "stats drift: cohort 13, 1 learners differ") {
+		t.Errorf("log = %q", buf.String())
 	}
 }
