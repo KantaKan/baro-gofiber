@@ -61,7 +61,20 @@ func (r *trackedRepo) UpdateRecord(_ interface{}, id primitive.ObjectID, update 
 	}
 	return nil
 }
-func (r *trackedRepo) UpdateRecords(interface{}, domain.AttendanceRecordFilter, interface{}) error { return nil }
+func (r *trackedRepo) UpdateRecords(_ interface{}, f domain.AttendanceRecordFilter, update interface{}) error {
+	m := update.(bson.M)
+	for _, x := range r.live() {
+		if (f.UserID.IsZero() || x.UserID == f.UserID) && (f.Cohort == 0 || x.CohortNumber == f.Cohort) {
+			if st, ok := m["status"]; ok {
+				r.byID[x.ID].Status = st.(domain.AttendanceStatus)
+			}
+			if _, ok := m["deleted"]; ok {
+				r.byID[x.ID].Deleted = true
+			}
+		}
+	}
+	return nil
+}
 func (r *trackedRepo) DeleteRecord(_ interface{}, id primitive.ObjectID, _ string) error {
 	r.byID[id].Deleted = true
 	return nil
@@ -122,5 +135,31 @@ func TestTrackStatsWriteSucceedsWhenRecomputeFails(t *testing.T) {
 	}
 	if len(inner.live()) != 1 {
 		t.Fatal("record not written")
+	}
+}
+
+func TestTrackStatsBulkDeleteRecomputes(t *testing.T) {
+	inner := newTrackedRepo()
+	store := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
+	repo := TrackStats(inner, NewStatsKeeper(inner, store))
+	ctx := context.Background()
+	u := primitive.NewObjectID()
+
+	// Insert a record and verify stats are computed
+	x := rec(u, "2026-09-08", domain.SessionMorning, domain.StatusPresent)
+	if err := repo.InsertRecord(ctx, &x); err != nil {
+		t.Fatal(err)
+	}
+	if store.docs[u].Streak != 1 {
+		t.Fatalf("after insert: %+v", store.docs[u])
+	}
+
+	// Bulk delete via UpdateRecords should trigger recompute, clearing stats
+	if err := repo.UpdateRecords(ctx, domain.AttendanceRecordFilter{UserID: u}, bson.M{"deleted": true}); err != nil {
+		t.Fatal(err)
+	}
+	s := store.docs[u]
+	if s.Streak != 0 || s.LeaveUsed != 0 || len(s.Last10) != 0 {
+		t.Fatalf("after bulk delete: %+v", s)
 	}
 }

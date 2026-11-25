@@ -79,17 +79,24 @@ func (r *statsTrackingRepo) DeleteRecord(ctx interface{}, id primitive.ObjectID,
 }
 
 func (r *statsTrackingRepo) UpdateRecords(ctx interface{}, filter domain.AttendanceRecordFilter, update interface{}) error {
+	var learners []domain.AttendanceRecord
+	if touchesStats(update) {
+		// Find affected learners BEFORE the write so bulk deletes capture them before they're hidden.
+		recs, ferr := r.AttendanceRepository.FindRecords(ctx, filter, options.Find().SetProjection(bson.M{"user_id": 1, "cohort_number": 1}))
+		if ferr != nil {
+			log.Printf("learner stats: bulk update lookup: %v", ferr)
+			// Still perform the write despite lookup failure
+		} else {
+			learners = recs
+		}
+	}
 	err := r.AttendanceRepository.UpdateRecords(ctx, filter, update)
-	if err != nil || !touchesStats(update) {
+	if err != nil {
 		return err
 	}
-	recs, ferr := r.AttendanceRepository.FindRecords(ctx, filter, options.Find().SetProjection(bson.M{"user_id": 1, "cohort_number": 1}))
-	if ferr != nil {
-		log.Printf("learner stats: bulk update lookup: %v", ferr)
-		return nil
-	}
+	// Recompute stats for affected learners (deduplicated by UserID).
 	seen := map[primitive.ObjectID]bool{}
-	for _, x := range recs {
+	for _, x := range learners {
 		if !seen[x.UserID] {
 			seen[x.UserID] = true
 			r.refresh(x.UserID, x.CohortNumber)
