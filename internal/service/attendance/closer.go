@@ -11,6 +11,7 @@ import (
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/pkg/utils"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -37,6 +38,13 @@ type closerRecords interface {
 	ActiveCohorts(ctx interface{}, since string) ([]int, error)
 }
 
+type closerUsers interface {
+	ListCohortLearners(cohort int, projection bson.M) ([]domain.User, error)
+}
+
+// closerUserFields is all closeSession reads from a learner.
+var closerUserFields = bson.M{"jsd_number": 1, "first_name": 1, "last_name": 1, "attendance_status": 1}
+
 type closerLeaves interface {
 	FindAll(ctx interface{}, filter domain.LeaveRequestFilter) ([]domain.LeaveRequest, error)
 }
@@ -45,7 +53,7 @@ type closerLeaves interface {
 type SessionCloser struct {
 	records  closerRecords
 	leaves   closerLeaves
-	users    UserServiceInterface
+	users    closerUsers
 	settings CohortSettingsGetter
 	holidays HolidayChecker
 
@@ -53,17 +61,13 @@ type SessionCloser struct {
 	closed map[string]bool // "cohort|date|session"
 }
 
-func NewSessionCloser(records closerRecords, leaves closerLeaves, users UserServiceInterface, settings CohortSettingsGetter, holidays HolidayChecker) *SessionCloser {
+func NewSessionCloser(records closerRecords, leaves closerLeaves, users closerUsers, settings CohortSettingsGetter, holidays HolidayChecker) *SessionCloser {
 	return &SessionCloser{records: records, leaves: leaves, users: users, settings: settings, holidays: holidays, closed: map[string]bool{}}
 }
 
 func (s *SessionCloser) CloseIfDue(now time.Time) error {
 	classDay, err := IsClassDay(now, s.holidays)
 	if err != nil || !classDay {
-		return err
-	}
-	learners, _, err := s.users.GetAllUsers(0, "learner", "", "", "email", 1, 0, 0, "dropout,dismissed")
-	if err != nil {
 		return err
 	}
 	// Only cohorts with attendance in the last 7 days are running; alumni are left alone.
@@ -73,19 +77,9 @@ func (s *SessionCloser) CloseIfDue(now time.Time) error {
 	if err != nil {
 		return err
 	}
-	isActive := map[int]bool{}
-	for _, c := range active {
-		isActive[c] = true
-	}
-	byCohort := map[int][]domain.User{}
-	for _, u := range learners {
-		if isActive[u.CohortNumber] {
-			byCohort[u.CohortNumber] = append(byCohort[u.CohortNumber], u)
-		}
-	}
 	date := utils.FormatDate(now)
 	var firstErr error
-	for cohort, users := range byCohort {
+	for _, cohort := range active {
 		settings, err := s.settings.Get(cohort)
 		if err != nil {
 			log.Printf("session closer: cohort %d settings: %v", cohort, err)
@@ -95,6 +89,7 @@ func (s *SessionCloser) CloseIfDue(now time.Time) error {
 		if !settings.InSession(date) {
 			continue
 		}
+		var users []domain.User
 		for _, session := range []domain.AttendanceSession{domain.SessionMorning, domain.SessionAfternoon} {
 			key := fmt.Sprintf("%d|%s|%s", cohort, date, session)
 			s.mu.Lock()
@@ -102,6 +97,14 @@ func (s *SessionCloser) CloseIfDue(now time.Time) error {
 			s.mu.Unlock()
 			if done || settings.Rules.Window(session).PhaseAt(now) != PhaseClosed {
 				continue
+			}
+			// Learners are loaded only once a session is actually due, not on every tick.
+			if users == nil {
+				if users, err = s.learners(cohort); err != nil {
+					log.Printf("session closer: cohort %d learners: %v", cohort, err)
+					firstErr = errors.Join(firstErr, err)
+					break
+				}
 			}
 			if err := s.closeSession(cohort, date, session, users); err != nil {
 				// Keep going so one bad row can't stop other sessions or cohorts.
@@ -115,6 +118,21 @@ func (s *SessionCloser) CloseIfDue(now time.Time) error {
 		}
 	}
 	return firstErr
+}
+
+// learners is a cohort's learners who still attend (not dropped out or dismissed).
+func (s *SessionCloser) learners(cohort int) ([]domain.User, error) {
+	all, err := s.users.ListCohortLearners(cohort, closerUserFields)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.User, 0, len(all))
+	for _, u := range all {
+		if u.AttendanceStatus != "dropout" && u.AttendanceStatus != "dismissed" {
+			out = append(out, u)
+		}
+	}
+	return out, nil
 }
 
 func (s *SessionCloser) closeSession(cohort int, date string, session domain.AttendanceSession, users []domain.User) error {

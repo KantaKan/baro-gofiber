@@ -10,6 +10,7 @@ import (
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -37,6 +38,15 @@ func NewAdminHandler(
 	}
 }
 
+// adminUserListFields keeps each reflection's barometer (the table shows the count and the latest)
+// and drops the reflection text and the password hash.
+var adminUserListFields = bson.M{
+	"password":                                 0,
+	"reflections.reflection.tech_sessions":     0,
+	"reflections.reflection.non_tech_sessions": 0,
+	"reflections.admin_feedback":               0,
+}
+
 func (h *AdminHandler) GetAllUsers(c *fiber.Ctx) error {
 	cohort := c.QueryInt("cohort", 0)
 	role := c.Query("role", "")
@@ -47,7 +57,7 @@ func (h *AdminHandler) GetAllUsers(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 50)
 
-	users, total, err := h.userService.GetAllUsers(cohort, role, email, search, sort, sortDir, page, limit)
+	users, total, err := h.userService.GetUsersWithFields(adminUserListFields, cohort, role, email, search, sort, sortDir, page, limit)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching users")
 	}

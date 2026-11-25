@@ -912,7 +912,7 @@ func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 50)
 
-	users, total, err := h.userService.GetAllUsers(cohort, role, email, search, sort, sortDir, page, limit)
+	users, total, err := h.userService.GetUsersWithFields(bson.M{"reflections": 0, "password": 0}, cohort, role, email, search, sort, sortDir, page, limit)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching users")
 	}
