@@ -82,7 +82,7 @@ func (h *WellbeingViewsHandler) cohortUsers(c *fiber.Ctx) ([]domain.User, int, b
 func (h *WellbeingViewsHandler) cohortRecords(cohort int) ([]domain.AttendanceRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	recs, err := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, nil)
+	recs, err := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, viewRecordFields())
 	if err != nil {
 		log.Printf("wellbeing cohort %d: attendance records: %v", cohort, err)
 	}

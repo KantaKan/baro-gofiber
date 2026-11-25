@@ -10,6 +10,8 @@ import (
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type adminViewUsers interface {
@@ -33,6 +35,11 @@ func NewAdminViewsHandler(users adminViewUsers, records adminViewRecords, settin
 	return &AdminViewsHandler{users: users, records: records, settings: settings, holidays: holidays, now: utils.GetThailandTime}
 }
 
+// viewRecordFields drops the record fields the admin views never read, to shrink cohort-wide fetches.
+func viewRecordFields() *options.FindOptions {
+	return options.Find().SetProjection(bson.M{"first_name": 0, "last_name": 0, "jsd_number": 0, "cohort_number": 0, "locked": 0, "deleted": 0, "deleted_at": 0, "deleted_by": 0})
+}
+
 func (h *AdminViewsHandler) cohortData(cohort int) ([]domain.User, []domain.AttendanceRecord, domain.CohortSettings, error) {
 	users, _, err := h.users.GetAllUsers(cohort, "learner", "", "", "jsd_number", 1, 1, 1000)
 	if err != nil {
@@ -41,7 +48,7 @@ func (h *AdminViewsHandler) cohortData(cohort int) ([]domain.User, []domain.Atte
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	recs, err := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, nil)
+	recs, err := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, viewRecordFields())
 	if err != nil {
 		log.Printf("admin views cohort %d: attendance records: %v", cohort, err)
 		return nil, nil, domain.CohortSettings{}, err
