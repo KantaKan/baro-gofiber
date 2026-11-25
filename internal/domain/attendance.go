@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -145,4 +146,29 @@ type AttendanceCodeRepository interface {
 	InsertCode(ctx interface{}, code *AttendanceCode) error
 	FindActiveCode(ctx interface{}, cohort int, session AttendanceSession) (*AttendanceCode, error)
 	DeactivateOldCodes(ctx interface{}, cohort int, session AttendanceSession) error
+}
+
+// DayResult is one day's combined attendance status.
+type DayResult struct {
+	Date   string           `bson:"date" json:"date"`
+	Status AttendanceStatus `bson:"status" json:"status"`
+}
+
+// LearnerStats is one learner's attendance totals, kept current on every attendance write.
+type LearnerStats struct {
+	UserID         primitive.ObjectID `bson:"_id" json:"user_id"`
+	CohortNumber   int                `bson:"cohort_number" json:"cohort_number"`
+	AttendanceRate float64            `bson:"attendance_rate" json:"attendance_rate"`
+	LeaveUsed      int                `bson:"leave_used" json:"leave_used"`
+	Streak         int                `bson:"streak" json:"streak"`
+	LateRun        int                `bson:"late_run" json:"late_run"`
+	Last10         []DayResult        `bson:"last10" json:"last10"`
+	LastSeen       *time.Time         `bson:"last_seen,omitempty" json:"last_seen,omitempty"`
+	UpdatedAt      time.Time          `bson:"updated_at" json:"updated_at"`
+}
+
+type LearnerStatsRepository interface {
+	Upsert(ctx context.Context, s LearnerStats) error
+	UpsertMany(ctx context.Context, all []LearnerStats) error
+	FindByCohort(ctx context.Context, cohort int) ([]LearnerStats, error)
 }

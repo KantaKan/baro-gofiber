@@ -40,10 +40,7 @@ func CourseProgress(start string, days int, today string) (dayNumber, week, tota
 	return dayNumber, (dayNumber-1)/5 + 1, totalWeeks
 }
 
-type DayResult struct {
-	Date   string                  `json:"date"`
-	Status domain.AttendanceStatus `json:"status"`
-}
+type DayResult = domain.DayResult
 
 func skipsStreak(s domain.AttendanceStatus) bool {
 	return s == domain.StatusHoliday || s == domain.StatusNoClass || s == domain.StatusAbsentExcused || s == domain.StatusLateExcused
