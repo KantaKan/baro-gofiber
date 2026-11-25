@@ -12,6 +12,8 @@ import (
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson"
+	"golang.org/x/sync/errgroup"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -67,17 +69,36 @@ func (h *WellbeingViewsHandler) classNights(n int) []string {
 	return out
 }
 
-func (h *WellbeingViewsHandler) cohortUsers(c *fiber.Ctx) ([]domain.User, int, bool, error) {
+func (h *WellbeingViewsHandler) cohortUsers(c *fiber.Ctx, fields bson.M) ([]domain.User, int, bool, error) {
 	cohort := c.QueryInt("cohort")
 	if cohort <= 0 {
 		return nil, 0, false, utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
 	}
-	users, err := h.users.ListCohortLearners(cohort, learnerFields("reflections"))
+	users, err := h.users.ListCohortLearners(cohort, fields)
 	if err != nil {
 		log.Printf("wellbeing cohort %d: users: %v", cohort, err)
 		return nil, 0, false, utils.SendError(c, fiber.StatusInternalServerError, "Error loading learners")
 	}
 	return users, cohort, true, nil
+}
+
+// usersAndRecords loads a cohort's learners and slim attendance history in parallel.
+func (h *WellbeingViewsHandler) usersAndRecords(c *fiber.Ctx, fields bson.M) ([]domain.User, []domain.AttendanceRecord, int, bool, error) {
+	cohort := c.QueryInt("cohort")
+	if cohort <= 0 {
+		return nil, nil, 0, false, utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
+	}
+	var recs []domain.AttendanceRecord
+	var g errgroup.Group
+	g.Go(func() (err error) {
+		recs, err = h.cohortRecords(cohort)
+		return err
+	})
+	users, _, ok, err := h.cohortUsers(c, fields)
+	if e := g.Wait(); ok && e != nil {
+		return nil, nil, 0, false, utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
+	}
+	return users, recs, cohort, ok, err
 }
 
 func (h *WellbeingViewsHandler) cohortRecords(cohort int) ([]domain.AttendanceRecord, error) {
@@ -99,7 +120,7 @@ func ids(users []domain.User) []primitive.ObjectID {
 // Board is the Reflections page data.
 // @Summary  Reflections board  @Tags admin  @Security BearerAuth  @Router /admin/reflections/board [get]
 func (h *WellbeingViewsHandler) Board(c *fiber.Ctx) error {
-	users, _, ok, err := h.cohortUsers(c)
+	users, _, ok, err := h.cohortUsers(c, recentReflections(45))
 	if !ok {
 		return err
 	}
@@ -124,13 +145,9 @@ type learnerRow struct {
 // Learners is the All learners table (including dropped learners).
 // @Summary  All learners  @Tags admin  @Security BearerAuth  @Router /admin/learners [get]
 func (h *WellbeingViewsHandler) Learners(c *fiber.Ctx) error {
-	users, cohort, ok, err := h.cohortUsers(c)
+	users, recs, _, ok, err := h.usersAndRecords(c, recentReflections(30))
 	if !ok {
 		return err
-	}
-	recs, e := h.cohortRecords(cohort)
-	if e != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -267,19 +284,15 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 // Support is the Needs support list.
 // @Summary  Needs support  @Tags admin  @Security BearerAuth  @Router /admin/support [get]
 func (h *WellbeingViewsHandler) Support(c *fiber.Ctx) error {
-	users, cohort, ok, err := h.cohortUsers(c)
-	if !ok {
-		return err
-	}
 	// A graduated cohort has no class nights left, so "hasn't written" nudges would never end.
-	if h.settings != nil {
+	if cohort := c.QueryInt("cohort"); h.settings != nil && cohort > 0 {
 		if st, err := h.settings(cohort); err == nil && !st.InSession(utils.FormatDate(h.now())) {
 			return utils.SendResponse(c, fiber.StatusOK, "Needs support", []wellbeing.SupportRow{})
 		}
 	}
-	recs, e := h.cohortRecords(cohort)
-	if e != nil {
-		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
+	users, recs, _, ok, err := h.usersAndRecords(c, recentReflections(30))
+	if !ok {
+		return err
 	}
 	return utils.SendResponse(c, fiber.StatusOK, "Needs support", h.SupportRows(users, recs))
 }
@@ -300,7 +313,7 @@ func (h *WellbeingViewsHandler) Weeks(c *fiber.Ctx) error {
 	if n < 1 || n > 20 {
 		return utils.SendError(c, fiber.StatusBadRequest, "weeks must be between 1 and 20")
 	}
-	users, _, ok, err := h.cohortUsers(c)
+	users, _, ok, err := h.cohortUsers(c, learnerFields("reflections"))
 	if !ok {
 		return err
 	}
