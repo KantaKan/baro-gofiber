@@ -104,6 +104,8 @@ type StudentAttendanceRow struct {
 type AttendanceRecordFilter struct {
 	Cohort         int
 	Date           string
+	DateFrom       string
+	DateTo         string
 	Session        AttendanceSession
 	UserID         primitive.ObjectID
 	NotDeleted     bool

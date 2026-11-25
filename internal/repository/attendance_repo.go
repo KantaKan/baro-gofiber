@@ -272,6 +272,8 @@ func (r *attendanceRepository) buildFilter(filter domain.AttendanceRecordFilter)
 	}
 	if filter.Date != "" {
 		bsonFilter["date"] = filter.Date
+	} else if filter.DateFrom != "" && filter.DateTo != "" {
+		bsonFilter["date"] = bson.M{"$gte": filter.DateFrom, "$lte": filter.DateTo}
 	}
 	if filter.Session != "" {
 		bsonFilter["session"] = filter.Session

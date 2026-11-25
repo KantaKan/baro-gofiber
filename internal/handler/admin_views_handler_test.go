@@ -136,3 +136,41 @@ func TestAdminRestore(t *testing.T) {
 		t.Errorf("bad status → %d, want 400", res.StatusCode)
 	}
 }
+
+type rangeRecords struct{ list []domain.AttendanceRecord }
+
+func (r rangeRecords) FindRecords(_ interface{}, f domain.AttendanceRecordFilter, _ interface{}) ([]domain.AttendanceRecord, error) {
+	var out []domain.AttendanceRecord
+	for _, rec := range r.list {
+		if f.DateFrom != "" && (rec.Date < f.DateFrom || rec.Date > f.DateTo) {
+			continue
+		}
+		if f.DateFrom == "" {
+			rec = domain.AttendanceRecord{UserID: rec.UserID, Date: rec.Date, Session: rec.Session, Status: rec.Status}
+		}
+		out = append(out, rec)
+	}
+	return out, nil
+}
+
+func TestLoadCohortRecordsFullOnlyInRange(t *testing.T) {
+	u := primitive.NewObjectID()
+	ip := "1.2.3.4"
+	src := rangeRecords{[]domain.AttendanceRecord{
+		{UserID: u, Date: "2026-11-24", Session: domain.SessionMorning, Status: domain.StatusPresent, IPAddress: ip},
+		{UserID: u, Date: "2026-11-25", Session: domain.SessionMorning, Status: domain.StatusLate, IPAddress: ip},
+		{UserID: u, Date: "2026-11-25", Session: domain.SessionAfternoon, Status: domain.StatusPresent, IPAddress: ip},
+	}}
+	recs, err := loadCohortRecords(src, 13, "2026-11-25", "2026-11-25")
+	if err != nil || len(recs) != 3 {
+		t.Fatalf("want 3 records, got %d (%v)", len(recs), err)
+	}
+	for _, r := range recs {
+		if full := r.IPAddress != ""; full != (r.Date == "2026-11-25") {
+			t.Errorf("%s: full record = %v", r.Date, full)
+		}
+	}
+	if hist, _ := loadCohortRecords(src, 13, "", ""); len(hist) != 3 {
+		t.Errorf("history only: want 3, got %d", len(hist))
+	}
+}
