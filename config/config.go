@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/event"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -30,7 +32,7 @@ func InitializeDB(mongoURI, databaseName string) error {
 	mongoURI = strings.TrimSpace(mongoURI)
 	mongoURI = strings.Trim(mongoURI, "\"'")
 
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(mongoURI))
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(mongoURI).SetMonitor(slowCommandMonitor()))
 	if err != nil {
 		return fmt.Errorf("failed to connect to MongoDB: %v", err)
 	}
@@ -38,6 +40,14 @@ func InitializeDB(mongoURI, databaseName string) error {
 	if err := client.Ping(context.Background(), readpref.Primary()); err != nil {
 		return fmt.Errorf("failed to ping MongoDB: %v", err)
 	}
+	best := time.Hour
+	for i := 0; i < 3; i++ {
+		t := time.Now()
+		if client.Ping(context.Background(), readpref.Primary()) == nil && time.Since(t) < best {
+			best = time.Since(t)
+		}
+	}
+	log.Printf("MongoDB round trip: %v", best.Round(time.Millisecond))
 
 	DB = client.Database(databaseName)
 
@@ -256,5 +266,38 @@ func cleanupAttendanceDuplicates(ctx context.Context) {
 
 	if len(groups) > 0 {
 		log.Printf("Cleaned %d duplicate attendance groups", len(groups))
+	}
+}
+
+// slowCommandMonitor logs MongoDB commands that take over 300ms or fail, with their collection
+// and reply size, so slow pages can be traced to a query or to the network.
+func slowCommandMonitor() *event.CommandMonitor {
+	var started sync.Map // request id -> "command collection"
+	name := func(e event.CommandStartedEvent) string {
+		if v, err := e.Command.LookupErr(e.CommandName); err == nil {
+			if coll, ok := v.StringValueOK(); ok {
+				return e.CommandName + " " + coll
+			}
+		}
+		return e.CommandName
+	}
+	done := func(id int64, d time.Duration, size int, failure string) {
+		what, _ := started.LoadAndDelete(id)
+		if failure != "" {
+			log.Printf("mongo failed: %v after %v: %s", what, d.Round(time.Millisecond), failure)
+		} else if d > 300*time.Millisecond {
+			log.Printf("slow mongo: %v took %v, reply %d KB", what, d.Round(time.Millisecond), size/1024)
+		}
+	}
+	return &event.CommandMonitor{
+		Started: func(_ context.Context, e *event.CommandStartedEvent) {
+			started.Store(e.RequestID, name(*e))
+		},
+		Succeeded: func(_ context.Context, e *event.CommandSucceededEvent) {
+			done(e.RequestID, e.Duration, len(e.Reply), "")
+		},
+		Failed: func(_ context.Context, e *event.CommandFailedEvent) {
+			done(e.RequestID, e.Duration, 0, e.Failure)
+		},
 	}
 }

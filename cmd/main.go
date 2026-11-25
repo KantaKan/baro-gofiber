@@ -17,6 +17,7 @@ import (
 
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	_ "gofiber-baro/docs"
@@ -154,6 +155,15 @@ func main() {
 	app := fiber.New(fiberConfig(os.Getenv("PROXY_HEADER")))
 
 	app.Use(recover.New())
+	app.Use(func(c *fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next()
+		if d := time.Since(start); d > 500*time.Millisecond {
+			log.Printf("slow request: %s %s %d %v", c.Method(), c.Path(), c.Response().StatusCode(), d.Round(time.Millisecond))
+		}
+		return err
+	})
+	app.Use(compress.New(compress.Config{Level: compress.LevelBestSpeed}))
 
 	allowedOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
