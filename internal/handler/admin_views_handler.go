@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -35,15 +36,20 @@ func NewAdminViewsHandler(users adminViewUsers, records adminViewRecords, settin
 func (h *AdminViewsHandler) cohortData(cohort int) ([]domain.User, []domain.AttendanceRecord, domain.CohortSettings, error) {
 	users, _, err := h.users.GetAllUsers(cohort, "learner", "", "", "jsd_number", 1, 1, 1000)
 	if err != nil {
+		log.Printf("admin views cohort %d: users: %v", cohort, err)
 		return nil, nil, domain.CohortSettings{}, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	recs, err := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, nil)
 	if err != nil {
+		log.Printf("admin views cohort %d: attendance records: %v", cohort, err)
 		return nil, nil, domain.CohortSettings{}, err
 	}
 	st, err := h.settings.Get(cohort)
+	if err != nil {
+		log.Printf("admin views cohort %d: settings: %v", cohort, err)
+	}
 	return users, recs, st, err
 }
 
@@ -68,6 +74,7 @@ func (h *AdminViewsHandler) Today(c *fiber.Ctx) error {
 	now := h.now()
 	classDay, err := attendance.IsClassDay(now, h.holidays)
 	if err != nil {
+		log.Printf("admin today cohort %d: holidays: %v", cohort, err)
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading today")
 	}
 	classDay = classDay && st.InSession(utils.FormatDate(now))
