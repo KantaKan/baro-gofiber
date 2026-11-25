@@ -10,13 +10,14 @@ import (
 	"gofiber-baro/internal/domain"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type avUsers struct{ list []domain.User }
 
-func (u avUsers) GetAllUsers(int, string, string, string, string, int, int, int, ...string) ([]domain.User, int, error) {
-	return u.list, len(u.list), nil
+func (u avUsers) ListCohortLearners(int, bson.M) ([]domain.User, error) {
+	return u.list, nil
 }
 
 type avRecords struct{ list []domain.AttendanceRecord }

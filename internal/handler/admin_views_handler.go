@@ -15,7 +15,20 @@ import (
 )
 
 type adminViewUsers interface {
-	GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int, excludeAttendanceStatus ...string) ([]domain.User, int, error)
+	ListCohortLearners(cohort int, projection bson.M) ([]domain.User, error)
+}
+
+// learnerFields is what the cohort list views read from a user, plus any extra paths
+// (e.g. reflection fields). The learner overview loads the full user on its own.
+func learnerFields(extra ...string) bson.M {
+	p := bson.M{}
+	for _, f := range []string{"jsd_number", "first_name", "last_name", "email", "cohort_number", "role", "genmate_group", "zoom_name", "attendance_status", "deleted", "avatar"} {
+		p[f] = 1
+	}
+	for _, f := range extra {
+		p[f] = 1
+	}
+	return p
 }
 
 type adminViewRecords interface {
@@ -66,8 +79,8 @@ func loadCohortRecords(r adminViewRecords, cohort int, from, to string) ([]domai
 	return out, nil
 }
 
-func (h *AdminViewsHandler) cohortData(cohort int, from, to string) ([]domain.User, []domain.AttendanceRecord, domain.CohortSettings, error) {
-	users, _, err := h.users.GetAllUsers(cohort, "learner", "", "", "jsd_number", 1, 1, 1000)
+func (h *AdminViewsHandler) cohortData(cohort int, from, to string, userFields bson.M) ([]domain.User, []domain.AttendanceRecord, domain.CohortSettings, error) {
+	users, err := h.users.ListCohortLearners(cohort, userFields)
 	if err != nil {
 		log.Printf("admin views cohort %d: users: %v", cohort, err)
 		return nil, nil, domain.CohortSettings{}, err
@@ -100,7 +113,7 @@ func (h *AdminViewsHandler) Today(c *fiber.Ctx) error {
 	}
 	now := h.now()
 	today := utils.FormatDate(now)
-	users, recs, st, err := h.cohortData(cohort, today, today)
+	users, recs, st, err := h.cohortData(cohort, today, today, learnerFields("reflections.day", "reflections.date", "reflections.reflection.barometer"))
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading today")
 	}
@@ -140,7 +153,7 @@ func (h *AdminViewsHandler) Register(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "week must be a Monday (YYYY-MM-DD)")
 	}
 	t, _ := time.Parse("2006-01-02", week)
-	users, recs, _, err := h.cohortData(cohort, week, t.AddDate(0, 0, 4).Format("2006-01-02"))
+	users, recs, _, err := h.cohortData(cohort, week, t.AddDate(0, 0, 4).Format("2006-01-02"), learnerFields())
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading register")
 	}
