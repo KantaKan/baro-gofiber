@@ -71,6 +71,15 @@ func (s *Service) GetAllUsers(cohort int, role, email, search, sort string, sort
 	return s.repo.FindAll(ctx, filter, findOpts)
 }
 
+// ListCohortLearners returns a cohort's learners sorted by JSD number with only the projected fields.
+func (s *Service) ListCohortLearners(cohort int, projection bson.M) ([]domain.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	opts := options.Find().SetSort(bson.D{{Key: "jsd_number", Value: 1}}).SetLimit(1000).SetProjection(projection)
+	users, _, err := s.repo.FindAll(ctx, domain.UserFilter{Cohort: cohort, Role: "learner"}, opts)
+	return users, err
+}
+
 func (s *Service) UpdateUser(id string, update interface{}) error {
 	oid, err := primitive.ObjectIDFromHex(id)
 	if err != nil {

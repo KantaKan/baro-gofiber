@@ -21,7 +21,7 @@ type ReportSource struct {
 }
 
 func (s ReportSource) Load(cohort int, week string) (report.Input, error) {
-	users, _, err := s.WB.users.GetAllUsers(cohort, "learner", "", "", "jsd_number", 1, 1, 1000)
+	users, err := s.WB.users.ListCohortLearners(cohort, learnerFields("reflections"))
 	if err != nil {
 		return report.Input{}, err
 	}

@@ -72,8 +72,9 @@ func (h *WellbeingViewsHandler) cohortUsers(c *fiber.Ctx) ([]domain.User, int, b
 	if cohort <= 0 {
 		return nil, 0, false, utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
 	}
-	users, _, err := h.users.GetAllUsers(cohort, "learner", "", "", "jsd_number", 1, 1, 1000)
+	users, err := h.users.ListCohortLearners(cohort, learnerFields("reflections"))
 	if err != nil {
+		log.Printf("wellbeing cohort %d: users: %v", cohort, err)
 		return nil, 0, false, utils.SendError(c, fiber.StatusInternalServerError, "Error loading learners")
 	}
 	return users, cohort, true, nil
