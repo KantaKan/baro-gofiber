@@ -10,6 +10,7 @@ import (
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"golang.org/x/sync/errgroup"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -28,6 +29,14 @@ func learnerFields(extra ...string) bson.M {
 	for _, f := range extra {
 		p[f] = 1
 	}
+	return p
+}
+
+// recentReflections is learnerFields plus only each learner's last n reflections
+// (reflections are appended, so the tail is the newest).
+func recentReflections(n int) bson.M {
+	p := learnerFields()
+	p["reflections"] = bson.M{"$slice": -n}
 	return p
 }
 
@@ -80,14 +89,22 @@ func loadCohortRecords(r adminViewRecords, cohort int, from, to string) ([]domai
 }
 
 func (h *AdminViewsHandler) cohortData(cohort int, from, to string, userFields bson.M) ([]domain.User, []domain.AttendanceRecord, domain.CohortSettings, error) {
+	var recs []domain.AttendanceRecord
+	var g errgroup.Group
+	g.Go(func() (err error) {
+		if recs, err = loadCohortRecords(h.records, cohort, from, to); err != nil {
+			log.Printf("admin views cohort %d: attendance records: %v", cohort, err)
+		}
+		return err
+	})
 	users, err := h.users.ListCohortLearners(cohort, userFields)
 	if err != nil {
 		log.Printf("admin views cohort %d: users: %v", cohort, err)
-		return nil, nil, domain.CohortSettings{}, err
 	}
-	recs, err := loadCohortRecords(h.records, cohort, from, to)
+	if e := g.Wait(); err == nil {
+		err = e
+	}
 	if err != nil {
-		log.Printf("admin views cohort %d: attendance records: %v", cohort, err)
 		return nil, nil, domain.CohortSettings{}, err
 	}
 	st, err := h.settings.Get(cohort)
