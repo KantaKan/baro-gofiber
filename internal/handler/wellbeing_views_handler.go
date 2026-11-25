@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log"
 	"sort"
 	"time"
 
@@ -81,7 +82,11 @@ func (h *WellbeingViewsHandler) cohortUsers(c *fiber.Ctx) ([]domain.User, int, b
 func (h *WellbeingViewsHandler) cohortRecords(cohort int) ([]domain.AttendanceRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return h.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, nil)
+	recs, err := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, nil)
+	if err != nil {
+		log.Printf("wellbeing cohort %d: attendance records: %v", cohort, err)
+	}
+	return recs, err
 }
 
 func ids(users []domain.User) []primitive.ObjectID {
