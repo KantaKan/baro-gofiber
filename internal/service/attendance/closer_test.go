@@ -7,6 +7,7 @@ import (
 
 	"gofiber-baro/internal/domain"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -34,11 +35,22 @@ func TestPlanSessionClose_AllIn(t *testing.T) {
 }
 
 // --- fakes ---
-type fakeUsers struct{ list []domain.User }
+type fakeUsers struct {
+	list  []domain.User
+	calls *int
+}
 
-func (f fakeUsers) GetUserByID(id string) (*domain.User, error) { return nil, nil }
-func (f fakeUsers) GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int, ex ...string) ([]domain.User, int, error) {
-	return f.list, len(f.list), nil
+func (f fakeUsers) ListCohortLearners(cohort int, _ bson.M) ([]domain.User, error) {
+	if f.calls != nil {
+		*f.calls++
+	}
+	var out []domain.User
+	for _, u := range f.list {
+		if u.CohortNumber == cohort {
+			out = append(out, u)
+		}
+	}
+	return out, nil
 }
 
 type fakeCloserRecords struct {
@@ -147,5 +159,34 @@ func TestCloseIfDue_ContinuesAfterFailure(t *testing.T) {
 	_ = c.CloseIfDue(at(14, 31, 0))
 	if recs.bySession[domain.SessionAfternoon] != 2 {
 		t.Errorf("afternoon should still close after a morning failure, got %v", recs.bySession)
+	}
+}
+
+func TestCloseIfDue_NoUserLoadUntilDue(t *testing.T) {
+	calls := 0
+	users := fakeUsers{list: []domain.User{{ID: primitive.NewObjectID(), CohortNumber: 13, Role: "learner"}}, calls: &calls}
+	c := NewSessionCloser(&fakeCloserRecords{}, fakeLeaves{}, users, fakeSettings{}, fakeHolidays{})
+	_ = c.CloseIfDue(at(9, 0, 0))
+	if calls != 0 {
+		t.Errorf("loaded learners %d times before any session was due", calls)
+	}
+	_ = c.CloseIfDue(at(10, 31, 0))
+	_ = c.CloseIfDue(at(10, 32, 0))
+	if calls != 1 {
+		t.Errorf("want one learner load for the morning close, got %d", calls)
+	}
+}
+
+func TestCloseIfDue_SkipsDroppedLearners(t *testing.T) {
+	users := fakeUsers{list: []domain.User{
+		{ID: primitive.NewObjectID(), CohortNumber: 13, Role: "learner"},
+		{ID: primitive.NewObjectID(), CohortNumber: 13, Role: "learner", AttendanceStatus: "dropout"},
+		{ID: primitive.NewObjectID(), CohortNumber: 13, Role: "learner", AttendanceStatus: "dismissed"},
+	}}
+	recs := &fakeCloserRecords{}
+	c := NewSessionCloser(recs, fakeLeaves{}, users, fakeSettings{}, fakeHolidays{})
+	_ = c.CloseIfDue(at(10, 31, 0))
+	if recs.upserts != 1 {
+		t.Errorf("only the active learner should be marked, got %d", recs.upserts)
 	}
 }

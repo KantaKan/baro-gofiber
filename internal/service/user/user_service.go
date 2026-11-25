@@ -39,6 +39,11 @@ func (s *Service) GetUserByEmail(email string) (*domain.User, error) {
 }
 
 func (s *Service) GetAllUsers(cohort int, role, email, search, sort string, sortDir, page, limit int, excludeAttendanceStatus ...string) ([]domain.User, int, error) {
+	return s.GetUsersWithFields(nil, cohort, role, email, search, sort, sortDir, page, limit, excludeAttendanceStatus...)
+}
+
+// GetUsersWithFields is GetAllUsers that loads only the projected fields (nil loads everything).
+func (s *Service) GetUsersWithFields(projection bson.M, cohort int, role, email, search, sort string, sortDir, page, limit int, excludeAttendanceStatus ...string) ([]domain.User, int, error) {
 	ctx := context.Background()
 
 	filter := domain.UserFilter{
@@ -66,6 +71,9 @@ func (s *Service) GetAllUsers(cohort int, role, email, search, sort string, sort
 			direction = -1
 		}
 		findOpts.SetSort(bson.D{{Key: sort, Value: direction}})
+	}
+	if projection != nil {
+		findOpts.SetProjection(projection)
 	}
 
 	return s.repo.FindAll(ctx, filter, findOpts)

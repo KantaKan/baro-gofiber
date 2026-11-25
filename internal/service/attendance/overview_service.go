@@ -6,15 +6,21 @@ import (
 
 	"gofiber-baro/internal/domain"
 	"gofiber-baro/pkg/utils"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type OverviewService struct {
 	recordRepo  domain.AttendanceRepository
 	codeRepo    domain.AttendanceCodeRepository
-	userService UserServiceInterface
+	userService overviewUsers
 }
 
-func NewOverviewService(recordRepo domain.AttendanceRepository, codeRepo domain.AttendanceCodeRepository, userService UserServiceInterface) *OverviewService {
+type overviewUsers interface {
+	GetUsersWithFields(projection bson.M, cohort int, role, email, search, sort string, sortDir, page, limit int, excludeAttendanceStatus ...string) ([]domain.User, int, error)
+}
+
+func NewOverviewService(recordRepo domain.AttendanceRepository, codeRepo domain.AttendanceCodeRepository, userService overviewUsers) *OverviewService {
 	return &OverviewService{
 		recordRepo:  recordRepo,
 		codeRepo:    codeRepo,
@@ -67,7 +73,7 @@ func (s *OverviewService) GetAttendanceOverviewByDate(cohort int, session domain
 		}
 	}
 
-	users, _, err := s.userService.GetAllUsers(cohort, "", "", "", "first_name", 1, 1, 500, "dropout,dismissed")
+	users, _, err := s.userService.GetUsersWithFields(bson.M{"jsd_number": 1, "first_name": 1, "last_name": 1}, cohort, "", "", "", "first_name", 1, 1, 500, "dropout,dismissed")
 	if err != nil {
 		return nil, err
 	}
