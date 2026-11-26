@@ -110,7 +110,7 @@ func (h *WellbeingViewsHandler) learnersAndStats(c *fiber.Ctx, n int) ([]domain.
 		return err
 	})
 	g.Go(func() (err error) {
-		stats, err = h.stats.FindByCohort(ctx, cohort)
+		stats, err = h.stats.FindByCohort(ctx, cohort, false)
 		return err
 	})
 	if err := g.Wait(); err != nil {
@@ -152,7 +152,11 @@ func (h *WellbeingViewsHandler) Board(c *fiber.Ctx) error {
 	if len(nights) > 0 {
 		textDay = nights[len(nights)-1]
 	}
-	users, err := h.users.ListCohortLearnersWithReflections(cohort, learnerFields(), 30, textDay)
+	n := 20
+	if rng == "4w" {
+		n = 30
+	}
+	users, err := h.users.ListCohortLearnersWithReflections(cohort, learnerFields(), n, textDay)
 	if err != nil {
 		log.Printf("wellbeing cohort %d: users: %v", cohort, err)
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading learners")

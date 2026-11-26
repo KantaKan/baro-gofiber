@@ -89,7 +89,7 @@ func TestWellbeingViews(t *testing.T) {
 func TestLearnersReadStoredStats(t *testing.T) {
 	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Mint", Role: "learner"}
 	seen := time.Date(2026, 9, 9, 1, 55, 0, 0, time.UTC)
-	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, avRecords{}, avStats{[]domain.LearnerStats{{UserID: u.ID, AttendanceRate: 0.5, LeaveUsed: 6, LateRun: 3, LastSeen: &seen}}}, avHolidays{}, careReadFake{})
+	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, avRecords{}, avStats{list: []domain.LearnerStats{{UserID: u.ID, AttendanceRate: 0.5, LeaveUsed: 6, LateRun: 3, LastSeen: &seen}}}, avHolidays{}, careReadFake{})
 	loc, _ := time.LoadLocation("Asia/Bangkok")
 	h.now = func() time.Time { return time.Date(2026, 9, 9, 18, 0, 0, 0, loc) }
 	app := fiber.New()
@@ -140,9 +140,11 @@ func TestTextNightSpansHolidayWeekend(t *testing.T) {
 			t.Errorf("%s loaded n=%d textDay=%q, want 20 and Thursday 2026-09-10", url, users.n, users.textDay)
 		}
 	}
-	send(app, "GET", "/admin/reflections/board?cohort=13", "")
 	nights := h.classNights(20)
-	if users.n != 30 || users.textDay != nights[len(nights)-1] {
-		t.Errorf("board loaded n=%d textDay=%q, want 30 and %s", users.n, users.textDay, nights[len(nights)-1])
+	for url, n := range map[string]int{"/admin/reflections/board?cohort=13": 20, "/admin/reflections/board?cohort=13&range=week": 20, "/admin/reflections/board?cohort=13&range=4w": 30} {
+		send(app, "GET", url, "")
+		if users.n != n || users.textDay != nights[len(nights)-1] {
+			t.Errorf("%s loaded n=%d textDay=%q, want %d and %s", url, users.n, users.textDay, n, nights[len(nights)-1])
+		}
 	}
 }

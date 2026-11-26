@@ -35,8 +35,12 @@ func (r *learnerStatsRepository) UpsertMany(ctx context.Context, all []domain.Le
 	return err
 }
 
-func (r *learnerStatsRepository) FindByCohort(ctx context.Context, cohort int) ([]domain.LearnerStats, error) {
-	cur, err := r.col.Find(ctx, bson.M{"cohort_number": cohort})
+func (r *learnerStatsRepository) FindByCohort(ctx context.Context, cohort int, withLast10 bool) ([]domain.LearnerStats, error) {
+	opts := options.Find()
+	if !withLast10 {
+		opts.SetProjection(bson.M{"last10": 0})
+	}
+	cur, err := r.col.Find(ctx, bson.M{"cohort_number": cohort}, opts)
 	if err != nil {
 		return nil, err
 	}

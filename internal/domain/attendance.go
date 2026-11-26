@@ -170,5 +170,6 @@ type LearnerStats struct {
 type LearnerStatsRepository interface {
 	Upsert(ctx context.Context, s LearnerStats) error
 	UpsertMany(ctx context.Context, all []LearnerStats) error
-	FindByCohort(ctx context.Context, cohort int) ([]LearnerStats, error)
+	// FindByCohort returns the cohort's stats; withLast10 false leaves Last10 empty to keep the read small.
+	FindByCohort(ctx context.Context, cohort int, withLast10 bool) ([]LearnerStats, error)
 }

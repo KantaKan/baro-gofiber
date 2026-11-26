@@ -177,10 +177,29 @@ func TestLoadCohortRecordsIsHistoryOnly(t *testing.T) {
 	}
 }
 
-type avStats struct{ list []domain.LearnerStats }
+type avStats struct {
+	list     []domain.LearnerStats
+	withDays *[]bool
+}
 
-func (s avStats) FindByCohort(context.Context, int) ([]domain.LearnerStats, error) {
+func (s avStats) FindByCohort(_ context.Context, _ int, withLast10 bool) ([]domain.LearnerStats, error) {
+	if s.withDays != nil {
+		*s.withDays = append(*s.withDays, withLast10)
+	}
 	return s.list, nil
+}
+
+func TestOnlyTodayReadsLast10(t *testing.T) {
+	var got []bool
+	h := NewAdminViewsHandler(avUsers{}, avRecords{}, avStats{withDays: &got}, avSettings{}, avHolidays{})
+	app := fiber.New()
+	app.Get("/admin/today", h.Today)
+	app.Get("/admin/attendance/register", h.Register)
+	app.Test(httptest.NewRequest("GET", "/admin/today?cohort=13", nil))
+	app.Test(httptest.NewRequest("GET", "/admin/attendance/register?cohort=13&week=2026-09-07", nil))
+	if len(got) != 2 || !got[0] || got[1] {
+		t.Fatalf("withLast10 per call = %v, want [true false] (Today, Register)", got)
+	}
 }
 
 func TestRegisterLoadsSelectedAndPreviousWeekOnly(t *testing.T) {
