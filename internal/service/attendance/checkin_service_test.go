@@ -127,3 +127,24 @@ func TestCheckInThailandOnly(t *testing.T) {
 		t.Errorf("TH → allowed, got %v", err)
 	}
 }
+
+func TestSummaryReportsTourSeen(t *testing.T) {
+	seen := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+	p := NewProgressService(userRecs{}, oneUser{domain.User{CohortNumber: 13, TourSeenAt: &seen}}, fakeSettings{}, fakeHolidays{})
+	sum, err := p.Summary(primitive.NewObjectID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sum.Preferences.TourSeen {
+		t.Error("tour_seen should be true when tour_seen_at is set")
+	}
+
+	p = NewProgressService(userRecs{}, oneUser{domain.User{CohortNumber: 13}}, fakeSettings{}, fakeHolidays{})
+	sum, err = p.Summary(primitive.NewObjectID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Preferences.TourSeen {
+		t.Error("tour_seen should be false for a new learner")
+	}
+}
