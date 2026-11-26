@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sync"
 	"time"
 
@@ -79,7 +80,6 @@ func (k *StatsKeeper) RebuildCohort(ctx context.Context, cohort int) (int, error
 	k.mu.Unlock()
 	err = k.store.UpsertMany(ctx, all)
 	k.mu.Lock()
-	// Only delete touched entries for learners in this cohort
 	for id := range cohortLearners {
 		if t, ok := k.touched[id]; ok && t.Before(start) {
 			delete(k.touched, id)
@@ -91,10 +91,21 @@ func (k *StatsKeeper) RebuildCohort(ctx context.Context, cohort int) (int, error
 
 // RebuildActive rebuilds every cohort with attendance in the last 7 days.
 func (k *StatsKeeper) RebuildActive(ctx context.Context, now time.Time) error {
-	cohorts, err := k.records.ActiveCohorts(ctx, utils.FormatDate(now.AddDate(0, 0, -7)))
+	return k.rebuildSince(ctx, utils.FormatDate(now.AddDate(0, 0, -7)))
+}
+
+// RebuildAll rebuilds every cohort with live attendance records.
+func (k *StatsKeeper) RebuildAll(ctx context.Context) error {
+	return k.rebuildSince(ctx, "")
+}
+
+func (k *StatsKeeper) rebuildSince(ctx context.Context, since string) error {
+	cohorts, err := k.records.ActiveCohorts(ctx, since)
 	if err != nil {
 		return err
 	}
+	// Ascending, so a learner with records in two cohorts ends on the newer one.
+	slices.Sort(cohorts)
 	var errs error
 	for _, c := range cohorts {
 		n, err := k.RebuildCohort(ctx, c)

@@ -48,7 +48,21 @@ func (k keeperRecords) FindRecords(_ interface{}, f domain.AttendanceRecordFilte
 	}
 	return out, nil
 }
-func (k keeperRecords) ActiveCohorts(interface{}, string) ([]int, error) { return k.cohorts, nil }
+// ActiveCohorts returns the fixed cohorts if set, else every cohort with a record on or after since.
+func (k keeperRecords) ActiveCohorts(_ interface{}, since string) ([]int, error) {
+	if k.cohorts != nil {
+		return k.cohorts, nil
+	}
+	seen := map[int]bool{}
+	var out []int
+	for _, r := range k.list {
+		if r.Date >= since && !seen[r.CohortNumber] {
+			seen[r.CohortNumber] = true
+			out = append(out, r.CohortNumber)
+		}
+	}
+	return out, nil
+}
 
 func TestRecomputeStoresOneLearner(t *testing.T) {
 	u, other := primitive.NewObjectID(), primitive.NewObjectID()
@@ -160,8 +174,6 @@ func TestRebuildCohortKeepsNewerRecompute(t *testing.T) {
 func TestRebuildCleanupKeepsOtherCohortsTouched(t *testing.T) {
 	a := primitive.NewObjectID()
 	x := primitive.NewObjectID()
-
-	// A in cohort 13, X in cohort 14
 	aRec := rec(a, "2026-09-01", domain.SessionMorning, domain.StatusPresent)
 	xRec := rec(x, "2026-09-01", domain.SessionMorning, domain.StatusPresent)
 	xRec.CohortNumber = 14
@@ -169,26 +181,54 @@ func TestRebuildCleanupKeepsOtherCohortsTouched(t *testing.T) {
 	store := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
 	recs := keeperRecords{list: []domain.AttendanceRecord{aRec, xRec}}
 	k := NewStatsKeeper(recs, store)
-
-	// Recompute X (cohort 14) to set touched[X]
 	if err := k.Recompute(context.Background(), x, 14); err != nil {
 		t.Fatal(err)
 	}
-
-	// Sleep briefly to ensure touched[X] time is strictly before RebuildCohort's start time
 	time.Sleep(1 * time.Millisecond)
-
-	// RebuildCohort(13) should not delete touched[X]
 	if _, err := k.RebuildCohort(context.Background(), 13); err != nil {
 		t.Fatal(err)
 	}
-
-	// Assert touched[X] still exists
 	k.mu.Lock()
 	_, exists := k.touched[x]
 	k.mu.Unlock()
 
 	if !exists {
 		t.Fatal("rebuild cleanup deleted touched[X] from another cohort")
+	}
+}
+
+func TestRebuildAllCoversCohortsWithOnlyOldRecords(t *testing.T) {
+	cur, alum := primitive.NewObjectID(), primitive.NewObjectID()
+	now := time.Date(2026, 9, 8, 3, 0, 0, 0, time.UTC)
+	old := rec(alum, "2026-01-05", domain.SessionMorning, domain.StatusPresent)
+	old.CohortNumber = 12
+	recs := keeperRecords{list: []domain.AttendanceRecord{rec(cur, "2026-09-07", domain.SessionMorning, domain.StatusPresent), old}}
+	active := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
+	if err := NewStatsKeeper(recs, active).RebuildActive(context.Background(), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := active.docs[alum]; ok || len(active.docs) != 1 {
+		t.Fatalf("RebuildActive should skip cohort 12, got %+v", active.docs)
+	}
+	all := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
+	if err := NewStatsKeeper(recs, all).RebuildAll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if all.docs[alum].CohortNumber != 12 || len(all.docs) != 2 {
+		t.Fatalf("RebuildAll should cover cohort 12, got %+v", all.docs)
+	}
+}
+
+func TestRebuildEndsOnNewestCohort(t *testing.T) {
+	u := primitive.NewObjectID()
+	old := rec(u, "2026-01-05", domain.SessionMorning, domain.StatusPresent)
+	old.CohortNumber = 12
+	store := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
+	recs := keeperRecords{list: []domain.AttendanceRecord{rec(u, "2026-09-07", domain.SessionMorning, domain.StatusPresent), old}, cohorts: []int{13, 12}}
+	if err := NewStatsKeeper(recs, store).RebuildActive(context.Background(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.docs[u].CohortNumber; got != 13 {
+		t.Fatalf("learner in cohorts 12 and 13 ended on %d, want 13", got)
 	}
 }

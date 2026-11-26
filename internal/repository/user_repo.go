@@ -637,7 +637,7 @@ func (r *userRepository) AddPlantReaction(ctx interface{}, userID primitive.Obje
 }
 
 // reflectionsView keeps each learner's last n reflections; only those written for textDay keep
-// their text, the rest keep id, day, date and barometer.
+// their text, the rest keep day, date and barometer.
 func reflectionsView(n int, textDay string) bson.M {
 	if textDay == "" {
 		textDay = "-"
@@ -645,7 +645,8 @@ func reflectionsView(n int, textDay string) bson.M {
 	day := bson.M{"$cond": bson.A{
 		bson.M{"$gt": bson.A{bson.M{"$ifNull": bson.A{"$$r.day", ""}}, ""}},
 		"$$r.day",
-		bson.M{"$dateToString": bson.M{"format": "%Y-%m-%d", "date": "$$r.date", "onNull": ""}},
+		bson.M{"$dateToString": bson.M{"format": "%Y-%m-%d", "onNull": "",
+			"date": bson.M{"$convert": bson.M{"input": "$$r.date", "to": "date", "onError": nil, "onNull": nil}}}},
 	}}
 	return bson.M{"$map": bson.M{
 		"input": bson.M{"$slice": bson.A{bson.M{"$ifNull": bson.A{"$reflections", bson.A{}}}, -n}},
@@ -653,7 +654,7 @@ func reflectionsView(n int, textDay string) bson.M {
 		"in": bson.M{"$cond": bson.A{
 			bson.M{"$eq": bson.A{day, textDay}},
 			"$$r",
-			bson.M{"_id": "$$r._id", "day": "$$r.day", "date": "$$r.date", "reflection": bson.M{"barometer": "$$r.reflection.barometer"}},
+			bson.M{"day": "$$r.day", "date": "$$r.date", "reflection": bson.M{"barometer": "$$r.reflection.barometer"}},
 		}},
 	}}
 }

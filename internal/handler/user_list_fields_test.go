@@ -3,7 +3,7 @@ package handler
 import "testing"
 
 func TestUserListFieldsDropHeavyFields(t *testing.T) {
-	for _, f := range []string{"reflections", "password", "profile_comments", "profile_reactions", "plant_reactions", "care_energy_log", "gift_boxes", "owned_cosmetic_ids", "new_cosmetic_ids"} {
+	for _, f := range []string{"reflections", "password", "profile_comments", "profile_reactions", "plant_reactions", "care_energy_log", "fertilizer_log", "gift_boxes", "owned_cosmetic_ids", "new_cosmetic_ids"} {
 		if v, ok := userListFields[f]; !ok || v != 0 {
 			t.Errorf("%s not excluded from GET /users", f)
 		}

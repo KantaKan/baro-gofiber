@@ -71,7 +71,7 @@ var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning
 // recommendations from GET /users/:id when opened.
 var userListFields = bson.M{
 	"reflections": 0, "password": 0, "profile_comments": 0, "profile_reactions": 0, "plant_reactions": 0,
-	"care_energy_log": 0, "gift_boxes": 0, "owned_cosmetic_ids": 0, "new_cosmetic_ids": 0,
+	"care_energy_log": 0, "fertilizer_log": 0, "gift_boxes": 0, "owned_cosmetic_ids": 0, "new_cosmetic_ids": 0,
 }
 
 func NewUserHandler(userService *user.Service, careEnergyService *user.CareEnergyService, milestones *milestone.Service, achievements *achievement.Service, progress *attendance.ProgressService) *UserHandler {
@@ -301,7 +301,7 @@ func (h *UserHandler) GetUserByID(c *fiber.Ctx) error {
 
 	var user *domain.User
 	var err error
-	if claims.Role == "admin" || claims.UserID == id {
+	if claims.Role == "admin" {
 		user, err = h.userService.GetUserByID(id)
 	} else {
 		user, err = h.userService.GetUserByIDWithFields(id, bson.M{"reflections": 0, "password": 0})

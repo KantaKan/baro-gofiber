@@ -84,9 +84,10 @@ func (h *WellbeingViewsHandler) cohortUsers(c *fiber.Ctx, fields bson.M) ([]doma
 }
 
 // textNight is the latest class night: the only night whose reflection text any view reads.
+// classNights(2) looks back far enough to cross a long weekend, matching Support's window.
 func (h *WellbeingViewsHandler) textNight() string {
-	if n := h.classNights(1); len(n) > 0 {
-		return n[0]
+	if n := h.classNights(2); len(n) > 0 {
+		return n[len(n)-1]
 	}
 	return ""
 }
@@ -120,7 +121,7 @@ func (h *WellbeingViewsHandler) learnersAndStats(c *fiber.Ctx, n int) ([]domain.
 }
 
 func (h *WellbeingViewsHandler) cohortRecords(cohort int) ([]domain.AttendanceRecord, error) {
-	recs, err := loadCohortRecords(h.records, cohort, "", "")
+	recs, err := loadCohortRecords(h.records, cohort)
 	if err != nil {
 		log.Printf("wellbeing cohort %d: attendance records: %v", cohort, err)
 	}

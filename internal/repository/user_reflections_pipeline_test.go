@@ -19,12 +19,18 @@ func TestReflectionsViewKeepsTextForOneNight(t *testing.T) {
 		t.Errorf("text night match = %v → %v", eq, cond[1])
 	}
 	slim := cond[2].(bson.M)
-	if _, ok := slim["reflection"].(bson.M)["barometer"]; !ok || len(slim) != 4 {
-		t.Errorf("other nights keep %v, want _id/day/date/barometer only", slim)
+	if _, ok := slim["reflection"].(bson.M)["barometer"]; !ok || len(slim) != 3 {
+		t.Errorf("other nights keep %v, want day/date/barometer only", slim)
 	}
 	day := eq[0].(bson.M)["$cond"].(bson.A)
-	if fmt := day[2].(bson.M)["$dateToString"].(bson.M)["format"]; fmt != "%Y-%m-%d" {
+	toString := day[2].(bson.M)["$dateToString"].(bson.M)
+	if toString["format"] != "%Y-%m-%d" || toString["onNull"] != "" {
 		t.Errorf("reflections without day must match on their date, got %v", day[2])
+	}
+	dateArg, _ := toString["date"].(bson.M)
+	conv, _ := dateArg["$convert"].(bson.M)
+	if conv["input"] != "$$r.date" || conv["to"] != "date" || conv["onError"] != nil || conv["onNull"] != nil || len(conv) != 4 {
+		t.Errorf("a non-date date must not fail the aggregation, got %v", toString["date"])
 	}
 }
 

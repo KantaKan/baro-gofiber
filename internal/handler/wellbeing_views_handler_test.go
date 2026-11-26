@@ -105,3 +105,44 @@ func TestLearnersReadStoredStats(t *testing.T) {
 		t.Errorf("support body: %s", body)
 	}
 }
+
+// wbCallUsers records the last (n, textDay) the handler asked for.
+type wbCallUsers struct {
+	wbUsersFake
+	n       int
+	textDay string
+}
+
+func (u *wbCallUsers) ListCohortLearnersWithReflections(_ int, _ bson.M, n int, textDay string) ([]domain.User, error) {
+	u.n, u.textDay = n, textDay
+	return u.list, nil
+}
+
+type holidayOn string
+
+func (h holidayOn) IsHoliday(d string) (bool, *domain.Holiday, error) { return d == string(h), nil, nil }
+
+func TestTextNightSpansHolidayWeekend(t *testing.T) {
+	users := &wbCallUsers{}
+	h := NewWellbeingViewsHandler(users, avRecords{}, avStats{}, holidayOn("2026-09-11"), careReadFake{})
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h.now = func() time.Time { return time.Date(2026, 9, 14, 10, 0, 0, 0, loc) }
+	app := fiber.New()
+	app.Get("/admin/learners", h.Learners)
+	app.Get("/admin/support", h.Support)
+	app.Get("/admin/reflections/board", h.Board)
+	for _, url := range []string{"/admin/support?cohort=13", "/admin/learners?cohort=13"} {
+		users.n, users.textDay = 0, ""
+		if code, body := send(app, "GET", url, ""); code != 200 {
+			t.Fatalf("%s → %d %s", url, code, body)
+		}
+		if users.n != 20 || users.textDay != "2026-09-10" {
+			t.Errorf("%s loaded n=%d textDay=%q, want 20 and Thursday 2026-09-10", url, users.n, users.textDay)
+		}
+	}
+	send(app, "GET", "/admin/reflections/board?cohort=13", "")
+	nights := h.classNights(20)
+	if users.n != 30 || users.textDay != nights[len(nights)-1] {
+		t.Errorf("board loaded n=%d textDay=%q, want 30 and %s", users.n, users.textDay, nights[len(nights)-1])
+	}
+}

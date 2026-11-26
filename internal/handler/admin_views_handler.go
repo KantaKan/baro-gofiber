@@ -67,25 +67,11 @@ func historyFields() *options.FindOptions {
 	return options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "date": 1, "session": 1, "status": 1})
 }
 
-// loadCohortRecords returns a cohort's slim attendance history, with full records for the
-// dates from..to (the cells a view actually shows). Empty from means history only.
-func loadCohortRecords(r adminViewRecords, cohort int, from, to string) ([]domain.AttendanceRecord, error) {
+// loadCohortRecords returns a cohort's slim attendance history.
+func loadCohortRecords(r adminViewRecords, cohort int) ([]domain.AttendanceRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	hist, err := r.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, historyFields())
-	if err != nil || from == "" {
-		return hist, err
-	}
-	out, err := r.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, DateFrom: from, DateTo: to}, viewRecordFields())
-	if err != nil {
-		return nil, err
-	}
-	for _, rec := range hist {
-		if rec.Date < from || rec.Date > to {
-			out = append(out, rec)
-		}
-	}
-	return out, nil
+	return r.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, historyFields())
 }
 
 func statsMap(list []domain.LearnerStats) map[primitive.ObjectID]domain.LearnerStats {
@@ -96,8 +82,9 @@ func statsMap(list []domain.LearnerStats) map[primitive.ObjectID]domain.LearnerS
 	return m
 }
 
-// viewData loads learners, stored stats and the records for the dates on screen, in parallel.
-func (h *AdminViewsHandler) viewData(cohort int, records domain.AttendanceRecordFilter, loadUsers func() ([]domain.User, error)) ([]domain.User, []domain.AttendanceRecord, map[primitive.ObjectID]domain.LearnerStats, error) {
+// viewData loads learners, stored stats, the records for the dates on screen and any slim
+// history ranges (appended after the on-screen records), in parallel.
+func (h *AdminViewsHandler) viewData(cohort int, records domain.AttendanceRecordFilter, loadUsers func() ([]domain.User, error), history ...domain.AttendanceRecordFilter) ([]domain.User, []domain.AttendanceRecord, map[primitive.ObjectID]domain.LearnerStats, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	var (
@@ -118,6 +105,15 @@ func (h *AdminViewsHandler) viewData(cohort int, records domain.AttendanceRecord
 		}
 		return err
 	})
+	hist := make([][]domain.AttendanceRecord, len(history))
+	for i, f := range history {
+		g.Go(func() (err error) {
+			if hist[i], err = h.records.FindRecords(ctx, f, historyFields()); err != nil {
+				log.Printf("admin views cohort %d: attendance history: %v", cohort, err)
+			}
+			return err
+		})
+	}
 	g.Go(func() (err error) {
 		if stats, err = h.stats.FindByCohort(ctx, cohort); err != nil {
 			log.Printf("admin views cohort %d: learner stats: %v", cohort, err)
@@ -126,6 +122,9 @@ func (h *AdminViewsHandler) viewData(cohort int, records domain.AttendanceRecord
 	})
 	if err := g.Wait(); err != nil {
 		return nil, nil, nil, err
+	}
+	for _, more := range hist {
+		recs = append(recs, more...)
 	}
 	return users, recs, statsMap(stats), nil
 }
@@ -193,9 +192,10 @@ func (h *AdminViewsHandler) Register(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "week must be a Monday (YYYY-MM-DD)")
 	}
 	t, _ := time.Parse("2006-01-02", week)
-	users, recs, stats, err := h.viewData(cohort, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, DateFrom: t.AddDate(0, 0, -7).Format("2006-01-02"), DateTo: t.AddDate(0, 0, 4).Format("2006-01-02")}, func() ([]domain.User, error) {
+	day := func(n int) string { return t.AddDate(0, 0, n).Format("2006-01-02") }
+	users, recs, stats, err := h.viewData(cohort, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, DateFrom: week, DateTo: day(4)}, func() ([]domain.User, error) {
 		return h.users.ListCohortLearners(cohort, learnerFields())
-	})
+	}, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, DateFrom: day(-7), DateTo: day(-3)})
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading register")
 	}
