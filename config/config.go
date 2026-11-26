@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -99,7 +100,9 @@ func createIndexes(ctx context.Context) error {
 	legacyUniqueName := "user_id_1_date_1_session_1"
 	_, _ = AttendanceRecordsCollection.Indexes().DropOne(ctx, legacyUniqueName)
 
-	cleanupAttendanceDuplicates(ctx)
+	if os.Getenv("CLEANUP_ATTENDANCE_DUPLICATES") == "true" {
+		cleanupAttendanceDuplicates(ctx)
+	}
 
 	attendanceIndexes := []mongo.IndexModel{
 		{
@@ -214,6 +217,7 @@ func createIndexes(ctx context.Context) error {
 
 func cleanupAttendanceDuplicates(ctx context.Context) {
 	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"deleted": false}}},
 		{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: bson.D{
 				{Key: "user_id", Value: "$user_id"},
