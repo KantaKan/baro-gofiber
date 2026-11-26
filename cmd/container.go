@@ -39,6 +39,8 @@ type Container struct {
 
 	UserRepo           domain.UserRepository
 	AttendanceRepo     domain.AttendanceRepository
+	LearnerStatsRepo   domain.LearnerStatsRepository
+	StatsKeeper        *attendance.StatsKeeper
 	AttendanceCodeRepo domain.AttendanceCodeRepository
 	LeaveRepo          domain.LeaveRequestRepository
 	HolidayRepo        domain.HolidayRepository
@@ -140,7 +142,10 @@ func NewContainer(db *mongo.Database) *Container {
 
 func (c *Container) initRepositories() {
 	c.UserRepo = repository.NewUserRepository(c.DB)
-	c.AttendanceRepo = repository.NewAttendanceRepository(c.DB)
+	rawAttendance := repository.NewAttendanceRepository(c.DB)
+	c.LearnerStatsRepo = repository.NewLearnerStatsRepository(c.DB)
+	c.StatsKeeper = attendance.NewStatsKeeper(rawAttendance, c.LearnerStatsRepo)
+	c.AttendanceRepo = attendance.TrackStats(rawAttendance, c.StatsKeeper)
 	c.AttendanceCodeRepo = repository.NewAttendanceCodeRepository(c.DB)
 	c.LeaveRepo = repository.NewLeaveRequestRepository(c.DB)
 	c.HolidayRepo = repository.NewHolidayRepository(c.DB)
@@ -224,6 +229,7 @@ func (c *Container) initHandlers() {
 	c.CohortHandler = handler.NewCohortHandler(c.CohortService)
 	c.CupHandler = handler.NewCupHandler(c.CupService, c.UserService)
 	c.AdminViewsHandler = handler.NewAdminViewsHandler(c.UserService, c.AttendanceRepo, c.CohortService, c.HolidayService)
+	c.AdminViewsHandler.SetStatsDriftCheck(c.LearnerStatsRepo)
 	c.AdminMarkHandler = handler.NewAdminMarkHandler(c.AttendanceSubmissionService, c.AttendanceRepo)
 	c.CareRepo = repository.NewCareRepository(c.DB)
 	c.StaffRepo = repository.NewStaffRepository(c.DB)

@@ -158,17 +158,7 @@ func SupportReasons(leaveUsed int, days []attendance.DayResult, patterns []Patte
 	if leaveUsed >= 6 {
 		out = append(out, Reason{"leave", fmt.Sprintf("Leave %d/8", leaveUsed)})
 	}
-	run := 0
-	for i := len(days) - 1; i >= 0; i-- {
-		s := days[i].Status
-		if s == domain.StatusHoliday || s == domain.StatusNoClass {
-			continue
-		}
-		if s != domain.StatusLate {
-			break
-		}
-		run++
-	}
+	run := attendance.LateRun(days)
 	if run >= 3 {
 		out = append(out, Reason{"late_run", fmt.Sprintf("Late %d days running", run)})
 	}

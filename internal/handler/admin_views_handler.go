@@ -3,6 +3,9 @@ package handler
 import (
 	"context"
 	"log"
+	"math"
+	"slices"
+	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -10,9 +13,9 @@ import (
 	"gofiber-baro/pkg/utils"
 
 	"github.com/gofiber/fiber/v2"
-	"golang.org/x/sync/errgroup"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/sync/errgroup"
 )
 
 type adminViewUsers interface {
@@ -46,15 +49,71 @@ type adminViewRecords interface {
 
 // AdminViewsHandler serves the assembled admin read views (Today, Register).
 type AdminViewsHandler struct {
-	users    adminViewUsers
-	records  adminViewRecords
-	settings attendance.CohortSettingsGetter
-	holidays attendance.HolidayChecker
-	now      func() time.Time
+	users     adminViewUsers
+	records   adminViewRecords
+	settings  attendance.CohortSettingsGetter
+	holidays  attendance.HolidayChecker
+	now       func() time.Time
+	drift     statsReader
+	driftSync bool
 }
 
 func NewAdminViewsHandler(users adminViewUsers, records adminViewRecords, settings attendance.CohortSettingsGetter, holidays attendance.HolidayChecker) *AdminViewsHandler {
 	return &AdminViewsHandler{users: users, records: records, settings: settings, holidays: holidays, now: utils.GetThailandTime}
+}
+
+// statsReader is the subset of the learner_stats store Today needs to check for drift.
+type statsReader interface {
+	FindByCohort(ctx context.Context, cohort int) ([]domain.LearnerStats, error)
+}
+
+// SetStatsDriftCheck compares Today's computed numbers with learner_stats and logs mismatches.
+// It proves learner_stats on real data before the views read it.
+func (h *AdminViewsHandler) SetStatsDriftCheck(store statsReader) { h.drift = store }
+
+func (h *AdminViewsHandler) logStatsDrift(cohort int, v attendance.TodayView) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	stored, err := h.drift.FindByCohort(ctx, cohort)
+	if err != nil {
+		log.Printf("stats drift check: cohort %d: %v", cohort, err)
+		return
+	}
+	by := map[string]domain.LearnerStats{}
+	for _, s := range stored {
+		by[s.UserID.Hex()] = s
+	}
+	var examples []string
+	n := 0
+	for _, l := range v.Learners {
+		if f := statsDiff(by[l.ID], l); len(f) > 0 {
+			n++
+			if len(examples) < 3 {
+				examples = append(examples, l.ID+":"+strings.Join(f, ","))
+			}
+		}
+	}
+	if n > 0 {
+		log.Printf("stats drift: cohort %d, %d learners differ (e.g. %s)", cohort, n, strings.Join(examples, " "))
+	}
+}
+
+// statsDiff names the fields where stored stats disagree with the live Today row.
+func statsDiff(s domain.LearnerStats, l attendance.TodayLearner) []string {
+	var f []string
+	if s.Streak != l.Streak {
+		f = append(f, "streak")
+	}
+	if s.LeaveUsed != l.LeaveUsed {
+		f = append(f, "leave")
+	}
+	if math.Abs(s.AttendanceRate-l.AttendanceRate) > 1e-9 {
+		f = append(f, "rate")
+	}
+	if !slices.Equal(s.Last10, l.Last10) {
+		f = append(f, "last10")
+	}
+	return f
 }
 
 // viewRecordFields drops the record fields the admin views never read.
@@ -140,7 +199,15 @@ func (h *AdminViewsHandler) Today(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading today")
 	}
 	classDay = classDay && st.InSession(utils.FormatDate(now))
-	return utils.SendResponse(c, fiber.StatusOK, "Today retrieved", attendance.BuildTodayRoster(users, recs, now, st.Rules, classDay, st.FlagsOn()))
+	view := attendance.BuildTodayRoster(users, recs, now, st.Rules, classDay, st.FlagsOn())
+	if h.drift != nil {
+		if h.driftSync {
+			h.logStatsDrift(cohort, view)
+		} else {
+			go h.logStatsDrift(cohort, view)
+		}
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Today retrieved", view)
 }
 
 func mondayOf(t time.Time) string {

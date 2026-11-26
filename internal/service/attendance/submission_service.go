@@ -78,9 +78,6 @@ func (s *SubmissionService) ManualMarkAttendance(userID primitive.ObjectID, date
 }
 
 func (s *SubmissionService) BulkMarkAttendance(userIDs []primitive.ObjectID, date string, session domain.AttendanceSession, status domain.AttendanceStatus, markedBy string) ([]domain.AttendanceRecord, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	var records []domain.AttendanceRecord
 	now := utils.GetThailandTime()
 
@@ -121,7 +118,9 @@ func (s *SubmissionService) BulkMarkAttendance(userIDs []primitive.ObjectID, dat
 			NotDeleted: true,
 		}
 
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		record, err := s.recordRepo.UpsertRecord(ctx, filter, update)
+		cancel()
 		if err != nil {
 			log.Printf("[WARN] BulkMarkAttendance: upsert failed for user %s: %v", userID.Hex(), err)
 			continue
