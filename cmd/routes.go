@@ -11,6 +11,7 @@ import (
 )
 
 type Handlers struct {
+	Latency      *handler.Latency
 	User         *handler.UserHandler
 	Admin        *handler.AdminHandler
 	Attendance   *handler.AttendanceHandler
@@ -232,6 +233,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Get("/attendance/logs", h.Attendance.GetAttendanceLogs)
 	admin.Get("/attendance/stats", h.Attendance.GetAttendanceStats)
 	admin.Get("/today", h.AdminViews.Today)
+	admin.Get("/metrics/latency", h.Latency.Report)
 	admin.Get("/attendance/register", h.AdminViews.Register)
 	admin.Post("/attendance/mark", h.AdminMark.Mark)
 	admin.Post("/attendance/:id/restore", h.AdminMark.Restore)

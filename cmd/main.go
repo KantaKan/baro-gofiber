@@ -5,6 +5,7 @@ import (
 	"errors"
 	"gofiber-baro/config"
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/handler"
 	"gofiber-baro/internal/jobs"
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/cup"
@@ -172,10 +173,15 @@ func main() {
 	app := fiber.New(fiberConfig(os.Getenv("PROXY_HEADER")))
 
 	app.Use(recover.New())
+	latency := handler.NewLatency()
 	app.Use(func(c *fiber.Ctx) error {
 		start := time.Now()
 		err := c.Next()
-		if d := time.Since(start); d > 500*time.Millisecond {
+		d := time.Since(start)
+		if c.Method() != fiber.MethodOptions && c.Response().StatusCode() != fiber.StatusNotFound {
+			latency.Observe(c.Method()+" "+c.Route().Path, d)
+		}
+		if d > 500*time.Millisecond {
 			log.Printf("slow request: %s %s %d %v", c.Method(), c.Path(), c.Response().StatusCode(), d.Round(time.Millisecond))
 		}
 		return err
@@ -258,6 +264,7 @@ func main() {
 		GodEvent:     container.GodEventHandler,
 		StartupStory: container.StartupStoryHandler,
 		Audit:        container.AuditMiddleware,
+		Latency:      latency,
 	}
 
 	setupRoutes(app, handlers)
