@@ -34,14 +34,6 @@ func learnerFields(extra ...string) bson.M {
 	return p
 }
 
-// recentReflections is learnerFields plus only each learner's last n reflections
-// (reflections are appended, so the tail is the newest).
-func recentReflections(n int) bson.M {
-	p := learnerFields()
-	p["reflections"] = bson.M{"$slice": -n}
-	return p
-}
-
 type adminViewRecords interface {
 	FindRecords(ctx interface{}, filter domain.AttendanceRecordFilter, opts interface{}) ([]domain.AttendanceRecord, error)
 }

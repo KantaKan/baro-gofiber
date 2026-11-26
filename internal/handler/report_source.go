@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/cup"
 	"gofiber-baro/internal/service/report"
 	"gofiber-baro/pkg/utils"
@@ -43,6 +44,6 @@ func (s ReportSource) Load(cohort int, week string) (report.Input, error) {
 	}
 	return report.Input{
 		Week: week, Today: utils.FormatDate(s.WB.now()), Users: users, Records: recs, Holidays: hol,
-		Support: s.WB.SupportRows(users, recs), Cup: scores,
+		Support: s.WB.SupportRows(users, attendance.StatsByUser(recs)), Cup: scores,
 	}, nil
 }

@@ -19,6 +19,9 @@ type wbUsersFake struct{ list []domain.User }
 func (u wbUsersFake) ListCohortLearners(int, bson.M) ([]domain.User, error) {
 	return u.list, nil
 }
+func (u wbUsersFake) ListCohortLearnersWithReflections(int, bson.M, int, string) ([]domain.User, error) {
+	return u.list, nil
+}
 func (u wbUsersFake) GetUserByID(id string) (*domain.User, error) {
 	for _, x := range u.list {
 		if x.ID.Hex() == id {
@@ -44,7 +47,7 @@ func (careReadFake) AcksFor(context.Context, []primitive.ObjectID, time.Time) ([
 }
 
 func wbApp(users []domain.User) *fiber.App {
-	h := NewWellbeingViewsHandler(wbUsersFake{users}, avRecords{}, avHolidays{}, careReadFake{})
+	h := NewWellbeingViewsHandler(wbUsersFake{users}, avRecords{}, avStats{}, avHolidays{}, careReadFake{})
 	loc, _ := time.LoadLocation("Asia/Bangkok")
 	h.now = func() time.Time { return time.Date(2026, 9, 9, 18, 0, 0, 0, loc) }
 	app := fiber.New()
@@ -81,4 +84,24 @@ func TestWellbeingViews(t *testing.T) {
 		}
 	}
 	_ = httptest.NewRequest
+}
+
+func TestLearnersReadStoredStats(t *testing.T) {
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Mint", Role: "learner"}
+	seen := time.Date(2026, 9, 9, 1, 55, 0, 0, time.UTC)
+	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, avRecords{}, avStats{[]domain.LearnerStats{{UserID: u.ID, AttendanceRate: 0.5, LeaveUsed: 6, LateRun: 3, LastSeen: &seen}}}, avHolidays{}, careReadFake{})
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h.now = func() time.Time { return time.Date(2026, 9, 9, 18, 0, 0, 0, loc) }
+	app := fiber.New()
+	app.Get("/admin/learners", h.Learners)
+	app.Get("/admin/support", h.Support)
+	_, body := send(app, "GET", "/admin/learners?cohort=13", "")
+	for _, want := range []string{`"attendance_rate":0.5`, `"leave_used":6`, `"support":true`, `"last_seen":"2026-09-09T01:55:00Z"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("learners body missing %s: %s", want, body)
+		}
+	}
+	if _, body := send(app, "GET", "/admin/support?cohort=13", ""); !strings.Contains(body, `"late_run"`) || !strings.Contains(body, `"Leave 6/8"`) {
+		t.Errorf("support body: %s", body)
+	}
 }
