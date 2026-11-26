@@ -43,6 +43,9 @@ func dayOf(r domain.Reflection) string {
 	return r.Date.Format("2006-01-02")
 }
 
+// DayOf is the class day a reflection belongs to.
+func DayOf(r domain.Reflection) string { return dayOf(r) }
+
 func joinText(r domain.Reflection) string {
 	d := r.ReflectionData
 	// Reflections are stored HTML-escaped (can&#39;t); match and show the real text.

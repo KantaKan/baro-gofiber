@@ -63,6 +63,22 @@ func OnTimeStreak(days []DayResult) int {
 	return n
 }
 
+// LongestOnTimeStreak is the best on-time run in the history, with OnTimeStreak's rules.
+func LongestOnTimeStreak(days []DayResult) int {
+	best, n := 0, 0
+	for _, d := range days {
+		switch s := d.Status; {
+		case s == domain.StatusPresent:
+			n++
+			best = max(best, n)
+		case skipsStreak(s):
+		default:
+			n = 0
+		}
+	}
+	return best
+}
+
 func LeaveDaysUsed(days []DayResult) int {
 	n := 0
 	for _, d := range days {

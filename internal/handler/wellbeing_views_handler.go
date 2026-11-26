@@ -2,8 +2,11 @@ package handler
 
 import (
 	"context"
+	"html"
 	"log"
+	"math"
 	"sort"
+	"strconv"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -13,8 +16,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
-	"golang.org/x/sync/errgroup"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/sync/errgroup"
 )
 
 type careReader interface {
@@ -223,6 +226,124 @@ type dayAMPM struct {
 
 // Overview is one learner's full profile for admins.
 // @Summary  Learner overview  @Tags admin  @Security BearerAuth  @Router /admin/learners/{id}/overview [get]
+type sessionAt struct {
+	Status domain.AttendanceStatus `json:"status"`
+	At     time.Time               `json:"at"`
+}
+
+type dayReflection struct {
+	ID             string     `json:"id"`
+	Zone           string     `json:"zone"`
+	SentAt         time.Time  `json:"sent_at"`
+	TechHappy      string     `json:"tech_happy"`
+	TechImprove    string     `json:"tech_improve"`
+	NontechHappy   string     `json:"nontech_happy"`
+	NontechImprove string     `json:"nontech_improve"`
+	Reply          string     `json:"reply"`
+	ReplyName      string     `json:"reply_name"`
+	ReplyAt        *time.Time `json:"reply_at"`
+}
+
+type overviewDay struct {
+	Date       string         `json:"date"`
+	Morning    *sessionAt     `json:"morning"`
+	Afternoon  *sessionAt     `json:"afternoon"`
+	Reflection *dayReflection `json:"reflection"`
+}
+
+// courseDays lists class days from the course start (or the learner's first record or
+// reflection when the cohort has no start date) up to today.
+func (h *WellbeingViewsHandler) courseDays(start string, recs []domain.AttendanceRecord, refls []domain.Reflection) []string {
+	from := start
+	if from == "" {
+		for _, r := range recs {
+			if from == "" || r.Date < from {
+				from = r.Date
+			}
+		}
+		for _, r := range refls {
+			if d := wellbeing.DayOf(r); d != "" && (from == "" || d < from) {
+				from = d
+			}
+		}
+	}
+	first, err := utils.ParseDate(from)
+	if err != nil {
+		return nil
+	}
+	today := utils.FormatDate(h.now())
+	var out []string
+	for d := first; utils.FormatDate(d) <= today; d = d.AddDate(0, 0, 1) {
+		if ok, err := attendance.IsClassDay(d, h.holidays); err == nil && ok {
+			out = append(out, utils.FormatDate(d))
+		}
+	}
+	return out
+}
+
+func overviewDays(dates []string, recs []domain.AttendanceRecord, refls []domain.Reflection) []*overviewDay {
+	out := make([]*overviewDay, len(dates))
+	by := make(map[string]*overviewDay, len(dates))
+	for i, d := range dates {
+		out[i] = &overviewDay{Date: d}
+		by[d] = out[i]
+	}
+	for _, r := range recs {
+		x := by[r.Date]
+		if x == nil {
+			continue
+		}
+		s := &sessionAt{Status: r.Status, At: r.SubmittedAt}
+		if r.Session == domain.SessionAfternoon {
+			x.Afternoon = s
+		} else {
+			x.Morning = s
+		}
+	}
+	un := html.UnescapeString
+	for _, r := range refls {
+		x := by[wellbeing.DayOf(r)]
+		if x == nil {
+			continue
+		}
+		d := r.ReflectionData
+		x.Reflection = &dayReflection{
+			ID: r.ID.Hex(), Zone: attendance.ZoneOf(d.Barometer), SentAt: r.CreatedAt,
+			TechHappy: un(d.TechSessions.Happy), TechImprove: un(d.TechSessions.Improve),
+			NontechHappy: un(d.NonTechSessions.Happy), NontechImprove: un(d.NonTechSessions.Improve),
+			Reply: r.AdminFeedback, ReplyName: r.AdminFeedbackName, ReplyAt: r.AdminFeedbackAt,
+		}
+	}
+	return out
+}
+
+// neighbors is the previous and next learner of the cohort in JSD-number order.
+func neighbors(peers []domain.User, id primitive.ObjectID) fiber.Map {
+	num := func(s string) (int, bool) { n, err := strconv.Atoi(s); return n, err == nil }
+	sort.SliceStable(peers, func(i, j int) bool {
+		a, aok := num(peers[i].JSDNumber)
+		b, bok := num(peers[j].JSDNumber)
+		if aok && bok {
+			return a < b
+		}
+		return peers[i].JSDNumber < peers[j].JSDNumber
+	})
+	out := fiber.Map{"prev": nil, "next": nil, "index": 0, "total": len(peers)}
+	for i, p := range peers {
+		if p.ID != id {
+			continue
+		}
+		out["index"] = i
+		if i > 0 {
+			out["prev"] = peers[i-1].ID.Hex()
+		}
+		if i+1 < len(peers) {
+			out["next"] = peers[i+1].ID.Hex()
+		}
+	}
+	return out
+}
+
 func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 	id, e := primitive.ObjectIDFromHex(c.Params("id"))
 	if e != nil {
@@ -288,19 +409,42 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 	if len(recent) > 2 {
 		recent = recent[len(recent)-2:]
 	}
+	var st domain.CohortSettings
+	if h.settings != nil {
+		st, _ = h.settings(u.CohortNumber)
+	}
+	dayN, week, total := attendance.CourseProgress(st.StartDate, st.CourseDays, utils.FormatDate(h.now()))
+	cohortRate := 0.0
+	if list, err := h.stats.FindByCohort(ctx, u.CohortNumber, false); err == nil && len(list) > 0 {
+		for _, s := range list {
+			cohortRate += s.AttendanceRate
+		}
+		cohortRate = math.Round(cohortRate/float64(len(list))*1000) / 1000
+	}
+	badges := make([]fiber.Map, 0, len(u.Badges))
+	for _, b := range u.Badges {
+		badges = append(badges, fiber.Map{"id": b.ID.Hex(), "name": b.Name, "emoji": b.Emoji, "image_url": b.ImageUrl, "color": b.Color, "style": b.Style, "awarded_at": b.AwardedAt})
+	}
+	peers, _ := h.users.ListCohortLearners(u.CohortNumber, bson.M{"_id": 1, "jsd_number": 1})
 	reasons, _, _ := wellbeing.ReasonsFor(*u, attendance.ComputeStats(recs), items, acks, recent, wellbeing.DefaultWords)
 	return utils.SendResponse(c, fiber.StatusOK, "Overview", fiber.Map{
-		"learner":         fiber.Map{"id": u.ID.Hex(), "first_name": u.FirstName, "last_name": u.LastName, "zoom_name": u.ZoomName, "jsd_number": u.JSDNumber, "genmate_group": u.GenmateGroup, "avatar": u.Avatar, "email": u.Email, "created_at": u.ID.Timestamp(), "cohort_number": u.CohortNumber},
-		"attendance_rate": attendance.AttendanceRate(days),
-		"leave_used":      attendance.LeaveDaysUsed(days),
-		"streak":          attendance.OnTimeStreak(days),
-		"last20":          last20,
-		"nights":          nightList,
-		"latest_quote":    quote,
-		"patterns":        wellbeing.WorthALook(ns, recent, wellbeing.DefaultWords),
-		"reasons":         reasons,
-		"notes":           notes,
-		"support":         items,
+		"learner":           fiber.Map{"id": u.ID.Hex(), "first_name": u.FirstName, "last_name": u.LastName, "zoom_name": u.ZoomName, "jsd_number": u.JSDNumber, "genmate_group": u.GenmateGroup, "avatar": u.Avatar, "email": u.Email, "created_at": u.ID.Timestamp(), "cohort_number": u.CohortNumber},
+		"attendance_rate":   attendance.AttendanceRate(days),
+		"leave_used":        attendance.LeaveDaysUsed(days),
+		"streak":            attendance.OnTimeStreak(days),
+		"last20":            last20,
+		"nights":            nightList,
+		"latest_quote":      quote,
+		"patterns":          wellbeing.WorthALook(ns, recent, wellbeing.DefaultWords),
+		"reasons":           reasons,
+		"notes":             notes,
+		"support":           items,
+		"days":              overviewDays(h.courseDays(st.StartDate, recs, u.Reflections), recs, u.Reflections),
+		"course":            fiber.Map{"week_number": week, "total_weeks": total, "day_number": dayN, "course_days": st.CourseDays},
+		"best_streak":       attendance.LongestOnTimeStreak(days),
+		"cohort_attendance": cohortRate,
+		"badges":            badges,
+		"neighbors":         neighbors(peers, u.ID),
 	})
 }
 

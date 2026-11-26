@@ -136,3 +136,14 @@ func TestProjectLeave(t *testing.T) {
 		t.Error("a present day becomes leave")
 	}
 }
+
+func TestLongestOnTimeStreak(t *testing.T) {
+	d := func(s domain.AttendanceStatus) DayResult { return DayResult{Status: s} }
+	days := []DayResult{d(domain.StatusPresent), d(domain.StatusPresent), d(domain.StatusLate), d(domain.StatusPresent), d(domain.StatusHoliday), d(domain.StatusPresent), d(domain.StatusPresent), d(domain.StatusAbsent), d(domain.StatusPresent)}
+	if got := LongestOnTimeStreak(days); got != 3 {
+		t.Errorf("LongestOnTimeStreak = %d, want 3 (holiday skipped, not a break)", got)
+	}
+	if got := LongestOnTimeStreak(nil); got != 0 {
+		t.Errorf("empty = %d", got)
+	}
+}

@@ -120,7 +120,9 @@ func (u *wbCallUsers) ListCohortLearnersWithReflections(_ int, _ bson.M, n int, 
 
 type holidayOn string
 
-func (h holidayOn) IsHoliday(d string) (bool, *domain.Holiday, error) { return d == string(h), nil, nil }
+func (h holidayOn) IsHoliday(d string) (bool, *domain.Holiday, error) {
+	return d == string(h), nil, nil
+}
 
 func TestTextNightSpansHolidayWeekend(t *testing.T) {
 	users := &wbCallUsers{}
@@ -146,5 +148,48 @@ func TestTextNightSpansHolidayWeekend(t *testing.T) {
 		if users.n != n || users.textDay != nights[len(nights)-1] {
 			t.Errorf("%s loaded n=%d textDay=%q, want %d and %s", url, users.n, users.textDay, n, nights[len(nights)-1])
 		}
+	}
+}
+
+func TestOverviewDaysBadgesNeighbors(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	a := domain.User{ID: primitive.NewObjectID(), FirstName: "Aom", JSDNumber: "01", CohortNumber: 13, Role: "learner"}
+	sentAt := time.Date(2026, 9, 8, 10, 2, 0, 0, time.UTC)
+	replyAt := time.Date(2026, 9, 8, 11, 0, 0, 0, time.UTC)
+	b := domain.User{ID: primitive.NewObjectID(), FirstName: "Bee", JSDNumber: "02", CohortNumber: 13, Role: "learner",
+		Badges: []domain.Badge{{Name: "Seedling", Emoji: "🌱", AwardedAt: time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC)}},
+		Reflections: []domain.Reflection{
+			{ID: primitive.NewObjectID(), Day: "2026-09-08", CreatedAt: sentAt, AdminFeedback: "nice", AdminFeedbackName: "Nan", AdminFeedbackAt: &replyAt,
+				ReflectionData: domain.ReflectionContent{Barometer: "Stretch zone - overwhelmed", TechSessions: domain.SessionDetails{Improve: "react query &amp; cache"}}},
+			{ID: primitive.NewObjectID(), Date: time.Date(2026, 9, 7, 10, 0, 0, 0, time.UTC), ReflectionData: domain.ReflectionContent{Barometer: "Comfort Zone"}},
+		}}
+	c := domain.User{ID: primitive.NewObjectID(), FirstName: "Cat", JSDNumber: "03", CohortNumber: 13, Role: "learner"}
+	in := time.Date(2026, 9, 8, 6, 24, 0, 0, time.UTC)
+	recs := avRecords{list: []domain.AttendanceRecord{
+		{UserID: b.ID, Date: "2026-09-07", Session: domain.SessionMorning, Status: domain.StatusPresent, SubmittedAt: in.AddDate(0, 0, -1)},
+		{UserID: b.ID, Date: "2026-09-08", Session: domain.SessionAfternoon, Status: domain.StatusLate, SubmittedAt: in},
+	}}
+	stats := avStats{list: []domain.LearnerStats{{UserID: a.ID, AttendanceRate: 1}, {UserID: b.ID, AttendanceRate: 0.5}}}
+	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{c, a, b}}, recs, stats, avHolidays{}, careReadFake{})
+	h.now = func() time.Time { return time.Date(2026, 9, 8, 18, 0, 0, 0, loc) }
+	app := fiber.New()
+	app.Get("/admin/learners/:id/overview", h.Overview)
+	_, body := send(app, "GET", "/admin/learners/"+b.ID.Hex()+"/overview", "")
+	for _, want := range []string{
+		`"date":"2026-09-07"`, `"date":"2026-09-08"`,
+		`"afternoon":{"status":"late","at":"2026-09-08T06:24:00Z"}`,
+		`"zone":"stretch-overwhelmed"`, `"tech_improve":"react query \u0026 cache"`, `"reply":"nice"`, `"reply_name":"Nan"`,
+		`"zone":"comfort"`,
+		`"cohort_attendance":0.75`,
+		`"name":"Seedling"`,
+		`"prev":"` + a.ID.Hex() + `"`, `"next":"` + c.ID.Hex() + `"`, `"index":1`, `"total":3`,
+		`"best_streak":1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("overview missing %s\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `"date":"2026-09-06"`) {
+		t.Error("Sunday listed as a class day")
 	}
 }
