@@ -1,12 +1,9 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"io"
-	"log"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -24,10 +21,22 @@ func (u avUsers) ListCohortLearners(int, bson.M) ([]domain.User, error) {
 	return u.list, nil
 }
 
+func (u avUsers) ListCohortLearnersWithReflections(int, bson.M, int, string) ([]domain.User, error) {
+	return u.list, nil
+}
+
 type avRecords struct{ list []domain.AttendanceRecord }
 
 func (r avRecords) FindRecords(interface{}, domain.AttendanceRecordFilter, interface{}) ([]domain.AttendanceRecord, error) {
 	return r.list, nil
+}
+
+// avRangeRecords records the filters a handler asked for.
+type avRangeRecords struct{ filters *[]domain.AttendanceRecordFilter }
+
+func (r avRangeRecords) FindRecords(_ interface{}, f domain.AttendanceRecordFilter, _ interface{}) ([]domain.AttendanceRecord, error) {
+	*r.filters = append(*r.filters, f)
+	return nil, nil
 }
 
 type avSettings struct{}
@@ -41,7 +50,7 @@ type avHolidays struct{}
 func (avHolidays) IsHoliday(string) (bool, *domain.Holiday, error) { return false, nil, nil }
 
 func avApp() *fiber.App {
-	h := NewAdminViewsHandler(avUsers{[]domain.User{{ID: primitive.NewObjectID(), FirstName: "A", GenmateGroup: "F", Role: "learner"}}}, avRecords{}, avSettings{}, avHolidays{})
+	h := NewAdminViewsHandler(avUsers{[]domain.User{{ID: primitive.NewObjectID(), FirstName: "A", GenmateGroup: "F", Role: "learner"}}}, avRecords{}, avStats{}, avSettings{}, avHolidays{})
 	loc, _ := time.LoadLocation("Asia/Bangkok")
 	h.now = func() time.Time { return time.Date(2026, 9, 8, 9, 0, 0, 0, loc) }
 	app := fiber.New()
@@ -186,37 +195,28 @@ func (s avStats) FindByCohort(context.Context, int) ([]domain.LearnerStats, erro
 	return s.list, nil
 }
 
-func todayDriftLog(t *testing.T, stored func(u domain.User) []domain.LearnerStats) string {
-	t.Helper()
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-	u := domain.User{ID: primitive.NewObjectID(), FirstName: "A", Role: "learner"}
-	h := NewAdminViewsHandler(avUsers{[]domain.User{u}}, avRecords{}, avSettings{}, avHolidays{})
-	h.SetStatsDriftCheck(avStats{stored(u)})
-	h.driftSync = true
+func TestRegisterLoadsSelectedAndPreviousWeekOnly(t *testing.T) {
+	var got []domain.AttendanceRecordFilter
+	h := NewAdminViewsHandler(avUsers{}, avRangeRecords{&got}, avStats{}, avSettings{}, avHolidays{})
 	app := fiber.New()
-	app.Get("/admin/today", h.Today)
-	if res, _ := app.Test(httptest.NewRequest("GET", "/admin/today?cohort=13", nil)); res.StatusCode != 200 {
+	app.Get("/admin/attendance/register", h.Register)
+	if res, _ := app.Test(httptest.NewRequest("GET", "/admin/attendance/register?cohort=13&week=2026-09-07", nil)); res.StatusCode != 200 {
 		t.Fatalf("status %d", res.StatusCode)
 	}
-	return buf.String()
-}
-
-func TestTodayLogsStatsDrift(t *testing.T) {
-	out := todayDriftLog(t, func(u domain.User) []domain.LearnerStats {
-		return []domain.LearnerStats{{UserID: u.ID, Streak: 9, Last10: []domain.DayResult{{Date: "2026-11-25", Status: domain.StatusPresent}}}}
-	})
-	if !strings.Contains(out, "stats drift: cohort 13, 1 learners differ") || !strings.Contains(out, ":streak,last10") {
-		t.Errorf("log = %q", out)
+	if len(got) != 1 || got[0].DateFrom != "2026-08-31" || got[0].DateTo != "2026-09-11" {
+		t.Fatalf("filters = %+v, want 2026-08-31..2026-09-11 (previous week for KPI deltas)", got)
 	}
 }
 
-func TestTodayLogsNoDriftWhenStatsMatch(t *testing.T) {
-	out := todayDriftLog(t, func(u domain.User) []domain.LearnerStats {
-		return []domain.LearnerStats{{UserID: u.ID}}
-	})
-	if strings.Contains(out, "stats drift") {
-		t.Errorf("log = %q", out)
+func TestTodayLoadsOnlyToday(t *testing.T) {
+	var got []domain.AttendanceRecordFilter
+	h := NewAdminViewsHandler(avUsers{}, avRangeRecords{&got}, avStats{}, avSettings{}, avHolidays{})
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h.now = func() time.Time { return time.Date(2026, 9, 8, 9, 0, 0, 0, loc) }
+	app := fiber.New()
+	app.Get("/admin/today", h.Today)
+	app.Test(httptest.NewRequest("GET", "/admin/today?cohort=13", nil))
+	if len(got) != 1 || got[0].Date != "2026-09-08" || got[0].Cohort != 13 {
+		t.Fatalf("filters = %+v, want today's records only", got)
 	}
 }
