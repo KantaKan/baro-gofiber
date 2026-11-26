@@ -32,8 +32,15 @@ func (r *statsTrackingRepo) refresh(userID primitive.ObjectID, cohort int) {
 	}
 }
 
-func (r *statsTrackingRepo) refreshByID(ctx interface{}, id primitive.ObjectID) {
-	if x, err := r.AttendanceRepository.FindByID(ctx, id); err == nil && x != nil {
+func (r *statsTrackingRepo) refreshByID(id primitive.ObjectID) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	x, err := r.AttendanceRepository.FindByID(ctx, id)
+	if err != nil {
+		log.Printf("learner stats: lookup %s: %v", id.Hex(), err)
+		return
+	}
+	if x != nil {
 		r.refresh(x.UserID, x.CohortNumber)
 	}
 }
@@ -65,7 +72,7 @@ func (r *statsTrackingRepo) UpsertRecord(ctx interface{}, filter domain.Attendan
 func (r *statsTrackingRepo) UpdateRecord(ctx interface{}, id primitive.ObjectID, update interface{}) error {
 	err := r.AttendanceRepository.UpdateRecord(ctx, id, update)
 	if err == nil {
-		r.refreshByID(ctx, id)
+		r.refreshByID(id)
 	}
 	return err
 }
@@ -73,7 +80,7 @@ func (r *statsTrackingRepo) UpdateRecord(ctx interface{}, id primitive.ObjectID,
 func (r *statsTrackingRepo) DeleteRecord(ctx interface{}, id primitive.ObjectID, deletedBy string) error {
 	err := r.AttendanceRepository.DeleteRecord(ctx, id, deletedBy)
 	if err == nil {
-		r.refreshByID(ctx, id)
+		r.refreshByID(id)
 	}
 	return err
 }
@@ -85,7 +92,6 @@ func (r *statsTrackingRepo) UpdateRecords(ctx interface{}, filter domain.Attenda
 		recs, ferr := r.AttendanceRepository.FindRecords(ctx, filter, options.Find().SetProjection(bson.M{"user_id": 1, "cohort_number": 1}))
 		if ferr != nil {
 			log.Printf("learner stats: bulk update lookup: %v", ferr)
-			// Still perform the write despite lookup failure
 		} else {
 			learners = recs
 		}
@@ -94,7 +100,6 @@ func (r *statsTrackingRepo) UpdateRecords(ctx interface{}, filter domain.Attenda
 	if err != nil {
 		return err
 	}
-	// Recompute stats for affected learners (deduplicated by UserID).
 	seen := map[primitive.ObjectID]bool{}
 	for _, x := range learners {
 		if !seen[x.UserID] {

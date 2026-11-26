@@ -3,6 +3,7 @@ package attendance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -32,36 +33,58 @@ type StatsKeeper struct {
 
 	mu          sync.Mutex
 	lastNightly string
+	touched     map[primitive.ObjectID]time.Time
 }
 
 func NewStatsKeeper(records StatsRecords, store domain.LearnerStatsRepository) *StatsKeeper {
-	return &StatsKeeper{records: records, store: store}
+	return &StatsKeeper{records: records, store: store, touched: map[primitive.ObjectID]time.Time{}}
 }
 
 // Recompute rewrites one learner's stats from their live records.
 func (k *StatsKeeper) Recompute(ctx context.Context, userID primitive.ObjectID, cohort int) error {
-	recs, err := k.records.FindRecords(ctx, domain.AttendanceRecordFilter{UserID: userID, NotDeleted: true}, statsRecordFields())
+	recs, err := k.records.FindRecords(ctx, domain.AttendanceRecordFilter{UserID: userID, Cohort: cohort, NotDeleted: true}, statsRecordFields())
 	if err != nil {
 		return err
 	}
 	s := ComputeStats(recs)
 	s.UserID, s.CohortNumber, s.UpdatedAt = userID, cohort, time.Now()
-	return k.store.Upsert(ctx, s)
+	if err := k.store.Upsert(ctx, s); err != nil {
+		return err
+	}
+	k.mu.Lock()
+	k.touched[userID] = time.Now()
+	k.mu.Unlock()
+	return nil
 }
 
-// RebuildCohort rewrites stats for every learner with records in the cohort.
+// RebuildCohort rewrites stats for every learner with records in the cohort, skipping
+// learners recomputed after the rebuild began so their newer stats are not overwritten.
 func (k *StatsKeeper) RebuildCohort(ctx context.Context, cohort int) (int, error) {
+	start := time.Now()
 	recs, err := k.records.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, statsRecordFields())
 	if err != nil {
 		return 0, err
 	}
 	now := time.Now()
 	all := make([]domain.LearnerStats, 0)
+	k.mu.Lock()
 	for _, s := range StatsByUser(recs) {
+		if t, ok := k.touched[s.UserID]; ok && !t.Before(start) {
+			continue
+		}
 		s.CohortNumber, s.UpdatedAt = cohort, now
 		all = append(all, s)
 	}
-	return len(all), k.store.UpsertMany(ctx, all)
+	k.mu.Unlock()
+	err = k.store.UpsertMany(ctx, all)
+	k.mu.Lock()
+	for id, t := range k.touched {
+		if t.Before(start) {
+			delete(k.touched, id)
+		}
+	}
+	k.mu.Unlock()
+	return len(all), err
 }
 
 // RebuildActive rebuilds every cohort with attendance in the last 7 days.
@@ -74,7 +97,7 @@ func (k *StatsKeeper) RebuildActive(ctx context.Context, now time.Time) error {
 	for _, c := range cohorts {
 		n, err := k.RebuildCohort(ctx, c)
 		if err != nil {
-			errs = errors.Join(errs, err)
+			errs = errors.Join(errs, fmt.Errorf("cohort %d: %w", c, err))
 			continue
 		}
 		log.Printf("learner stats: rebuilt cohort %d (%d learners)", c, n)
@@ -82,7 +105,8 @@ func (k *StatsKeeper) RebuildActive(ctx context.Context, now time.Time) error {
 	return errs
 }
 
-// DueForNightlyRebuild is true once per Bangkok day, at or after 02:00.
+// DueForNightlyRebuild is true once per Bangkok day, at or after 02:00. The first call
+// seeds the guard, so calling it at a daytime boot marks that day's rebuild as done.
 func (k *StatsKeeper) DueForNightlyRebuild(now time.Time) bool {
 	now = now.In(bangkokLoc())
 	if now.Hour() < 2 {

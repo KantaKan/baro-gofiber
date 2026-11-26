@@ -14,7 +14,7 @@ import (
 // trackedRepo is an in-memory AttendanceRepository for the decorator tests.
 type trackedRepo struct {
 	domain.AttendanceRepository
-	byID    map[primitive.ObjectID]*domain.AttendanceRecord
+	byID     map[primitive.ObjectID]*domain.AttendanceRecord
 	insertOK bool
 }
 
@@ -74,6 +74,20 @@ func (r *trackedRepo) UpdateRecords(_ interface{}, f domain.AttendanceRecordFilt
 		}
 	}
 	return nil
+}
+func (r *trackedRepo) UpsertRecord(_ interface{}, f domain.AttendanceRecordFilter, update interface{}) (*domain.AttendanceRecord, error) {
+	set := update.(bson.M)["$set"].(bson.M)
+	for _, x := range r.byID {
+		if !x.Deleted && x.UserID == f.UserID && x.Date == f.Date && x.Session == f.Session {
+			x.Status = set["status"].(domain.AttendanceStatus)
+			c := *x
+			return &c, nil
+		}
+	}
+	x := domain.AttendanceRecord{ID: primitive.NewObjectID(), UserID: f.UserID, CohortNumber: set["cohort_number"].(int), Date: f.Date, Session: f.Session, Status: set["status"].(domain.AttendanceStatus)}
+	r.byID[x.ID] = &x
+	c := x
+	return &c, nil
 }
 func (r *trackedRepo) DeleteRecord(_ interface{}, id primitive.ObjectID, _ string) error {
 	r.byID[id].Deleted = true
@@ -145,7 +159,6 @@ func TestTrackStatsBulkDeleteRecomputes(t *testing.T) {
 	ctx := context.Background()
 	u := primitive.NewObjectID()
 
-	// Insert a record and verify stats are computed
 	x := rec(u, "2026-09-08", domain.SessionMorning, domain.StatusPresent)
 	if err := repo.InsertRecord(ctx, &x); err != nil {
 		t.Fatal(err)
@@ -154,12 +167,49 @@ func TestTrackStatsBulkDeleteRecomputes(t *testing.T) {
 		t.Fatalf("after insert: %+v", store.docs[u])
 	}
 
-	// Bulk delete via UpdateRecords should trigger recompute, clearing stats
 	if err := repo.UpdateRecords(ctx, domain.AttendanceRecordFilter{UserID: u}, bson.M{"deleted": true}); err != nil {
 		t.Fatal(err)
 	}
 	s := store.docs[u]
 	if s.Streak != 0 || s.LeaveUsed != 0 || len(s.Last10) != 0 {
 		t.Fatalf("after bulk delete: %+v", s)
+	}
+}
+
+func TestTrackStatsInsertIfAbsentRecomputesWhenInserted(t *testing.T) {
+	inner := newTrackedRepo()
+	store := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
+	repo := TrackStats(inner, NewStatsKeeper(inner, store))
+	u := primitive.NewObjectID()
+	x := rec(u, "2026-09-08", domain.SessionMorning, domain.StatusLate)
+	if ok, err := repo.InsertIfAbsent(context.Background(), &x); err != nil || !ok {
+		t.Fatalf("InsertIfAbsent = %v, %v", ok, err)
+	}
+	if store.docs[u].LeaveUsed != 1 {
+		t.Fatalf("after insert: %+v", store.docs[u])
+	}
+}
+
+func TestTrackStatsUpsertRecordRecomputes(t *testing.T) {
+	inner := newTrackedRepo()
+	store := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
+	repo := TrackStats(inner, NewStatsKeeper(inner, store))
+	ctx := context.Background()
+	u := primitive.NewObjectID()
+	f := domain.AttendanceRecordFilter{UserID: u, Date: "2026-09-08", Session: domain.SessionMorning, NotDeleted: true}
+	mark := func(st domain.AttendanceStatus) bson.M {
+		return bson.M{"$set": bson.M{"cohort_number": 13, "status": st}}
+	}
+	if _, err := repo.UpsertRecord(ctx, f, mark(domain.StatusLate)); err != nil {
+		t.Fatal(err)
+	}
+	if store.docs[u].LeaveUsed != 1 {
+		t.Fatalf("after upsert insert: %+v", store.docs[u])
+	}
+	if _, err := repo.UpsertRecord(ctx, f, mark(domain.StatusPresent)); err != nil {
+		t.Fatal(err)
+	}
+	if s := store.docs[u]; s.LeaveUsed != 0 || s.Streak != 1 {
+		t.Fatalf("after upsert update: %+v", s)
 	}
 }

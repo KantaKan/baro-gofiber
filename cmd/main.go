@@ -15,9 +15,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
-	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	_ "gofiber-baro/docs"
@@ -137,8 +137,11 @@ func main() {
 	closer := attendance.NewSessionCloser(container.AttendanceRepo, container.LeaveRepo, container.UserService, container.CohortService, container.HolidayService)
 	cupRunner := cup.NewRunner(container.CupService, container.CupRepo, container.AttendanceRepo, container.CohortService, container.GiftBoxService,
 		func(t time.Time) (bool, error) { return attendance.IsClassDay(t, container.HolidayService) })
+	container.StatsKeeper.DueForNightlyRebuild(utils.GetThailandTime())
 	go func() {
-		if err := container.StatsKeeper.RebuildActive(context.Background(), utils.GetThailandTime()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := container.StatsKeeper.RebuildActive(ctx, utils.GetThailandTime()); err != nil {
 			log.Printf("learner stats: startup rebuild: %v", err)
 		}
 	}()
@@ -154,7 +157,9 @@ func main() {
 			}
 			if container.StatsKeeper.DueForNightlyRebuild(now) {
 				go func() {
-					if err := container.StatsKeeper.RebuildActive(context.Background(), now); err != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+					defer cancel()
+					if err := container.StatsKeeper.RebuildActive(ctx, now); err != nil {
 						log.Printf("learner stats: nightly rebuild: %v", err)
 					}
 				}()
