@@ -24,7 +24,7 @@ func (m *memStats) UpsertMany(_ context.Context, all []domain.LearnerStats) erro
 	}
 	return nil
 }
-func (m *memStats) FindByCohort(_ context.Context, cohort int) ([]domain.LearnerStats, error) {
+func (m *memStats) FindByCohort(_ context.Context, cohort int, _ bool) ([]domain.LearnerStats, error) {
 	var out []domain.LearnerStats
 	for _, s := range m.docs {
 		if s.CohortNumber == cohort {
