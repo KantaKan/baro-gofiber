@@ -156,3 +156,39 @@ func TestRebuildCohortKeepsNewerRecompute(t *testing.T) {
 		t.Fatal("rebuild skipped B")
 	}
 }
+
+func TestRebuildCleanupKeepsOtherCohortsTouched(t *testing.T) {
+	a := primitive.NewObjectID()
+	x := primitive.NewObjectID()
+
+	// A in cohort 13, X in cohort 14
+	aRec := rec(a, "2026-09-01", domain.SessionMorning, domain.StatusPresent)
+	xRec := rec(x, "2026-09-01", domain.SessionMorning, domain.StatusPresent)
+	xRec.CohortNumber = 14
+
+	store := &memStats{docs: map[primitive.ObjectID]domain.LearnerStats{}}
+	recs := keeperRecords{list: []domain.AttendanceRecord{aRec, xRec}}
+	k := NewStatsKeeper(recs, store)
+
+	// Recompute X (cohort 14) to set touched[X]
+	if err := k.Recompute(context.Background(), x, 14); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sleep briefly to ensure touched[X] time is strictly before RebuildCohort's start time
+	time.Sleep(1 * time.Millisecond)
+
+	// RebuildCohort(13) should not delete touched[X]
+	if _, err := k.RebuildCohort(context.Background(), 13); err != nil {
+		t.Fatal(err)
+	}
+
+	// Assert touched[X] still exists
+	k.mu.Lock()
+	_, exists := k.touched[x]
+	k.mu.Unlock()
+
+	if !exists {
+		t.Fatal("rebuild cleanup deleted touched[X] from another cohort")
+	}
+}

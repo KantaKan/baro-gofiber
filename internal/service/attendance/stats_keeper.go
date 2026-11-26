@@ -67,8 +67,9 @@ func (k *StatsKeeper) RebuildCohort(ctx context.Context, cohort int) (int, error
 	}
 	now := time.Now()
 	all := make([]domain.LearnerStats, 0)
+	cohortLearners := StatsByUser(recs)
 	k.mu.Lock()
-	for _, s := range StatsByUser(recs) {
+	for _, s := range cohortLearners {
 		if t, ok := k.touched[s.UserID]; ok && !t.Before(start) {
 			continue
 		}
@@ -78,8 +79,9 @@ func (k *StatsKeeper) RebuildCohort(ctx context.Context, cohort int) (int, error
 	k.mu.Unlock()
 	err = k.store.UpsertMany(ctx, all)
 	k.mu.Lock()
-	for id, t := range k.touched {
-		if t.Before(start) {
+	// Only delete touched entries for learners in this cohort
+	for id := range cohortLearners {
+		if t, ok := k.touched[id]; ok && t.Before(start) {
 			delete(k.touched, id)
 		}
 	}
