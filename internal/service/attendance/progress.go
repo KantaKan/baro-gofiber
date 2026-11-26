@@ -198,6 +198,7 @@ type MySummary struct {
 	Preferences struct {
 		CheckinStyle  string `json:"checkin_style"`
 		CheckinRandom bool   `json:"checkin_random"`
+		TourSeen      bool   `json:"tour_seen"`
 	} `json:"preferences"`
 }
 
@@ -270,6 +271,7 @@ func (s *ProgressService) Summary(userID primitive.ObjectID) (MySummary, error) 
 	out.Course.DayNumber, out.Course.WeekNumber, out.Course.TotalWeeks = CourseProgress(settings.StartDate, days, today)
 	out.Preferences.CheckinStyle = user.CheckinStyle
 	out.Preferences.CheckinRandom = user.CheckinRandom
+	out.Preferences.TourSeen = user.TourSeenAt != nil
 	if s.champion != nil {
 		out.Champion = s.champion(*user)
 	}

@@ -1212,6 +1212,7 @@ func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
 	var body struct {
 		CheckinStyle  *string        `json:"checkin_style"`
 		CheckinRandom *bool          `json:"checkin_random"`
+		TourSeen      *bool          `json:"tour_seen"`
 		Avatar        *domain.Avatar `json:"avatar"`
 		Skills        *[]string      `json:"skills"`
 	}
@@ -1235,6 +1236,9 @@ func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
 	}
 	if body.CheckinRandom != nil {
 		set["checkin_random"] = *body.CheckinRandom
+	}
+	if body.TourSeen != nil && *body.TourSeen {
+		set["tour_seen_at"] = time.Now()
 	}
 	if body.Avatar != nil {
 		if err := user.AvatarAllowed(*body.Avatar, sum.Streak); err != nil {
