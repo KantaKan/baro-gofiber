@@ -3,6 +3,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+RUN CGO_ENABLED=0 go vet ./... && CGO_ENABLED=0 go test -tags timetzdata ./...
 RUN CGO_ENABLED=0 go build -tags timetzdata -o /baro-backend ./cmd
 
 FROM alpine:3.20

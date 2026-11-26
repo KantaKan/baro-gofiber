@@ -57,7 +57,9 @@ go build -o baro-backend ./cmd
 
 The API runs on `http://localhost:3000` (or PORT env value).
 
-> On every boot the server cleans duplicate attendance rows, syncs indexes and rebuilds `learner_stats` against whatever `MONGO_URI` points at. Don't start it against production data casually.
+> On every boot the server syncs indexes and rebuilds `learner_stats` against whatever `MONGO_URI` points at. Don't start it against production data casually. The one-off duplicate attendance cleanup runs only when `CLEANUP_ATTENDANCE_DUPLICATES=true`; the partial unique index keeps new duplicates out.
+>
+> The Docker build runs `go vet` and `go test` first, so a failing test stops a Dokploy deploy and the running version stays up.
 
 ## Available Scripts
 
