@@ -635,3 +635,60 @@ func (r *userRepository) AddPlantReaction(ctx interface{}, userID primitive.Obje
 	_, err = r.collection.UpdateOne(c, filter, update)
 	return err
 }
+
+// reflectionsView keeps each learner's last n reflections; only those written for textDay keep
+// their text, the rest keep id, day, date and barometer.
+func reflectionsView(n int, textDay string) bson.M {
+	if textDay == "" {
+		textDay = "-"
+	}
+	day := bson.M{"$cond": bson.A{
+		bson.M{"$gt": bson.A{bson.M{"$ifNull": bson.A{"$$r.day", ""}}, ""}},
+		"$$r.day",
+		bson.M{"$dateToString": bson.M{"format": "%Y-%m-%d", "date": "$$r.date", "onNull": ""}},
+	}}
+	return bson.M{"$map": bson.M{
+		"input": bson.M{"$slice": bson.A{bson.M{"$ifNull": bson.A{"$reflections", bson.A{}}}, -n}},
+		"as":    "r",
+		"in": bson.M{"$cond": bson.A{
+			bson.M{"$eq": bson.A{day, textDay}},
+			"$$r",
+			bson.M{"_id": "$$r._id", "day": "$$r.day", "date": "$$r.date", "reflection": bson.M{"barometer": "$$r.reflection.barometer"}},
+		}},
+	}}
+}
+
+func (r *userRepository) FindCohortLearnersWithReflections(ctx interface{}, cohort int, fields bson.M, n int, textDay string) ([]domain.User, error) {
+	c := ctx.(context.Context)
+	project := bson.M{"reflections": reflectionsView(n, textDay)}
+	for k, v := range fields {
+		project[k] = v
+	}
+	cur, err := r.collection.Aggregate(c, mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"cohort_number": cohort, "role": "learner"}}},
+		{{Key: "$sort", Value: bson.D{{Key: "jsd_number", Value: 1}}}},
+		{{Key: "$limit", Value: 1000}},
+		{{Key: "$project", Value: project}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var out []domain.User
+	if err := cur.All(c, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (r *userRepository) FindByIDWithFields(ctx interface{}, id primitive.ObjectID, projection bson.M) (*domain.User, error) {
+	c := ctx.(context.Context)
+	var user domain.User
+	err := r.collection.FindOne(c, bson.M{"_id": id}, options.FindOne().SetProjection(projection)).Decode(&user)
+	if err == mongo.ErrNoDocuments {
+		return nil, domain.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

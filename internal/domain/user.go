@@ -324,6 +324,8 @@ type UserRepository interface {
 	RevokeCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot, legacyValue string) (bool, error)
 	EquipCosmetic(ctx interface{}, userID primitive.ObjectID, cosmeticID, slot string, requiresOwnership bool) error
 	UnequipCosmetic(ctx interface{}, userID primitive.ObjectID, slot string) error
+	FindCohortLearnersWithReflections(ctx interface{}, cohort int, fields bson.M, n int, textDay string) ([]User, error)
+	FindByIDWithFields(ctx interface{}, id primitive.ObjectID, projection bson.M) (*User, error)
 }
 
 // Avatar is a DiceBear avatar: Options[style][part] = value, or nil for "None".
