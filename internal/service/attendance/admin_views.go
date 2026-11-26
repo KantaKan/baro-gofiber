@@ -174,8 +174,8 @@ func last(days []DayResult, n int) []DayResult {
 	return out
 }
 
-// BuildTodayRoster assembles the admin Today board for one cohort.
-func BuildTodayRoster(learners []domain.User, records []domain.AttendanceRecord, now time.Time, rules domain.CheckinRules, classToday, flagUnusual bool) TodayView {
+// BuildTodayRoster assembles the admin Today board for one cohort from today's records and stored stats.
+func BuildTodayRoster(learners []domain.User, records []domain.AttendanceRecord, stats map[primitive.ObjectID]domain.LearnerStats, now time.Time, rules domain.CheckinRules, classToday, flagUnusual bool) TodayView {
 	now = now.In(bangkokLoc())
 	today := utils.FormatDate(now)
 	byUser := map[primitive.ObjectID][]domain.AttendanceRecord{}
@@ -199,12 +199,12 @@ func BuildTodayRoster(learners []domain.User, records []domain.AttendanceRecord,
 				l.Morning = cellOf(r)
 			}
 		}
-		days := BuildDays(recs)
-		l.Streak = OnTimeStreak(days)
-		l.LeaveUsed = LeaveDaysUsed(days)
-		l.WarningLevel = WarningLevel(l.LeaveUsed)
-		l.AttendanceRate = AttendanceRate(days)
-		l.Last10 = last(days, 10)
+		st := stats[u.ID]
+		l.Streak = st.Streak
+		l.LeaveUsed = st.LeaveUsed
+		l.WarningLevel = WarningLevel(st.LeaveUsed)
+		l.AttendanceRate = st.AttendanceRate
+		l.Last10 = append([]DayResult{}, st.Last10...)
 		l.MoodYesterday = moodBefore(u.Reflections, today)
 		countCell(&am, l.Morning.Status)
 		countCell(&pm, l.Afternoon.Status)
@@ -302,7 +302,7 @@ func weekKPIs(learners []domain.User, byUser map[primitive.ObjectID][]domain.Att
 }
 
 // BuildRegister assembles one week (Mon–Fri) of AM/PM statuses for a cohort.
-func BuildRegister(learners []domain.User, records []domain.AttendanceRecord, week string, holidays map[string]bool) RegisterView {
+func BuildRegister(learners []domain.User, records []domain.AttendanceRecord, stats map[primitive.ObjectID]domain.LearnerStats, week string, holidays map[string]bool) RegisterView {
 	dates, _ := weekDates(week)
 	v := RegisterView{Week: week, Dates: dates, Holidays: []string{}, Learners: []RegisterLearner{}}
 	idx := map[string]int{}
@@ -343,7 +343,7 @@ func BuildRegister(learners []domain.User, records []domain.AttendanceRecord, we
 		if tot > 0 {
 			l.WeekRate = float64(att) / float64(tot)
 		}
-		l.LeaveUsed = LeaveDaysUsed(BuildDays(byUser[u.ID]))
+		l.LeaveUsed = stats[u.ID].LeaveUsed
 		v.Learners = append(v.Learners, l)
 	}
 	v.KPIs = weekKPIs(active, byUser, dates)

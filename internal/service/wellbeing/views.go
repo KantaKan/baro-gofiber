@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
-	"gofiber-baro/internal/service/attendance"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -261,7 +260,7 @@ type SupportRow struct {
 }
 
 // ReasonsFor computes one learner's active (not acknowledged) support reasons.
-func ReasonsFor(u domain.User, recs []domain.AttendanceRecord, items []domain.SupportItem, acks []domain.SupportAck, recentClassDays []string, words []string) (reasons []Reason, open, done int) {
+func ReasonsFor(u domain.User, st domain.LearnerStats, items []domain.SupportItem, acks []domain.SupportAck, recentClassDays []string, words []string) (reasons []Reason, open, done int) {
 	for _, it := range items {
 		if it.UserID != u.ID {
 			continue
@@ -278,8 +277,7 @@ func ReasonsFor(u domain.User, recs []domain.AttendanceRecord, items []domain.Su
 			acked[a.ReasonKey+"|"+a.ReasonText] = true
 		}
 	}
-	days := attendance.BuildDays(recs)
-	all := SupportReasons(attendance.LeaveDaysUsed(days), days, WorthALook(Nights(u.Reflections), recentClassDays, words), open)
+	all := SupportReasons(st.LeaveUsed, st.LateRun, WorthALook(Nights(u.Reflections), recentClassDays, words), open)
 	for _, r := range all {
 		if !acked[r.Key+"|"+r.Text] {
 			reasons = append(reasons, r)
@@ -289,14 +287,10 @@ func ReasonsFor(u domain.User, recs []domain.AttendanceRecord, items []domain.Su
 }
 
 // BuildSupportList lists learners with at least one active reason, most reasons first.
-func BuildSupportList(users []domain.User, records []domain.AttendanceRecord, items []domain.SupportItem, acks []domain.SupportAck, recentClassDays []string, words []string) []SupportRow {
-	byUser := map[primitive.ObjectID][]domain.AttendanceRecord{}
-	for _, r := range records {
-		byUser[r.UserID] = append(byUser[r.UserID], r)
-	}
+func BuildSupportList(users []domain.User, stats map[primitive.ObjectID]domain.LearnerStats, items []domain.SupportItem, acks []domain.SupportAck, recentClassDays []string, words []string) []SupportRow {
 	out := []SupportRow{}
 	for _, u := range Active(users) {
-		rs, open, done := ReasonsFor(u, byUser[u.ID], items, acks, recentClassDays, words)
+		rs, open, done := ReasonsFor(u, stats[u.ID], items, acks, recentClassDays, words)
 		if len(rs) == 0 {
 			continue
 		}

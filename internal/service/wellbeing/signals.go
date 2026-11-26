@@ -153,14 +153,13 @@ func WorthALook(n []Night, recentClassDays []string, words []string) []Pattern {
 }
 
 // SupportReasons lists why a learner needs support right now.
-func SupportReasons(leaveUsed int, days []attendance.DayResult, patterns []Pattern, openItems int) []Reason {
+func SupportReasons(leaveUsed, lateRun int, patterns []Pattern, openItems int) []Reason {
 	var out []Reason
 	if leaveUsed >= 6 {
 		out = append(out, Reason{"leave", fmt.Sprintf("Leave %d/8", leaveUsed)})
 	}
-	run := attendance.LateRun(days)
-	if run >= 3 {
-		out = append(out, Reason{"late_run", fmt.Sprintf("Late %d days running", run)})
+	if lateRun >= 3 {
+		out = append(out, Reason{"late_run", fmt.Sprintf("Late %d days running", lateRun)})
 	}
 	for _, p := range patterns {
 		out = append(out, Reason{"pattern:" + p.Key, p.Title})
