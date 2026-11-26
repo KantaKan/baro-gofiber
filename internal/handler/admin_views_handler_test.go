@@ -1,13 +1,12 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"io"
-	"log"
 	"net/http/httptest"
-	"os"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,10 +23,32 @@ func (u avUsers) ListCohortLearners(int, bson.M) ([]domain.User, error) {
 	return u.list, nil
 }
 
+func (u avUsers) ListCohortLearnersWithReflections(int, bson.M, int, string) ([]domain.User, error) {
+	return u.list, nil
+}
+
 type avRecords struct{ list []domain.AttendanceRecord }
 
 func (r avRecords) FindRecords(interface{}, domain.AttendanceRecordFilter, interface{}) ([]domain.AttendanceRecord, error) {
 	return r.list, nil
+}
+
+// avRangeRecords records the filters (and projections) a handler asked for; views query in parallel.
+type avRangeRecords struct {
+	filters *[]domain.AttendanceRecordFilter
+	opts    *[]interface{}
+}
+
+var avRangeMu sync.Mutex
+
+func (r avRangeRecords) FindRecords(_ interface{}, f domain.AttendanceRecordFilter, o interface{}) ([]domain.AttendanceRecord, error) {
+	avRangeMu.Lock()
+	defer avRangeMu.Unlock()
+	*r.filters = append(*r.filters, f)
+	if r.opts != nil {
+		*r.opts = append(*r.opts, o)
+	}
+	return nil, nil
 }
 
 type avSettings struct{}
@@ -41,7 +62,7 @@ type avHolidays struct{}
 func (avHolidays) IsHoliday(string) (bool, *domain.Holiday, error) { return false, nil, nil }
 
 func avApp() *fiber.App {
-	h := NewAdminViewsHandler(avUsers{[]domain.User{{ID: primitive.NewObjectID(), FirstName: "A", GenmateGroup: "F", Role: "learner"}}}, avRecords{}, avSettings{}, avHolidays{})
+	h := NewAdminViewsHandler(avUsers{[]domain.User{{ID: primitive.NewObjectID(), FirstName: "A", GenmateGroup: "F", Role: "learner"}}}, avRecords{}, avStats{}, avSettings{}, avHolidays{})
 	loc, _ := time.LoadLocation("Asia/Bangkok")
 	h.now = func() time.Time { return time.Date(2026, 9, 8, 9, 0, 0, 0, loc) }
 	app := fiber.New()
@@ -142,41 +163,17 @@ func TestAdminRestore(t *testing.T) {
 	}
 }
 
-type rangeRecords struct{ list []domain.AttendanceRecord }
-
-func (r rangeRecords) FindRecords(_ interface{}, f domain.AttendanceRecordFilter, _ interface{}) ([]domain.AttendanceRecord, error) {
-	var out []domain.AttendanceRecord
-	for _, rec := range r.list {
-		if f.DateFrom != "" && (rec.Date < f.DateFrom || rec.Date > f.DateTo) {
-			continue
-		}
-		if f.DateFrom == "" {
-			rec = domain.AttendanceRecord{UserID: rec.UserID, Date: rec.Date, Session: rec.Session, Status: rec.Status}
-		}
-		out = append(out, rec)
+func TestLoadCohortRecordsIsHistoryOnly(t *testing.T) {
+	var got []domain.AttendanceRecordFilter
+	var opts []interface{}
+	if _, err := loadCohortRecords(avRangeRecords{&got, &opts}, 13); err != nil {
+		t.Fatal(err)
 	}
-	return out, nil
-}
-
-func TestLoadCohortRecordsFullOnlyInRange(t *testing.T) {
-	u := primitive.NewObjectID()
-	ip := "1.2.3.4"
-	src := rangeRecords{[]domain.AttendanceRecord{
-		{UserID: u, Date: "2026-11-24", Session: domain.SessionMorning, Status: domain.StatusPresent, IPAddress: ip},
-		{UserID: u, Date: "2026-11-25", Session: domain.SessionMorning, Status: domain.StatusLate, IPAddress: ip},
-		{UserID: u, Date: "2026-11-25", Session: domain.SessionAfternoon, Status: domain.StatusPresent, IPAddress: ip},
-	}}
-	recs, err := loadCohortRecords(src, 13, "2026-11-25", "2026-11-25")
-	if err != nil || len(recs) != 3 {
-		t.Fatalf("want 3 records, got %d (%v)", len(recs), err)
+	if len(got) != 1 || got[0] != (domain.AttendanceRecordFilter{Cohort: 13, NotDeleted: true}) {
+		t.Fatalf("filters = %+v, want the cohort's live records, no date bounds", got)
 	}
-	for _, r := range recs {
-		if full := r.IPAddress != ""; full != (r.Date == "2026-11-25") {
-			t.Errorf("%s: full record = %v", r.Date, full)
-		}
-	}
-	if hist, _ := loadCohortRecords(src, 13, "", ""); len(hist) != 3 {
-		t.Errorf("history only: want 3, got %d", len(hist))
+	if !reflect.DeepEqual(opts[0], historyFields()) {
+		t.Errorf("projection = %+v, want historyFields", opts[0])
 	}
 }
 
@@ -186,37 +183,42 @@ func (s avStats) FindByCohort(context.Context, int) ([]domain.LearnerStats, erro
 	return s.list, nil
 }
 
-func todayDriftLog(t *testing.T, stored func(u domain.User) []domain.LearnerStats) string {
-	t.Helper()
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(os.Stderr)
-	u := domain.User{ID: primitive.NewObjectID(), FirstName: "A", Role: "learner"}
-	h := NewAdminViewsHandler(avUsers{[]domain.User{u}}, avRecords{}, avSettings{}, avHolidays{})
-	h.SetStatsDriftCheck(avStats{stored(u)})
-	h.driftSync = true
+func TestRegisterLoadsSelectedAndPreviousWeekOnly(t *testing.T) {
+	var got []domain.AttendanceRecordFilter
+	var opts []interface{}
+	h := NewAdminViewsHandler(avUsers{}, avRangeRecords{&got, &opts}, avStats{}, avSettings{}, avHolidays{})
 	app := fiber.New()
-	app.Get("/admin/today", h.Today)
-	if res, _ := app.Test(httptest.NewRequest("GET", "/admin/today?cohort=13", nil)); res.StatusCode != 200 {
+	app.Get("/admin/attendance/register", h.Register)
+	if res, _ := app.Test(httptest.NewRequest("GET", "/admin/attendance/register?cohort=13&week=2026-09-07", nil)); res.StatusCode != 200 {
 		t.Fatalf("status %d", res.StatusCode)
 	}
-	return buf.String()
-}
-
-func TestTodayLogsStatsDrift(t *testing.T) {
-	out := todayDriftLog(t, func(u domain.User) []domain.LearnerStats {
-		return []domain.LearnerStats{{UserID: u.ID, Streak: 9, Last10: []domain.DayResult{{Date: "2026-11-25", Status: domain.StatusPresent}}}}
-	})
-	if !strings.Contains(out, "stats drift: cohort 13, 1 learners differ") || !strings.Contains(out, ":streak,last10") {
-		t.Errorf("log = %q", out)
+	if len(got) != 2 {
+		t.Fatalf("filters = %+v, want selected week and previous week", got)
+	}
+	want := map[string]interface{}{"2026-09-07..2026-09-11": viewRecordFields(), "2026-08-31..2026-09-04": historyFields()}
+	for i, f := range got {
+		key := f.DateFrom + ".." + f.DateTo
+		proj, ok := want[key]
+		if !ok || f.Cohort != 13 || !f.NotDeleted {
+			t.Errorf("unexpected filter %+v", f)
+			continue
+		}
+		if !reflect.DeepEqual(opts[i], proj) {
+			t.Errorf("%s projection = %+v, want %+v", key, opts[i], proj)
+		}
+		delete(want, key)
 	}
 }
 
-func TestTodayLogsNoDriftWhenStatsMatch(t *testing.T) {
-	out := todayDriftLog(t, func(u domain.User) []domain.LearnerStats {
-		return []domain.LearnerStats{{UserID: u.ID}}
-	})
-	if strings.Contains(out, "stats drift") {
-		t.Errorf("log = %q", out)
+func TestTodayLoadsOnlyToday(t *testing.T) {
+	var got []domain.AttendanceRecordFilter
+	h := NewAdminViewsHandler(avUsers{}, avRangeRecords{filters: &got}, avStats{}, avSettings{}, avHolidays{})
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h.now = func() time.Time { return time.Date(2026, 9, 8, 9, 0, 0, 0, loc) }
+	app := fiber.New()
+	app.Get("/admin/today", h.Today)
+	app.Test(httptest.NewRequest("GET", "/admin/today?cohort=13", nil))
+	if len(got) != 1 || got[0].Date != "2026-09-08" || got[0].Cohort != 13 {
+		t.Fatalf("filters = %+v, want today's records only", got)
 	}
 }

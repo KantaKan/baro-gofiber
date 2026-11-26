@@ -67,6 +67,13 @@ var validPlantLeaves = map[string]bool{"rounded": true, "pointed": true, "wide":
 var validPlantFlowers = map[string]bool{"daisy": true, "tulip": true, "star": true}
 var validPlantStems = map[string]bool{"straight": true, "curved": true, "leaning": true}
 
+// userListFields drops what no list screen reads; the classmate panel loads a learner's
+// recommendations from GET /users/:id when opened.
+var userListFields = bson.M{
+	"reflections": 0, "password": 0, "profile_comments": 0, "profile_reactions": 0, "plant_reactions": 0,
+	"care_energy_log": 0, "fertilizer_log": 0, "gift_boxes": 0, "owned_cosmetic_ids": 0, "new_cosmetic_ids": 0,
+}
+
 func NewUserHandler(userService *user.Service, careEnergyService *user.CareEnergyService, milestones *milestone.Service, achievements *achievement.Service, progress *attendance.ProgressService) *UserHandler {
 	return &UserHandler{userService: userService, careEnergyService: careEnergyService, milestones: milestones, achievements: achievements, progress: progress}
 }
@@ -292,7 +299,13 @@ func (h *UserHandler) GetUserByID(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid token claims")
 	}
 
-	user, err := h.userService.GetUserByID(id)
+	var user *domain.User
+	var err error
+	if claims.Role == "admin" {
+		user, err = h.userService.GetUserByID(id)
+	} else {
+		user, err = h.userService.GetUserByIDWithFields(id, bson.M{"reflections": 0, "password": 0})
+	}
 	if err != nil {
 		return utils.SendError(c, fiber.StatusNotFound, "User not found")
 	}
@@ -912,7 +925,7 @@ func (h *UserHandler) GetAllUsers(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 50)
 
-	users, total, err := h.userService.GetUsersWithFields(bson.M{"reflections": 0, "password": 0}, cohort, role, email, search, sort, sortDir, page, limit)
+	users, total, err := h.userService.GetUsersWithFields(userListFields, cohort, role, email, search, sort, sortDir, page, limit)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error fetching users")
 	}

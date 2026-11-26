@@ -33,6 +33,7 @@ type wbUsers interface {
 type WellbeingViewsHandler struct {
 	users    wbUsers
 	records  adminViewRecords
+	stats    statsReader
 	holidays attendance.HolidayChecker
 	care     careReader
 	now      func() time.Time
@@ -44,8 +45,8 @@ func (h *WellbeingViewsHandler) SetCohortSettings(fn func(cohort int) (domain.Co
 	h.settings = fn
 }
 
-func NewWellbeingViewsHandler(users wbUsers, records adminViewRecords, holidays attendance.HolidayChecker, care careReader) *WellbeingViewsHandler {
-	return &WellbeingViewsHandler{users: users, records: records, holidays: holidays, care: care, now: utils.GetThailandTime}
+func NewWellbeingViewsHandler(users wbUsers, records adminViewRecords, stats statsReader, holidays attendance.HolidayChecker, care careReader) *WellbeingViewsHandler {
+	return &WellbeingViewsHandler{users: users, records: records, stats: stats, holidays: holidays, care: care, now: utils.GetThailandTime}
 }
 
 // classNights returns the last n class days (oldest first) up to "last night":
@@ -82,27 +83,45 @@ func (h *WellbeingViewsHandler) cohortUsers(c *fiber.Ctx, fields bson.M) ([]doma
 	return users, cohort, true, nil
 }
 
-// usersAndRecords loads a cohort's learners and slim attendance history in parallel.
-func (h *WellbeingViewsHandler) usersAndRecords(c *fiber.Ctx, fields bson.M) ([]domain.User, []domain.AttendanceRecord, int, bool, error) {
+// textNight is the latest class night: the only night whose reflection text any view reads.
+// classNights(2) looks back far enough to cross a long weekend, matching Support's window.
+func (h *WellbeingViewsHandler) textNight() string {
+	if n := h.classNights(2); len(n) > 0 {
+		return n[len(n)-1]
+	}
+	return ""
+}
+
+// learnersAndStats loads a cohort's learners (last n reflections, text for the latest night) and stored stats in parallel.
+func (h *WellbeingViewsHandler) learnersAndStats(c *fiber.Ctx, n int) ([]domain.User, map[primitive.ObjectID]domain.LearnerStats, bool, error) {
 	cohort := c.QueryInt("cohort")
 	if cohort <= 0 {
-		return nil, nil, 0, false, utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
+		return nil, nil, false, utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
 	}
-	var recs []domain.AttendanceRecord
-	var g errgroup.Group
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var (
+		users []domain.User
+		stats []domain.LearnerStats
+		g     errgroup.Group
+	)
 	g.Go(func() (err error) {
-		recs, err = h.cohortRecords(cohort)
+		users, err = h.users.ListCohortLearnersWithReflections(cohort, learnerFields(), n, h.textNight())
 		return err
 	})
-	users, _, ok, err := h.cohortUsers(c, fields)
-	if e := g.Wait(); ok && e != nil {
-		return nil, nil, 0, false, utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
+	g.Go(func() (err error) {
+		stats, err = h.stats.FindByCohort(ctx, cohort)
+		return err
+	})
+	if err := g.Wait(); err != nil {
+		log.Printf("wellbeing cohort %d: %v", cohort, err)
+		return nil, nil, false, utils.SendError(c, fiber.StatusInternalServerError, "Error loading learners")
 	}
-	return users, recs, cohort, ok, err
+	return users, statsMap(stats), true, nil
 }
 
 func (h *WellbeingViewsHandler) cohortRecords(cohort int) ([]domain.AttendanceRecord, error) {
-	recs, err := loadCohortRecords(h.records, cohort, "", "")
+	recs, err := loadCohortRecords(h.records, cohort)
 	if err != nil {
 		log.Printf("wellbeing cohort %d: attendance records: %v", cohort, err)
 	}
@@ -120,15 +139,25 @@ func ids(users []domain.User) []primitive.ObjectID {
 // Board is the Reflections page data.
 // @Summary  Reflections board  @Tags admin  @Security BearerAuth  @Router /admin/reflections/board [get]
 func (h *WellbeingViewsHandler) Board(c *fiber.Ctx) error {
-	users, _, ok, err := h.cohortUsers(c, recentReflections(45))
-	if !ok {
-		return err
+	cohort := c.QueryInt("cohort")
+	if cohort <= 0 {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
 	}
 	rng := c.Query("range", "night")
 	if rng != "night" && rng != "week" && rng != "4w" {
 		return utils.SendError(c, fiber.StatusBadRequest, "range must be night, week or 4w")
 	}
-	return utils.SendResponse(c, fiber.StatusOK, "Reflections", wellbeing.BuildBoard(users, h.classNights(20), rng, wellbeing.DefaultWords))
+	nights := h.classNights(20)
+	textDay := ""
+	if len(nights) > 0 {
+		textDay = nights[len(nights)-1]
+	}
+	users, err := h.users.ListCohortLearnersWithReflections(cohort, learnerFields(), 30, textDay)
+	if err != nil {
+		log.Printf("wellbeing cohort %d: users: %v", cohort, err)
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading learners")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Reflections", wellbeing.BuildBoard(users, nights, rng, wellbeing.DefaultWords))
 }
 
 type learnerRow struct {
@@ -145,7 +174,7 @@ type learnerRow struct {
 // Learners is the All learners table (including dropped learners).
 // @Summary  All learners  @Tags admin  @Security BearerAuth  @Router /admin/learners [get]
 func (h *WellbeingViewsHandler) Learners(c *fiber.Ctx) error {
-	users, recs, _, ok, err := h.usersAndRecords(c, recentReflections(30))
+	users, stats, ok, err := h.learnersAndStats(c, 20)
 	if !ok {
 		return err
 	}
@@ -153,10 +182,6 @@ func (h *WellbeingViewsHandler) Learners(c *fiber.Ctx) error {
 	defer cancel()
 	items, _ := h.care.ItemsFor(ctx, ids(users))
 	acks, _ := h.care.AcksFor(ctx, ids(users), time.Now())
-	byUser := map[primitive.ObjectID][]domain.AttendanceRecord{}
-	for _, r := range recs {
-		byUser[r.UserID] = append(byUser[r.UserID], r)
-	}
 	nights := h.classNights(10)
 	recent := nights
 	if len(recent) > 2 {
@@ -167,8 +192,8 @@ func (h *WellbeingViewsHandler) Learners(c *fiber.Ctx) error {
 		if u.Role == "admin" || u.Deleted {
 			continue
 		}
-		days := attendance.BuildDays(byUser[u.ID])
-		row := learnerRow{LearnerRef: wellbeing.Ref(u), Email: u.Email, AttendanceStatus: u.AttendanceStatus, AttendanceRate: attendance.AttendanceRate(days), LeaveUsed: attendance.LeaveDaysUsed(days), Mood: make([]string, len(nights))}
+		st := stats[u.ID]
+		row := learnerRow{LearnerRef: wellbeing.Ref(u), Email: u.Email, AttendanceStatus: u.AttendanceStatus, AttendanceRate: st.AttendanceRate, LeaveUsed: st.LeaveUsed, LastSeen: st.LastSeen, Mood: make([]string, len(nights))}
 		by := map[string]string{}
 		for _, n := range wellbeing.Nights(u.Reflections) {
 			by[n.Day] = n.Zone
@@ -176,14 +201,8 @@ func (h *WellbeingViewsHandler) Learners(c *fiber.Ctx) error {
 		for i, d := range nights {
 			row.Mood[i] = by[d]
 		}
-		for _, r := range byUser[u.ID] {
-			if r.MarkedBy == domain.MarkedBySelf && !r.SubmittedAt.IsZero() && (row.LastSeen == nil || r.SubmittedAt.After(*row.LastSeen)) {
-				t := r.SubmittedAt
-				row.LastSeen = &t
-			}
-		}
 		if u.AttendanceStatus != "dropout" && u.AttendanceStatus != "dismissed" {
-			rs, _, _ := wellbeing.ReasonsFor(u, byUser[u.ID], items, acks, recent, wellbeing.DefaultWords)
+			rs, _, _ := wellbeing.ReasonsFor(u, st, items, acks, recent, wellbeing.DefaultWords)
 			row.Support = len(rs) > 0
 		}
 		out = append(out, row)
@@ -265,7 +284,7 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 	if len(recent) > 2 {
 		recent = recent[len(recent)-2:]
 	}
-	reasons, _, _ := wellbeing.ReasonsFor(*u, recs, items, acks, recent, wellbeing.DefaultWords)
+	reasons, _, _ := wellbeing.ReasonsFor(*u, attendance.ComputeStats(recs), items, acks, recent, wellbeing.DefaultWords)
 	return utils.SendResponse(c, fiber.StatusOK, "Overview", fiber.Map{
 		"learner":         fiber.Map{"id": u.ID.Hex(), "first_name": u.FirstName, "last_name": u.LastName, "zoom_name": u.ZoomName, "jsd_number": u.JSDNumber, "genmate_group": u.GenmateGroup, "avatar": u.Avatar, "email": u.Email, "created_at": u.ID.Timestamp(), "cohort_number": u.CohortNumber},
 		"attendance_rate": attendance.AttendanceRate(days),
@@ -290,20 +309,20 @@ func (h *WellbeingViewsHandler) Support(c *fiber.Ctx) error {
 			return utils.SendResponse(c, fiber.StatusOK, "Needs support", []wellbeing.SupportRow{})
 		}
 	}
-	users, recs, _, ok, err := h.usersAndRecords(c, recentReflections(30))
+	users, stats, ok, err := h.learnersAndStats(c, 20)
 	if !ok {
 		return err
 	}
-	return utils.SendResponse(c, fiber.StatusOK, "Needs support", h.SupportRows(users, recs))
+	return utils.SendResponse(c, fiber.StatusOK, "Needs support", h.SupportRows(users, stats))
 }
 
 // SupportRows is the Needs support list for a cohort's learners (shared with the weekly report).
-func (h *WellbeingViewsHandler) SupportRows(users []domain.User, recs []domain.AttendanceRecord) []wellbeing.SupportRow {
+func (h *WellbeingViewsHandler) SupportRows(users []domain.User, stats map[primitive.ObjectID]domain.LearnerStats) []wellbeing.SupportRow {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	items, _ := h.care.ItemsFor(ctx, ids(users))
 	acks, _ := h.care.AcksFor(ctx, ids(users), time.Now())
-	return wellbeing.BuildSupportList(users, recs, items, acks, h.classNights(2), wellbeing.DefaultWords)
+	return wellbeing.BuildSupportList(users, stats, items, acks, h.classNights(2), wellbeing.DefaultWords)
 }
 
 // Weeks: rough nights (overwhelmed or panic) per week for the Weekly summary, newest first.

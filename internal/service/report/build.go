@@ -212,6 +212,7 @@ func countedStatus(s domain.AttendanceStatus) bool {
 // Build assembles the report for in.Week. It is pure: all data comes in through Input.
 func Build(in Input) Report {
 	active := wellbeing.Active(in.Users)
+	stats := attendance.StatsByUser(in.Records)
 	days := weekDays(in.Week)
 	r := Report{Week: in.Week, WeekEnd: days[4], Notes: in.Notes, Status: "draft",
 		Mood: []MoodDay{}, ByDay: []DayRow{}, Support: []SupportItem{}, Groups: []GroupRow{}}
@@ -222,7 +223,7 @@ func Build(in Input) Report {
 	var curMood moodWeek
 	for i := 0; i < trendWeeks; i++ {
 		m := parseDay(in.Week).AddDate(0, 0, -7*(trendWeeks-1-i)).Format("2006-01-02")
-		v := attendance.BuildRegister(in.Users, in.Records, m, in.Holidays)
+		v := attendance.BuildRegister(in.Users, in.Records, stats, m, in.Holidays)
 		mw := buildMood(active, m, in.Today, in.Holidays)
 		att[i], lates[i] = v.KPIs.AttendanceRate, float64(v.KPIs.Lates)
 		refl[i], rough[i] = ratio(mw.written, mw.possible), ratio(mw.rough, mw.written)

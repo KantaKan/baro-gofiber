@@ -98,6 +98,23 @@ func (s *Service) UpdateUser(id string, update interface{}) error {
 	return s.repo.Update(ctx, oid, update)
 }
 
+// ListCohortLearnersWithReflections is ListCohortLearners with each learner's last n reflections,
+// text kept only for textDay.
+func (s *Service) ListCohortLearnersWithReflections(cohort int, fields bson.M, n int, textDay string) ([]domain.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return s.repo.FindCohortLearnersWithReflections(ctx, cohort, fields, n, textDay)
+}
+
+// GetUserByIDWithFields loads one user with only the projected fields.
+func (s *Service) GetUserByIDWithFields(id string, projection bson.M) (*domain.User, error) {
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, domain.ErrUserNotFound
+	}
+	return s.repo.FindByIDWithFields(context.Background(), oid, projection)
+}
+
 func (s *Service) AwardBadge(userID primitive.ObjectID, badgeType, badgeName, emoji, imageUrl, color, style string) error {
 	ctx := context.Background()
 

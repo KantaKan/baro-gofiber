@@ -3,9 +3,6 @@ package handler
 import (
 	"context"
 	"log"
-	"math"
-	"slices"
-	"strings"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -14,12 +11,14 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/sync/errgroup"
 )
 
 type adminViewUsers interface {
 	ListCohortLearners(cohort int, projection bson.M) ([]domain.User, error)
+	ListCohortLearnersWithReflections(cohort int, fields bson.M, n int, textDay string) ([]domain.User, error)
 }
 
 // learnerFields is what the cohort list views read from a user, plus any extra paths
@@ -35,85 +34,27 @@ func learnerFields(extra ...string) bson.M {
 	return p
 }
 
-// recentReflections is learnerFields plus only each learner's last n reflections
-// (reflections are appended, so the tail is the newest).
-func recentReflections(n int) bson.M {
-	p := learnerFields()
-	p["reflections"] = bson.M{"$slice": -n}
-	return p
-}
-
 type adminViewRecords interface {
 	FindRecords(ctx interface{}, filter domain.AttendanceRecordFilter, opts interface{}) ([]domain.AttendanceRecord, error)
 }
 
 // AdminViewsHandler serves the assembled admin read views (Today, Register).
 type AdminViewsHandler struct {
-	users     adminViewUsers
-	records   adminViewRecords
-	settings  attendance.CohortSettingsGetter
-	holidays  attendance.HolidayChecker
-	now       func() time.Time
-	drift     statsReader
-	driftSync bool
+	users    adminViewUsers
+	records  adminViewRecords
+	stats    statsReader
+	settings attendance.CohortSettingsGetter
+	holidays attendance.HolidayChecker
+	now      func() time.Time
 }
 
-func NewAdminViewsHandler(users adminViewUsers, records adminViewRecords, settings attendance.CohortSettingsGetter, holidays attendance.HolidayChecker) *AdminViewsHandler {
-	return &AdminViewsHandler{users: users, records: records, settings: settings, holidays: holidays, now: utils.GetThailandTime}
+func NewAdminViewsHandler(users adminViewUsers, records adminViewRecords, stats statsReader, settings attendance.CohortSettingsGetter, holidays attendance.HolidayChecker) *AdminViewsHandler {
+	return &AdminViewsHandler{users: users, records: records, stats: stats, settings: settings, holidays: holidays, now: utils.GetThailandTime}
 }
 
-// statsReader is the subset of the learner_stats store Today needs to check for drift.
+// statsReader is the subset of the learner_stats store the admin views read.
 type statsReader interface {
 	FindByCohort(ctx context.Context, cohort int) ([]domain.LearnerStats, error)
-}
-
-// SetStatsDriftCheck compares Today's computed numbers with learner_stats and logs mismatches.
-// It proves learner_stats on real data before the views read it.
-func (h *AdminViewsHandler) SetStatsDriftCheck(store statsReader) { h.drift = store }
-
-func (h *AdminViewsHandler) logStatsDrift(cohort int, v attendance.TodayView) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	stored, err := h.drift.FindByCohort(ctx, cohort)
-	if err != nil {
-		log.Printf("stats drift check: cohort %d: %v", cohort, err)
-		return
-	}
-	by := map[string]domain.LearnerStats{}
-	for _, s := range stored {
-		by[s.UserID.Hex()] = s
-	}
-	var examples []string
-	n := 0
-	for _, l := range v.Learners {
-		if f := statsDiff(by[l.ID], l); len(f) > 0 {
-			n++
-			if len(examples) < 3 {
-				examples = append(examples, l.ID+":"+strings.Join(f, ","))
-			}
-		}
-	}
-	if n > 0 {
-		log.Printf("stats drift: cohort %d, %d learners differ (e.g. %s)", cohort, n, strings.Join(examples, " "))
-	}
-}
-
-// statsDiff names the fields where stored stats disagree with the live Today row.
-func statsDiff(s domain.LearnerStats, l attendance.TodayLearner) []string {
-	var f []string
-	if s.Streak != l.Streak {
-		f = append(f, "streak")
-	}
-	if s.LeaveUsed != l.LeaveUsed {
-		f = append(f, "leave")
-	}
-	if math.Abs(s.AttendanceRate-l.AttendanceRate) > 1e-9 {
-		f = append(f, "rate")
-	}
-	if !slices.Equal(s.Last10, l.Last10) {
-		f = append(f, "last10")
-	}
-	return f
 }
 
 // viewRecordFields drops the record fields the admin views never read.
@@ -126,51 +67,66 @@ func historyFields() *options.FindOptions {
 	return options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1, "date": 1, "session": 1, "status": 1})
 }
 
-// loadCohortRecords returns a cohort's slim attendance history, with full records for the
-// dates from..to (the cells a view actually shows). Empty from means history only.
-func loadCohortRecords(r adminViewRecords, cohort int, from, to string) ([]domain.AttendanceRecord, error) {
+// loadCohortRecords returns a cohort's slim attendance history.
+func loadCohortRecords(r adminViewRecords, cohort int) ([]domain.AttendanceRecord, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	hist, err := r.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, historyFields())
-	if err != nil || from == "" {
-		return hist, err
-	}
-	out, err := r.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, DateFrom: from, DateTo: to}, viewRecordFields())
-	if err != nil {
-		return nil, err
-	}
-	for _, rec := range hist {
-		if rec.Date < from || rec.Date > to {
-			out = append(out, rec)
-		}
-	}
-	return out, nil
+	return r.FindRecords(ctx, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true}, historyFields())
 }
 
-func (h *AdminViewsHandler) cohortData(cohort int, from, to string, userFields bson.M) ([]domain.User, []domain.AttendanceRecord, domain.CohortSettings, error) {
-	var recs []domain.AttendanceRecord
-	var g errgroup.Group
+func statsMap(list []domain.LearnerStats) map[primitive.ObjectID]domain.LearnerStats {
+	m := make(map[primitive.ObjectID]domain.LearnerStats, len(list))
+	for _, s := range list {
+		m[s.UserID] = s
+	}
+	return m
+}
+
+// viewData loads learners, stored stats, the records for the dates on screen and any slim
+// history ranges (appended after the on-screen records), in parallel.
+func (h *AdminViewsHandler) viewData(cohort int, records domain.AttendanceRecordFilter, loadUsers func() ([]domain.User, error), history ...domain.AttendanceRecordFilter) ([]domain.User, []domain.AttendanceRecord, map[primitive.ObjectID]domain.LearnerStats, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	var (
+		users []domain.User
+		recs  []domain.AttendanceRecord
+		stats []domain.LearnerStats
+		g     errgroup.Group
+	)
 	g.Go(func() (err error) {
-		if recs, err = loadCohortRecords(h.records, cohort, from, to); err != nil {
+		if users, err = loadUsers(); err != nil {
+			log.Printf("admin views cohort %d: users: %v", cohort, err)
+		}
+		return err
+	})
+	g.Go(func() (err error) {
+		if recs, err = h.records.FindRecords(ctx, records, viewRecordFields()); err != nil {
 			log.Printf("admin views cohort %d: attendance records: %v", cohort, err)
 		}
 		return err
 	})
-	users, err := h.users.ListCohortLearners(cohort, userFields)
-	if err != nil {
-		log.Printf("admin views cohort %d: users: %v", cohort, err)
+	hist := make([][]domain.AttendanceRecord, len(history))
+	for i, f := range history {
+		g.Go(func() (err error) {
+			if hist[i], err = h.records.FindRecords(ctx, f, historyFields()); err != nil {
+				log.Printf("admin views cohort %d: attendance history: %v", cohort, err)
+			}
+			return err
+		})
 	}
-	if e := g.Wait(); err == nil {
-		err = e
+	g.Go(func() (err error) {
+		if stats, err = h.stats.FindByCohort(ctx, cohort); err != nil {
+			log.Printf("admin views cohort %d: learner stats: %v", cohort, err)
+		}
+		return err
+	})
+	if err := g.Wait(); err != nil {
+		return nil, nil, nil, err
 	}
-	if err != nil {
-		return nil, nil, domain.CohortSettings{}, err
+	for _, more := range hist {
+		recs = append(recs, more...)
 	}
-	st, err := h.settings.Get(cohort)
-	if err != nil {
-		log.Printf("admin views cohort %d: settings: %v", cohort, err)
-	}
-	return users, recs, st, err
+	return users, recs, statsMap(stats), nil
 }
 
 // Today returns the live check-in board for a cohort.
@@ -189,8 +145,15 @@ func (h *AdminViewsHandler) Today(c *fiber.Ctx) error {
 	}
 	now := h.now()
 	today := utils.FormatDate(now)
-	users, recs, st, err := h.cohortData(cohort, today, today, learnerFields("reflections.day", "reflections.date", "reflections.reflection.barometer"))
+	users, recs, stats, err := h.viewData(cohort, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, Date: today}, func() ([]domain.User, error) {
+		return h.users.ListCohortLearnersWithReflections(cohort, learnerFields(), 5, "")
+	})
 	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading today")
+	}
+	st, err := h.settings.Get(cohort)
+	if err != nil {
+		log.Printf("admin views cohort %d: settings: %v", cohort, err)
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading today")
 	}
 	classDay, err := attendance.IsClassDay(now, h.holidays)
@@ -198,16 +161,8 @@ func (h *AdminViewsHandler) Today(c *fiber.Ctx) error {
 		log.Printf("admin today cohort %d: holidays: %v", cohort, err)
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading today")
 	}
-	classDay = classDay && st.InSession(utils.FormatDate(now))
-	view := attendance.BuildTodayRoster(users, recs, now, st.Rules, classDay, st.FlagsOn())
-	if h.drift != nil {
-		if h.driftSync {
-			h.logStatsDrift(cohort, view)
-		} else {
-			go h.logStatsDrift(cohort, view)
-		}
-	}
-	return utils.SendResponse(c, fiber.StatusOK, "Today retrieved", view)
+	classDay = classDay && st.InSession(today)
+	return utils.SendResponse(c, fiber.StatusOK, "Today retrieved", attendance.BuildTodayRoster(users, recs, stats, now, st.Rules, classDay, st.FlagsOn()))
 }
 
 func mondayOf(t time.Time) string {
@@ -237,7 +192,10 @@ func (h *AdminViewsHandler) Register(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "week must be a Monday (YYYY-MM-DD)")
 	}
 	t, _ := time.Parse("2006-01-02", week)
-	users, recs, _, err := h.cohortData(cohort, week, t.AddDate(0, 0, 4).Format("2006-01-02"), learnerFields())
+	day := func(n int) string { return t.AddDate(0, 0, n).Format("2006-01-02") }
+	users, recs, stats, err := h.viewData(cohort, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, DateFrom: week, DateTo: day(4)}, func() ([]domain.User, error) {
+		return h.users.ListCohortLearners(cohort, learnerFields())
+	}, domain.AttendanceRecordFilter{Cohort: cohort, NotDeleted: true, DateFrom: day(-7), DateTo: day(-3)})
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading register")
 	}
@@ -248,5 +206,5 @@ func (h *AdminViewsHandler) Register(c *fiber.Ctx) error {
 			hol[d] = true
 		}
 	}
-	return utils.SendResponse(c, fiber.StatusOK, "Register retrieved", attendance.BuildRegister(users, recs, week, hol))
+	return utils.SendResponse(c, fiber.StatusOK, "Register retrieved", attendance.BuildRegister(users, recs, stats, week, hol))
 }

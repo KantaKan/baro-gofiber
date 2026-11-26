@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gofiber-baro/internal/domain"
+	"gofiber-baro/internal/service/attendance"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -61,7 +62,7 @@ func TestBuildSupportList(t *testing.T) {
 	c := user("C", "C", refl("2026-09-08", C, ""), refl("2026-09-09", C, ""))
 	items := []domain.SupportItem{{UserID: c.ID, Text: "1:1"}, {UserID: c.ID, Text: "done", Done: true}}
 	acks := []domain.SupportAck{{UserID: a.ID, ReasonKey: "pattern:panic_run", ReasonText: "Panic 2 nights in a row", Until: time.Now().Add(time.Hour)}}
-	list := BuildSupportList([]domain.User{a, b, c}, nil, items, acks, nights10[8:], DefaultWords)
+	list := BuildSupportList([]domain.User{a, b, c}, attendance.StatsByUser(nil), items, acks, nights10[8:], DefaultWords)
 	if len(list) != 1 || list[0].Learner.FirstName != "C" || list[0].OpenItems != 1 || list[0].DoneItems != 1 {
 		t.Fatalf("support list = %+v (A acked, B fine, C has an open step)", list)
 	}
@@ -77,12 +78,12 @@ func TestAckHidesOnlyTheSameReason(t *testing.T) {
 		recs = append(recs, day(d, domain.StatusAbsent))
 	}
 	acks := []domain.SupportAck{{UserID: a.ID, ReasonKey: "leave", ReasonText: "Leave 6/8", Until: time.Now().Add(time.Hour)}}
-	rs, _, _ := ReasonsFor(a, recs, nil, acks, nil, DefaultWords)
+	rs, _, _ := ReasonsFor(a, attendance.ComputeStats(recs), nil, acks, nil, DefaultWords)
 	if len(rs) != 1 || rs[0].Text != "Leave 7/8" {
 		t.Errorf("acknowledging 6/8 must not hide 7/8: %+v", rs)
 	}
 	acks[0].ReasonText = "Leave 7/8"
-	if rs, _, _ := ReasonsFor(a, recs, nil, acks, nil, DefaultWords); len(rs) != 0 {
+	if rs, _, _ := ReasonsFor(a, attendance.ComputeStats(recs), nil, acks, nil, DefaultWords); len(rs) != 0 {
 		t.Errorf("same reason stays hidden: %+v", rs)
 	}
 }

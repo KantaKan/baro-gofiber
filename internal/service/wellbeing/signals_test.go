@@ -71,15 +71,15 @@ func TestSupportReasons(t *testing.T) {
 	d := func(date string, s domain.AttendanceStatus) attendance.DayResult {
 		return attendance.DayResult{Date: date, Status: s}
 	}
-	r := SupportReasons(6, nil, nil, 0)
+	r := SupportReasons(6, 0, nil, 0)
 	if len(r) != 1 || r[0].Key != "leave" {
 		t.Errorf("leave 6 → leave, got %+v", r)
 	}
 	late := []attendance.DayResult{d("2026-09-07", domain.StatusPresent), d("2026-09-08", domain.StatusLate), d("2026-09-09", domain.StatusLate), d("2026-09-10", domain.StatusLate)}
-	if r := SupportReasons(0, late, nil, 0); len(r) != 1 || r[0].Key != "late_run" {
+	if r := SupportReasons(0, attendance.LateRun(late), nil, 0); len(r) != 1 || r[0].Key != "late_run" {
 		t.Errorf("3 lates in a row → late_run, got %+v", r)
 	}
-	r = SupportReasons(0, nil, []Pattern{{Key: "panic_run"}}, 2)
+	r = SupportReasons(0, 0, []Pattern{{Key: "panic_run"}}, 2)
 	if len(r) != 2 || r[0].Key != "pattern:panic_run" || r[1].Key != "plan" {
 		t.Errorf("pattern + plan, got %+v", r)
 	}

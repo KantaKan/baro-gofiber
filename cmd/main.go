@@ -141,7 +141,7 @@ func main() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		if err := container.StatsKeeper.RebuildActive(ctx, utils.GetThailandTime()); err != nil {
+		if err := container.StatsKeeper.RebuildAll(ctx); err != nil {
 			log.Printf("learner stats: startup rebuild: %v", err)
 		}
 	}()

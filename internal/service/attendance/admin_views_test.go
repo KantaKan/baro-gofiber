@@ -1,6 +1,8 @@
 package attendance
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +35,7 @@ func TestBuildTodayRoster(t *testing.T) {
 		{ID: primitive.NewObjectID(), UserID: a.ID, Date: "2026-09-07", Session: domain.SessionMorning, Status: domain.StatusLate, MarkedBy: domain.MarkedBySelf},
 		{ID: primitive.NewObjectID(), UserID: c.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusAbsentExcused, MarkedBy: domain.MarkedByAdmin, MarkedByUser: "system"},
 	}
-	v := BuildTodayRoster([]domain.User{a, b, c, d}, recs, bkkAt(today, 9, 10), domain.DefaultRules(), true, false)
+	v := BuildTodayRoster([]domain.User{a, b, c, d}, recs, StatsByUser(recs), bkkAt(today, 9, 10), domain.DefaultRules(), true, false)
 	if len(v.Learners) != 3 {
 		t.Fatalf("learners = %d, want 3 (dropout excluded)", len(v.Learners))
 	}
@@ -64,7 +66,7 @@ func TestBuildTodayRoster(t *testing.T) {
 
 func TestBuildTodayRosterWeekend(t *testing.T) {
 	a := learner("A", "F", "01")
-	v := BuildTodayRoster([]domain.User{a}, nil, bkkAt("2026-09-12", 10, 0), domain.DefaultRules(), false, false)
+	v := BuildTodayRoster([]domain.User{a}, nil, StatsByUser(nil), bkkAt("2026-09-12", 10, 0), domain.DefaultRules(), false, false)
 	if v.ClassToday || v.Counts[domain.SessionMorning].NotYet != 1 || v.Counts[domain.SessionAfternoon].Total != 1 {
 		t.Errorf("weekend view = %+v", v)
 	}
@@ -92,7 +94,7 @@ func TestBuildRegister(t *testing.T) {
 		rec("2026-08-18", M, domain.StatusLate), rec("2026-08-18", A, domain.StatusPresent),
 		rec("2026-08-20", M, domain.StatusAbsent), rec("2026-08-20", A, domain.StatusAbsentExcused),
 	}
-	v := BuildRegister([]domain.User{a}, recs, "2026-08-17", map[string]bool{"2026-08-19": true})
+	v := BuildRegister([]domain.User{a}, recs, StatsByUser(recs), "2026-08-17", map[string]bool{"2026-08-19": true})
 	if v.Week != "2026-08-17" || v.Dates[4] != "2026-08-21" || len(v.Holidays) != 1 || v.Holidays[0] != "2026-08-19" {
 		t.Fatalf("week header = %+v", v)
 	}
@@ -111,7 +113,7 @@ func TestBuildRegister(t *testing.T) {
 func TestBuildRegisterPreviousWeek(t *testing.T) {
 	a := learner("A", "F", "01")
 	recs := []domain.AttendanceRecord{{ID: primitive.NewObjectID(), UserID: a.ID, Date: "2026-08-12", Session: domain.SessionMorning, Status: domain.StatusLate}}
-	v := BuildRegister([]domain.User{a}, recs, "2026-08-17", nil)
+	v := BuildRegister([]domain.User{a}, recs, StatsByUser(recs), "2026-08-17", nil)
 	if v.KPIs.Lates != 0 || v.Previous.Lates != 1 {
 		t.Errorf("kpis %+v previous %+v", v.KPIs, v.Previous)
 	}
@@ -124,7 +126,7 @@ func TestCountsSkipNonClassStatuses(t *testing.T) {
 		{ID: primitive.NewObjectID(), UserID: a.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusHoliday},
 		{ID: primitive.NewObjectID(), UserID: b.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusPresent, MarkedBy: domain.MarkedBySelf},
 	}
-	v := BuildTodayRoster([]domain.User{a, b}, recs, bkkAt(today, 9, 0), domain.DefaultRules(), true, false)
+	v := BuildTodayRoster([]domain.User{a, b}, recs, StatsByUser(recs), bkkAt(today, 9, 0), domain.DefaultRules(), true, false)
 	if got := v.Counts[domain.SessionMorning]; got.Total != 1 || got.OnTime != 1 {
 		t.Errorf("holiday record must not count as checked in: %+v", got)
 	}
@@ -137,12 +139,25 @@ func TestSharedIPFlag(t *testing.T) {
 		return domain.AttendanceRecord{ID: primitive.NewObjectID(), UserID: u.ID, Date: today, Session: domain.SessionMorning, Status: domain.StatusPresent, MarkedBy: domain.MarkedBySelf, IPAddress: ip, SubmittedAt: bkkAt(today, 9, 0)}
 	}
 	recs := []domain.AttendanceRecord{self(a, "1.1.1.1"), self(b, "1.1.1.1"), self(c, "2.2.2.2")}
-	v := BuildTodayRoster([]domain.User{a, b, c}, recs, bkkAt(today, 9, 5), domain.DefaultRules(), true, true)
+	v := BuildTodayRoster([]domain.User{a, b, c}, recs, StatsByUser(recs), bkkAt(today, 9, 5), domain.DefaultRules(), true, true)
 	if v.Learners[0].Morning.Flag != "shared_ip" || v.Learners[1].Morning.Flag != "shared_ip" || v.Learners[2].Morning.Flag != "" {
 		t.Errorf("flags = %q %q %q", v.Learners[0].Morning.Flag, v.Learners[1].Morning.Flag, v.Learners[2].Morning.Flag)
 	}
-	off := BuildTodayRoster([]domain.User{a, b, c}, recs, bkkAt(today, 9, 5), domain.DefaultRules(), true, false)
+	off := BuildTodayRoster([]domain.User{a, b, c}, recs, StatsByUser(recs), bkkAt(today, 9, 5), domain.DefaultRules(), true, false)
 	if off.Learners[0].Morning.Flag != "" {
 		t.Error("flagging off → no flags")
+	}
+}
+
+func TestBuildTodayRosterLearnerWithoutStats(t *testing.T) {
+	a := learner("A", "F", "01")
+	v := BuildTodayRoster([]domain.User{a}, nil, map[primitive.ObjectID]domain.LearnerStats{}, bkkAt("2026-09-08", 9, 0), domain.DefaultRules(), true, false)
+	l := v.Learners[0]
+	if l.Streak != 0 || l.LeaveUsed != 0 || l.AttendanceRate != 0 || l.Last10 == nil {
+		t.Fatalf("learner with no stats doc → %+v, want zeros and empty last10", l)
+	}
+	b, _ := json.Marshal(l)
+	if !strings.Contains(string(b), `"last10":[]`) {
+		t.Errorf("last10 must serialize as [] not null: %s", b)
 	}
 }
