@@ -177,7 +177,7 @@ func TestOverviewDaysBadgesNeighbors(t *testing.T) {
 	_, body := send(app, "GET", "/admin/learners/"+b.ID.Hex()+"/overview", "")
 	for _, want := range []string{
 		`"date":"2026-09-07"`, `"date":"2026-09-08"`,
-		`"afternoon":{"status":"late","at":"2026-09-08T06:24:00Z"}`,
+		`"afternoon":{"status":"late","at":"2026-09-08T06:24:00Z"`,
 		`"zone":"stretch-overwhelmed"`, `"tech_improve":"react query \u0026 cache"`, `"reply":"nice"`, `"reply_name":"Nan"`,
 		`"zone":"comfort"`,
 		`"cohort_attendance":0.75`,
@@ -191,5 +191,68 @@ func TestOverviewDaysBadgesNeighbors(t *testing.T) {
 	}
 	if strings.Contains(body, `"date":"2026-09-06"`) {
 		t.Error("Sunday listed as a class day")
+	}
+}
+
+type countingHolidays struct{ single, ranged *int }
+
+func (h countingHolidays) IsHoliday(string) (bool, *domain.Holiday, error) {
+	*h.single++
+	return false, nil, nil
+}
+func (h countingHolidays) GetHolidayDatesInRange(string, string) (map[string]bool, error) {
+	*h.ranged++
+	return map[string]bool{}, nil
+}
+
+func overviewFor(t *testing.T, h *WellbeingViewsHandler, u domain.User) string {
+	t.Helper()
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h.now = func() time.Time { return time.Date(2026, 9, 8, 18, 0, 0, 0, loc) }
+	app := fiber.New()
+	app.Get("/admin/learners/:id/overview", h.Overview)
+	_, body := send(app, "GET", "/admin/learners/"+u.ID.Hex()+"/overview", "")
+	return body
+}
+
+func TestOverviewLooksUpHolidaysOnce(t *testing.T) {
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Bee", CohortNumber: 13, Role: "learner"}
+	single, ranged := 0, 0
+	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, avRecords{}, avStats{}, countingHolidays{&single, &ranged}, careReadFake{})
+	h.SetCohortSettings(func(int) (domain.CohortSettings, error) { return domain.CohortSettings{StartDate: "2025-01-06"}, nil })
+	body := overviewFor(t, h, u)
+	if ranged != 1 {
+		t.Errorf("range lookups = %d, want 1", ranged)
+	}
+	if single > 60 {
+		t.Errorf("per-day holiday lookups = %d; course days must not query one by one", single)
+	}
+	if !strings.Contains(body, `"date":"2026-09-08"`) {
+		t.Error("today missing from days")
+	}
+}
+
+func TestOverviewFallsBackOnBadStartDate(t *testing.T) {
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Bee", CohortNumber: 13, Role: "learner"}
+	recs := avRecords{list: []domain.AttendanceRecord{{UserID: u.ID, Date: "2026-09-07", Session: domain.SessionMorning, Status: domain.StatusPresent}}}
+	for _, start := range []string{"2026/09/07", "2027-01-04"} {
+		h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, recs, avStats{}, avHolidays{}, careReadFake{})
+		h.SetCohortSettings(func(int) (domain.CohortSettings, error) { return domain.CohortSettings{StartDate: start}, nil })
+		if body := overviewFor(t, h, u); !strings.Contains(body, `"days":[{"date":"2026-09-07"`) {
+			t.Errorf("start %q: days lost the learner's history", start)
+		}
+	}
+}
+
+func TestOverviewKeepsWeekendReflectionsAndMarkedBy(t *testing.T) {
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Bee", CohortNumber: 13, Role: "learner", SelectedPalette: "sunset", SelectedSpecies: "fern",
+		Reflections: []domain.Reflection{{ID: primitive.NewObjectID(), Day: "2026-09-06", ReflectionData: domain.ReflectionContent{Barometer: "Comfort Zone", TechSessions: domain.SessionDetails{Happy: "sunday study"}}}}}
+	recs := avRecords{list: []domain.AttendanceRecord{{UserID: u.ID, Date: "2026-09-07", Session: domain.SessionMorning, Status: domain.StatusPresent, MarkedBy: domain.MarkedBySelf, SubmittedAt: time.Date(2026, 9, 7, 1, 50, 0, 0, time.UTC)}}}
+	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, recs, avStats{}, avHolidays{}, careReadFake{})
+	body := overviewFor(t, h, u)
+	for _, want := range []string{`"date":"2026-09-06","extra":true`, `"tech_happy":"sunday study"`, `"marked_by":"self"`, `"plant":{"flower":"","leaf":"","palette":"sunset","pot":"","species":"fern","stem":""}`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s\n%s", want, body)
+		}
 	}
 }
