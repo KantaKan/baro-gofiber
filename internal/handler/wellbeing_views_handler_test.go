@@ -245,12 +245,12 @@ func TestOverviewFallsBackOnBadStartDate(t *testing.T) {
 }
 
 func TestOverviewKeepsWeekendReflectionsAndMarkedBy(t *testing.T) {
-	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Bee", CohortNumber: 13, Role: "learner",
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Bee", CohortNumber: 13, Role: "learner", SelectedPalette: "sunset", SelectedSpecies: "fern",
 		Reflections: []domain.Reflection{{ID: primitive.NewObjectID(), Day: "2026-09-06", ReflectionData: domain.ReflectionContent{Barometer: "Comfort Zone", TechSessions: domain.SessionDetails{Happy: "sunday study"}}}}}
 	recs := avRecords{list: []domain.AttendanceRecord{{UserID: u.ID, Date: "2026-09-07", Session: domain.SessionMorning, Status: domain.StatusPresent, MarkedBy: domain.MarkedBySelf, SubmittedAt: time.Date(2026, 9, 7, 1, 50, 0, 0, time.UTC)}}}
 	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, recs, avStats{}, avHolidays{}, careReadFake{})
 	body := overviewFor(t, h, u)
-	for _, want := range []string{`"date":"2026-09-06","extra":true`, `"tech_happy":"sunday study"`, `"marked_by":"self"`} {
+	for _, want := range []string{`"date":"2026-09-06","extra":true`, `"tech_happy":"sunday study"`, `"marked_by":"self"`, `"plant":{"flower":"","leaf":"","palette":"sunset","pot":"","species":"fern","stem":""}`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s\n%s", want, body)
 		}

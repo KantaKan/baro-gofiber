@@ -478,6 +478,7 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 		"cohort_attendance": cohortRate,
 		"badges":            badges,
 		"neighbors":         neighbors(peers, u.ID),
+		"plant":             fiber.Map{"palette": u.SelectedPalette, "species": u.SelectedSpecies, "pot": u.SelectedPot, "leaf": u.SelectedLeaf, "flower": u.SelectedFlower, "stem": u.SelectedStem},
 	})
 }
 
