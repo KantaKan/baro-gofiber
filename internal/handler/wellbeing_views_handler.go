@@ -388,13 +388,34 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	recs, e := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{UserID: id, NotDeleted: true}, nil)
-	if e != nil {
+	var (
+		recs   []domain.AttendanceRecord
+		notes  []domain.AdminNote
+		items  []domain.SupportItem
+		acks   []domain.SupportAck
+		cohort []domain.LearnerStats
+		peers  []domain.User
+		st     domain.CohortSettings
+	)
+	var g errgroup.Group
+	g.Go(func() (err error) {
+		recs, err = h.records.FindRecords(ctx, domain.AttendanceRecordFilter{UserID: id, NotDeleted: true}, nil)
+		return err
+	})
+	g.Go(func() error { notes, _ = h.care.Notes(ctx, id); return nil })
+	g.Go(func() error { items, _ = h.care.Items(ctx, id); return nil })
+	g.Go(func() error { acks, _ = h.care.AcksFor(ctx, []primitive.ObjectID{id}, time.Now()); return nil })
+	g.Go(func() error { cohort, _ = h.stats.FindByCohort(ctx, u.CohortNumber, false); return nil })
+	g.Go(func() error {
+		peers, _ = h.users.ListCohortLearners(u.CohortNumber, bson.M{"_id": 1, "jsd_number": 1})
+		return nil
+	})
+	if h.settings != nil {
+		g.Go(func() error { st, _ = h.settings(u.CohortNumber); return nil })
+	}
+	if e := g.Wait(); e != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
 	}
-	notes, _ := h.care.Notes(ctx, id)
-	items, _ := h.care.Items(ctx, id)
-	acks, _ := h.care.AcksFor(ctx, []primitive.ObjectID{id}, time.Now())
 	days := attendance.BuildDays(recs)
 	nights := h.classNights(20)
 	ampm := map[string]*dayAMPM{}
@@ -442,23 +463,18 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 	if len(recent) > 2 {
 		recent = recent[len(recent)-2:]
 	}
-	var st domain.CohortSettings
-	if h.settings != nil {
-		st, _ = h.settings(u.CohortNumber)
-	}
 	dayN, week, total := attendance.CourseProgress(st.StartDate, st.CourseDays, utils.FormatDate(h.now()))
 	cohortRate := 0.0
-	if list, err := h.stats.FindByCohort(ctx, u.CohortNumber, false); err == nil && len(list) > 0 {
-		for _, s := range list {
+	if len(cohort) > 0 {
+		for _, s := range cohort {
 			cohortRate += s.AttendanceRate
 		}
-		cohortRate = math.Round(cohortRate/float64(len(list))*1000) / 1000
+		cohortRate = math.Round(cohortRate/float64(len(cohort))*1000) / 1000
 	}
 	badges := make([]fiber.Map, 0, len(u.Badges))
 	for _, b := range u.Badges {
 		badges = append(badges, fiber.Map{"id": b.ID.Hex(), "name": b.Name, "emoji": b.Emoji, "image_url": b.ImageUrl, "color": b.Color, "style": b.Style, "awarded_at": b.AwardedAt})
 	}
-	peers, _ := h.users.ListCohortLearners(u.CohortNumber, bson.M{"_id": 1, "jsd_number": 1})
 	reasons, _, _ := wellbeing.ReasonsFor(*u, attendance.ComputeStats(recs), items, acks, recent, wellbeing.DefaultWords)
 	return utils.SendResponse(c, fiber.StatusOK, "Overview", fiber.Map{
 		"learner":           fiber.Map{"id": u.ID.Hex(), "first_name": u.FirstName, "last_name": u.LastName, "zoom_name": u.ZoomName, "jsd_number": u.JSDNumber, "genmate_group": u.GenmateGroup, "avatar": u.Avatar, "email": u.Email, "created_at": u.ID.Timestamp(), "cohort_number": u.CohortNumber},
