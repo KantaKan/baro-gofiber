@@ -227,8 +227,9 @@ type dayAMPM struct {
 // Overview is one learner's full profile for admins.
 // @Summary  Learner overview  @Tags admin  @Security BearerAuth  @Router /admin/learners/{id}/overview [get]
 type sessionAt struct {
-	Status domain.AttendanceStatus `json:"status"`
-	At     time.Time               `json:"at"`
+	Status   domain.AttendanceStatus `json:"status"`
+	At       time.Time               `json:"at"`
+	MarkedBy domain.MarkedBy         `json:"marked_by"`
 }
 
 type dayReflection struct {
@@ -246,35 +247,59 @@ type dayReflection struct {
 
 type overviewDay struct {
 	Date       string         `json:"date"`
+	Extra      bool           `json:"extra,omitempty"`
 	Morning    *sessionAt     `json:"morning"`
 	Afternoon  *sessionAt     `json:"afternoon"`
 	Reflection *dayReflection `json:"reflection"`
 }
 
-// courseDays lists class days from the course start (or the learner's first record or
-// reflection when the cohort has no start date) up to today.
+type holidayRange interface {
+	GetHolidayDatesInRange(startDate, endDate string) (map[string]bool, error)
+}
+
+// courseDays lists class days from the course start up to today. A missing, malformed or
+// future start falls back to the learner's first record or reflection; the walk is capped
+// at 14 months and holidays come from one range lookup when the checker supports it.
 func (h *WellbeingViewsHandler) courseDays(start string, recs []domain.AttendanceRecord, refls []domain.Reflection) []string {
+	earliest := ""
+	for _, r := range recs {
+		if earliest == "" || r.Date < earliest {
+			earliest = r.Date
+		}
+	}
+	for _, r := range refls {
+		if d := wellbeing.DayOf(r); d != "" && (earliest == "" || d < earliest) {
+			earliest = d
+		}
+	}
 	from := start
-	if from == "" {
-		for _, r := range recs {
-			if from == "" || r.Date < from {
-				from = r.Date
-			}
-		}
-		for _, r := range refls {
-			if d := wellbeing.DayOf(r); d != "" && (from == "" || d < from) {
-				from = d
-			}
-		}
+	if _, err := utils.ParseDate(from); err != nil || (earliest != "" && from > earliest) {
+		from = earliest
 	}
 	first, err := utils.ParseDate(from)
 	if err != nil {
 		return nil
 	}
-	today := utils.FormatDate(h.now())
+	now := h.now()
+	if floor := now.AddDate(0, -14, 0); first.Before(floor) {
+		first = floor
+	}
+	today := utils.FormatDate(now)
+	isClass := func(d time.Time) bool {
+		ok, err := attendance.IsClassDay(d, h.holidays)
+		return err == nil && ok
+	}
+	if hr, ok := h.holidays.(holidayRange); ok {
+		if set, err := hr.GetHolidayDatesInRange(utils.FormatDate(first), today); err == nil {
+			isClass = func(d time.Time) bool {
+				wd := d.Weekday()
+				return wd != time.Saturday && wd != time.Sunday && !set[utils.FormatDate(d)]
+			}
+		}
+	}
 	var out []string
 	for d := first; utils.FormatDate(d) <= today; d = d.AddDate(0, 0, 1) {
-		if ok, err := attendance.IsClassDay(d, h.holidays); err == nil && ok {
+		if isClass(d) {
 			out = append(out, utils.FormatDate(d))
 		}
 	}
@@ -288,12 +313,20 @@ func overviewDays(dates []string, recs []domain.AttendanceRecord, refls []domain
 		out[i] = &overviewDay{Date: d}
 		by[d] = out[i]
 	}
+	for _, r := range refls {
+		if d := wellbeing.DayOf(r); d != "" && by[d] == nil {
+			x := &overviewDay{Date: d, Extra: true}
+			out = append(out, x)
+			by[d] = x
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
 	for _, r := range recs {
 		x := by[r.Date]
 		if x == nil {
 			continue
 		}
-		s := &sessionAt{Status: r.Status, At: r.SubmittedAt}
+		s := &sessionAt{Status: r.Status, At: r.SubmittedAt, MarkedBy: r.MarkedBy}
 		if r.Session == domain.SessionAfternoon {
 			x.Afternoon = s
 		} else {
