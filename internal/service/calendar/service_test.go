@@ -293,7 +293,8 @@ func TestAdminSetZoomLinkSurvivesAReimport(t *testing.T) {
 // A tiny upload that unzips to a huge sheet (padded rows) is refused before it is parsed.
 func TestPaddedFileIsRefusedFast(t *testing.T) {
 	s, _ := newSvc()
-	src, err := zip.NewReader(bytes.NewReader(bookBytes(t, fixture(t))), int64(len(bookBytes(t, fixture(t)))))
+	book := bookBytes(t, fixture(t))
+	src, err := zip.NewReader(bytes.NewReader(book), int64(len(book)))
 	if err != nil {
 		t.Fatal(err)
 	}
