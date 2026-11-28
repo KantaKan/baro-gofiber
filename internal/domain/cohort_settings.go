@@ -14,6 +14,8 @@ type CohortSettings struct {
 	CheckinRegion string `bson:"checkin_region,omitempty" json:"checkin_region,omitempty"`
 	// FlagUnusual marks shared-network check-ins on the admin board (nil = on).
 	FlagUnusual *bool `bson:"flag_unusual,omitempty" json:"flag_unusual,omitempty"`
+	// ChessEnabled runs the cohort's team chess game.
+	ChessEnabled bool `bson:"chess_enabled,omitempty" json:"chess_enabled,omitempty"`
 }
 
 // InSession reports whether the cohort still has class on date (YYYY-MM-DD): true until it graduates.
