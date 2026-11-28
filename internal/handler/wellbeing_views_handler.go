@@ -498,6 +498,40 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 	})
 }
 
+// Journey is the signed-in learner's end-of-course story, once their cohort has graduated.
+// @Summary  My journey  @Tags users  @Security BearerAuth  @Router /users/me/journey [get]
+func (h *WellbeingViewsHandler) Journey(c *fiber.Ctx) error {
+	id, _ := c.Locals("userID").(string)
+	u, err := h.users.GetUserByID(id)
+	if err != nil || u == nil || u.Role != "learner" {
+		return utils.SendError(c, fiber.StatusNotFound, "No journey for this account")
+	}
+	var st domain.CohortSettings
+	if h.settings != nil {
+		st, _ = h.settings(u.CohortNumber)
+	}
+	today := utils.FormatDate(h.now())
+	if st.GraduatedOn == "" || st.GraduatedOn > today {
+		return utils.SendResponse(c, fiber.StatusOK, "Journey", fiber.Map{"unlocked": false})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	recs, err := h.records.FindRecords(ctx, domain.AttendanceRecordFilter{UserID: u.ID, NotDeleted: true}, nil)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
+	}
+	var days []string
+	for _, d := range h.courseDays(st.StartDate, recs, u.Reflections) {
+		if d <= st.GraduatedOn {
+			days = append(days, d)
+		}
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Journey", wellbeing.BuildJourney(wellbeing.JourneyInput{
+		Name: u.FirstName, Cohort: strconv.Itoa(u.CohortNumber), ClassDays: days,
+		Reflections: u.Reflections, Records: recs, Badges: len(u.Badges), QuoteID: u.JourneyQuoteID,
+	}))
+}
+
 // Support is the Needs support list.
 // @Summary  Needs support  @Tags admin  @Security BearerAuth  @Router /admin/support [get]
 func (h *WellbeingViewsHandler) Support(c *fiber.Ctx) error {

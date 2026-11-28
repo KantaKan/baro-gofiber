@@ -158,6 +158,7 @@ type User struct {
 	LastCaredAt        *time.Time           `bson:"last_cared_at,omitempty" json:"last_cared_at,omitempty"`
 	CheckinStyle       string               `bson:"checkin_style,omitempty" json:"checkin_style,omitempty"`
 	CheckinRandom      bool                 `bson:"checkin_random,omitempty" json:"checkin_random,omitempty"`
+	JourneyQuoteID     string               `bson:"journey_quote_id,omitempty" json:"journey_quote_id,omitempty"`
 	TourSeenAt         *time.Time           `bson:"tour_seen_at,omitempty" json:"tour_seen_at,omitempty"`
 	Avatar             *Avatar              `bson:"avatar,omitempty" json:"avatar,omitempty"`
 	Skills             []string             `bson:"skills,omitempty" json:"skills,omitempty"`

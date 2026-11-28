@@ -256,3 +256,34 @@ func TestOverviewKeepsWeekendReflectionsAndMarkedBy(t *testing.T) {
 		}
 	}
 }
+
+func journeyBody(t *testing.T, u domain.User, graduated string) (int, string) {
+	t.Helper()
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, avRecords{}, avStats{}, avHolidays{}, careReadFake{})
+	h.now = func() time.Time { return time.Date(2026, 12, 20, 10, 0, 0, 0, loc) }
+	h.SetCohortSettings(func(int) (domain.CohortSettings, error) {
+		return domain.CohortSettings{StartDate: "2026-12-07", GraduatedOn: graduated}, nil
+	})
+	app := fiber.New()
+	app.Get("/users/me/journey", func(c *fiber.Ctx) error { c.Locals("userID", u.ID.Hex()); return c.Next() }, h.Journey)
+	return send(app, "GET", "/users/me/journey", "")
+}
+
+func TestJourneyUnlocksAfterGraduation(t *testing.T) {
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Fern", CohortNumber: 13, Role: "learner"}
+	if _, body := journeyBody(t, u, "2026-12-21"); !strings.Contains(body, `"unlocked":false`) || strings.Contains(body, `"name"`) {
+		t.Errorf("before graduation: %s", body)
+	}
+	if _, body := journeyBody(t, u, ""); !strings.Contains(body, `"unlocked":false`) {
+		t.Errorf("no graduation date: %s", body)
+	}
+	_, body := journeyBody(t, u, "2026-12-18")
+	if !strings.Contains(body, `"unlocked":true`) || !strings.Contains(body, `"name":"Fern"`) || !strings.Contains(body, `"class_days":10`) || !strings.Contains(body, `"last_day":"2026-12-18"`) {
+		t.Errorf("after graduation: %s", body)
+	}
+	admin := domain.User{ID: primitive.NewObjectID(), Role: "admin", CohortNumber: 13}
+	if code, _ := journeyBody(t, admin, "2026-12-18"); code != 404 {
+		t.Errorf("admins have no journey, got %d", code)
+	}
+}
