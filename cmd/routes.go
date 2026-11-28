@@ -59,6 +59,20 @@ func setupRoutes(app *fiber.App, h Handlers) {
 			})
 		},
 	})
+	// Signed in, so keyed per user: a class behind one IP isn't throttled together.
+	passwordLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: 1 * time.Minute,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			if id, ok := c.Locals("userID").(string); ok && id != "" {
+				return "pw:" + id
+			}
+			return "pw-ip:" + c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": "Too many attempts, please try again in a minute"})
+		},
+	})
 	app.Post("/login", loginLimiter, h.User.LoginUser)
 	app.Post("/logout", func(c *fiber.Ctx) error {
 		middleware.ClearSession(c)
@@ -78,6 +92,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Get("/", h.User.GetAllUsers)
 	protected.Get("/genmate-garden", h.User.GetGenmateGarden)
 	protected.Get("/:id", h.User.GetUserByID)
+	protected.Put("/me/password", passwordLimiter, h.User.ChangeMyPassword)
 	protected.Put("/:id", h.User.UpdateUser)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
 	protected.Get("/:id/reflections", h.User.GetUserReflections)
@@ -217,6 +232,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Post("/god-events", handler.GodEventCastLimiter(), h.GodEvent.Cast)
 	admin.Get("/cohorts/:cohortNumber/gift-boxes/recipients", h.GiftBox.PreviewAudience)
 	admin.Post("/users/bulk-register", h.Admin.BulkRegisterUsers)
+	admin.Post("/users/:id/reset-password", h.Admin.ResetPassword)
 	admin.Put("/users/:userId/reflections/:reflectionId/feedback", h.Admin.UpdateReflectionFeedback)
 	admin.Get("/barometer", h.Admin.GetUserBarometerData)
 	admin.Get("/reflections", h.Admin.GetAllReflections)

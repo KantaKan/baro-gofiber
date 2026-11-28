@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/rand"
 	"time"
 
 	"gofiber-baro/internal/domain"
@@ -553,4 +554,30 @@ func (h *AdminHandler) UpdatePlantOverride(c *fiber.Ctx) error {
 	}
 
 	return utils.SendResponse(c, fiber.StatusOK, "Plant updated", nil)
+}
+
+// ResetPassword gives a learner a one-time temporary password; they must set their own at next sign-in.
+// @Summary  Reset a learner's password  @Tags admin  @Security BearerAuth  @Router /admin/users/{id}/reset-password [post]
+func (h *AdminHandler) ResetPassword(c *fiber.Ctx) error {
+	id := c.Params("id")
+	u, err := h.userService.GetUserByID(id)
+	if err != nil || u == nil {
+		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+	if err := user.CanResetPassword(u); err != nil {
+		return utils.SendError(c, fiber.StatusForbidden, "Only learner passwords can be reset here")
+	}
+	temp, err := user.TemporaryPassword(rand.Reader)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Could not make a password")
+	}
+	hash, err := utils.HashPassword(temp)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Could not make a password")
+	}
+	if err := h.userService.UpdateUser(id, bson.M{"password": hash, "must_change_password": true}); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Could not reset the password")
+	}
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	return utils.SendResponse(c, fiber.StatusOK, "Password reset", fiber.Map{"temporary_password": temp})
 }
