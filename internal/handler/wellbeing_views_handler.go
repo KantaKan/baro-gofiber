@@ -53,11 +53,11 @@ func NewWellbeingViewsHandler(users wbUsers, records adminViewRecords, stats sta
 }
 
 // classNights returns the last n class days (oldest first) up to "last night":
-// today once reflections open (16:45), otherwise the previous class day.
+// today once reflections open (16:30), otherwise the previous class day.
 func (h *WellbeingViewsHandler) classNights(n int) []string {
 	now := h.now()
 	d := now
-	if now.Hour()*60+now.Minute() < 16*60+45 {
+	if now.Hour()*60+now.Minute() < 16*60+30 {
 		d = d.AddDate(0, 0, -1)
 	}
 	var out []string
