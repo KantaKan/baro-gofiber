@@ -2,6 +2,7 @@ package chess
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math/rand"
 	"strings"
@@ -35,6 +36,11 @@ func (m *memStore) AllActive(context.Context) ([]Game, error) {
 	return out, nil
 }
 func (m *memStore) Insert(_ context.Context, g *Game) error {
+	for _, x := range m.games {
+		if x.CohortNumber == g.CohortNumber && x.Status == StatusActive {
+			return ErrConflict
+		}
+	}
 	c := *g
 	m.games = append(m.games, &c)
 	return nil
@@ -281,5 +287,116 @@ func TestPromotionIsRecorded(t *testing.T) {
 	}
 	if got := st.games[0].Moves[0].SAN; got != "e8=Q" && got != "e8=Q+" {
 		t.Errorf("promotion SAN %q", got)
+	}
+}
+
+func TestNewTurnSendsAnEmptyProposalList(t *testing.T) {
+	s, st, _ := newSvc(cohort13())
+	p, _ := picked(t, s)
+	if err := s.Move(context.Background(), p, "e2e4"); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := st.Active(context.Background(), 13)
+	v, _ := s.View(context.Background(), g.Turn.PickedUserID)
+	if b, _ := json.Marshal(v); !strings.Contains(string(b), `"proposals":[]`) {
+		t.Errorf("proposals must be [] not null: %s", b)
+	}
+}
+
+// racyStore hides the active game from the first Active call, as when two requests run Ensure together.
+type racyStore struct {
+	*memStore
+	hide bool
+}
+
+func (r *racyStore) Active(ctx context.Context, cohort int) (*Game, error) {
+	if r.hide {
+		r.hide = false
+		return nil, nil
+	}
+	return r.memStore.Active(ctx, cohort)
+}
+
+func TestEnsureRaceKeepsOneGame(t *testing.T) {
+	s, st, _ := newSvc(cohort13())
+	first, _ := picked(t, s)
+	_ = first
+	r := &racyStore{memStore: st, hide: true}
+	s.store = r
+	g, err := s.Ensure(context.Background(), 13)
+	if err != nil || g == nil || g.ID != st.games[0].ID || len(st.games) != 1 {
+		t.Fatalf("a racing Ensure must reuse the game: %v %v games=%d", g, err, len(st.games))
+	}
+}
+
+type brokenPeople struct{ fakePeople }
+
+func (b brokenPeople) Learners(cohort int) ([]Person, error) {
+	if cohort == 99 {
+		return nil, errors.New("mongo down")
+	}
+	return b.fakePeople.Learners(cohort)
+}
+
+func TestTickKeepsGoingPastABrokenCohort(t *testing.T) {
+	s, st, _ := newSvc(cohort13())
+	s.people = brokenPeople{cohort13()}
+	s.cohorts = func() []int { return []int{99, 13} }
+	_ = s.Tick(context.Background())
+	if len(st.games) != 1 || st.games[0].CohortNumber != 13 {
+		t.Errorf("cohort 13 still gets its game: %d", len(st.games))
+	}
+}
+
+func TestDisabledOrGraduatedCohortIsFrozen(t *testing.T) {
+	s, st, now := newSvc(cohort13())
+	p, g := picked(t, s)
+	s.settings = func(int) (bool, string) { return false, "" }
+	if err := s.Move(context.Background(), p, "e2e4"); !errors.Is(err, ErrNoGame) {
+		t.Errorf("chess off: %v", err)
+	}
+	s.settings = func(int) (bool, string) { return true, "2026-11-01" }
+	if err := s.Move(context.Background(), p, "e2e4"); !errors.Is(err, ErrNoGame) {
+		t.Errorf("graduated: %v", err)
+	}
+	if on, mine := s.Me(context.Background(), p); on || mine {
+		t.Error("no nav item or turn card for a frozen game")
+	}
+	*now = g.Turn.Deadline.Add(time.Hour)
+	_ = s.Tick(context.Background())
+	if st.games[0].Turn.PickedUserID != p || len(st.games[0].Moves) != 0 {
+		t.Error("the tick leaves a frozen game alone")
+	}
+}
+
+type flakyStore struct {
+	*memStore
+	fails int
+}
+
+func (f *flakyStore) Save(ctx context.Context, g *Game, version int) (bool, error) {
+	if f.fails > 0 {
+		f.fails--
+		return false, nil
+	}
+	return f.memStore.Save(ctx, g, version)
+}
+
+func TestVoteRetriesAConflictAndRejectsAnUnknownProposal(t *testing.T) {
+	s, st, _ := newSvc(cohort13())
+	_, g := picked(t, s)
+	w := g.Teams[White].Members
+	_ = s.Propose(context.Background(), w[0], "d2d4", "")
+	id := st.games[0].Proposals[0].ID
+	s.store = &flakyStore{memStore: st, fails: 1}
+	voter := w[len(w)-1]
+	if err := s.Vote(context.Background(), voter, id); err != nil {
+		t.Fatalf("a vote that loses one race is retried: %v", err)
+	}
+	if !contains(st.games[0].Proposals[0].Voters, voter) {
+		t.Error("vote recorded")
+	}
+	if err := s.Vote(context.Background(), voter, "nope"); !errors.Is(err, ErrConflict) {
+		t.Errorf("unknown proposal: %v", err)
 	}
 }

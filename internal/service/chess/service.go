@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ var (
 	ErrNoAccess    = errors.New("you can't use this room")
 	ErrConflict    = errors.New("the board changed, try again")
 	ErrBadText     = errors.New("message is empty or too long")
+	errStale       = fmt.Errorf("%w: that proposal is from an earlier turn", ErrConflict)
 )
 
 type Side struct {
@@ -115,14 +117,19 @@ func NewService(store Store, people People, settings func(int) (bool, string), c
 	return &Service{store: store, people: people, settings: settings, cohorts: cohorts, now: time.Now, rng: rand.New(rand.NewSource(time.Now().UnixNano()))}
 }
 
+// live reports whether the cohort plays: chess on and not graduated. Other games stay frozen.
+func (s *Service) live(cohort int) bool {
+	on, grad := s.settings(cohort)
+	return on && (grad == "" || grad >= s.now().In(bangkok).Format("2006-01-02"))
+}
+
 // Ensure returns the cohort's running game, starting one when chess is on and none is running.
 func (s *Service) Ensure(ctx context.Context, cohort int) (*Game, error) {
+	if !s.live(cohort) {
+		return nil, nil
+	}
 	if g, err := s.store.Active(ctx, cohort); err != nil || g != nil {
 		return g, err
-	}
-	on, grad := s.settings(cohort)
-	if !on || (grad != "" && grad < s.now().In(bangkok).Format("2006-01-02")) {
-		return nil, nil
 	}
 	learners, err := s.people.Learners(cohort)
 	if err != nil {
@@ -151,7 +158,9 @@ func (s *Service) Ensure(ctx context.Context, cohort int) (*Game, error) {
 	g := &Game{ID: primitive.NewObjectID(), CohortNumber: cohort, Status: StatusActive, StartedAt: now, Start: startFEN, FEN: startFEN, Teams: teams,
 		Turn: Turn{Side: White, PickedSoFar: map[string][]string{}}}
 	s.pick(g, White, now)
-	if err := s.store.Insert(ctx, g); err != nil {
+	if err := s.store.Insert(ctx, g); errors.Is(err, ErrConflict) {
+		return s.store.Active(ctx, cohort)
+	} else if err != nil {
 		return nil, err
 	}
 	s.announce(ctx, g, fmt.Sprintf("เกมใหม่เริ่มแล้ว · ทีมขาว กลุ่ม %s ปะทะ ทีมดำ กลุ่ม %s", strings.Join(white, " "), strings.Join(black, " ")))
@@ -266,8 +275,9 @@ func (s *Service) play(ctx context.Context, g *Game, uci, userID string, byTeam 
 	s.announce(ctx, g, fmt.Sprintf("%sเดิน %s · %s", team, san, who))
 	if g.Status == StatusEnded {
 		s.announce(ctx, g, "เกมจบแล้ว · "+map[string]string{White: "ทีมขาวชนะ", Black: "ทีมดำชนะ", "draw": "เสมอ"}[g.Result])
-		_, err := s.Ensure(ctx, g.CohortNumber)
-		return err
+		if _, err := s.Ensure(ctx, g.CohortNumber); err != nil {
+			log.Printf("chess: next game for cohort %d: %v", g.CohortNumber, err)
+		}
 	}
 	return nil
 }
@@ -333,8 +343,21 @@ func (s *Service) Move(ctx context.Context, userID, uci string) error {
 	return s.play(ctx, g, uci, userID, false)
 }
 
+// retry reruns a read-modify-write that lost a race with another write to the game.
+func retry(f func() error) error {
+	err := f()
+	for i := 0; i < 3 && errors.Is(err, ErrConflict); i++ {
+		err = f()
+	}
+	return err
+}
+
 // Propose records (or replaces) a teammate's suggested move for the side to move.
 func (s *Service) Propose(ctx context.Context, userID, uci, note string) error {
+	return retry(func() error { return s.propose(ctx, userID, uci, note) })
+}
+
+func (s *Service) propose(ctx context.Context, userID, uci, note string) error {
 	_, g, err := s.gameFor(ctx, userID)
 	if err != nil {
 		return err
@@ -365,6 +388,10 @@ func (s *Service) Propose(ctx context.Context, userID, uci, note string) error {
 
 // Vote toggles the caller's agreement with a proposal of their own side.
 func (s *Service) Vote(ctx context.Context, userID, proposalID string) error {
+	return retry(func() error { return s.vote(ctx, userID, proposalID) })
+}
+
+func (s *Service) vote(ctx context.Context, userID, proposalID string) error {
 	_, g, err := s.gameFor(ctx, userID)
 	if err != nil {
 		return err
@@ -383,7 +410,8 @@ func (s *Service) Vote(ctx context.Context, userID, proposalID string) error {
 		}
 		return s.save(ctx, g)
 	}
-	return ErrNoGame
+	// The proposal went with the last turn.
+	return errStale
 }
 
 func canUse(g *Game, p *Person, room string) bool {
@@ -428,7 +456,7 @@ func (s *Service) Post(ctx context.Context, userID, room, text string) (*Message
 func (s *Service) Tick(ctx context.Context) error {
 	for _, c := range s.cohorts() {
 		if _, err := s.Ensure(ctx, c); err != nil {
-			return err
+			log.Printf("chess: start game for cohort %d: %v", c, err)
 		}
 	}
 	games, err := s.store.AllActive(ctx)
@@ -438,18 +466,18 @@ func (s *Service) Tick(ctx context.Context) error {
 	now := s.now()
 	for i := range games {
 		g := &games[i]
-		if now.Before(g.Turn.Deadline) {
+		if now.Before(g.Turn.Deadline) || !s.live(g.CohortNumber) {
 			continue
 		}
 		if top := TopProposal(g.Proposals); top != nil {
 			if err := s.play(ctx, g, top.UCI, top.UserID, true); err != nil && !errors.Is(err, ErrConflict) {
-				return err
+				log.Printf("chess: cohort %d timeout move: %v", g.CohortNumber, err)
 			}
 			continue
 		}
 		s.pick(g, g.Turn.Side, now)
 		if err := s.save(ctx, g); err != nil && !errors.Is(err, ErrConflict) {
-			return err
+			log.Printf("chess: cohort %d re-pick: %v", g.CohortNumber, err)
 		}
 	}
 	return nil
@@ -537,7 +565,7 @@ func (s *Service) View(ctx context.Context, userID string) (*View, error) {
 		v.Teams[side] = tv
 	}
 	if me.Staff || (v.MySide != "" && v.MySide == g.Turn.Side) {
-		v.Proposals = g.Proposals
+		v.Proposals = append(v.Proposals, g.Proposals...)
 	}
 	return v, nil
 }
@@ -548,7 +576,9 @@ func (s *Service) Me(ctx context.Context, userID string) (enabled, myTurn bool) 
 	if err != nil || p == nil {
 		return false, false
 	}
-	on, _ := s.settings(p.Cohort)
+	if !s.live(p.Cohort) {
+		return false, false
+	}
 	g, err := s.store.Active(ctx, p.Cohort)
-	return on, err == nil && g != nil && g.Turn.PickedUserID == userID
+	return true, err == nil && g != nil && g.Turn.PickedUserID == userID
 }

@@ -19,10 +19,17 @@ func NewMongoStore(db *mongo.Database) *MongoStore {
 }
 
 func (m *MongoStore) EnsureIndexes(ctx context.Context) error {
+	oneActive := mongo.IndexModel{
+		Keys:    bson.D{{Key: "cohort_number", Value: 1}},
+		Options: options.Index().SetName("one_active_game").SetUnique(true).SetPartialFilterExpression(bson.M{"status": StatusActive}),
+	}
+	if _, err := m.games.Indexes().CreateOne(ctx, oneActive); err != nil {
+		return err
+	}
 	if _, err := m.games.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "cohort_number", Value: 1}, {Key: "status", Value: 1}}}); err != nil {
 		return err
 	}
-	_, err := m.messages.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "game_id", Value: 1}, {Key: "room", Value: 1}, {Key: "at", Value: 1}}})
+	_, err := m.messages.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "game_id", Value: 1}, {Key: "room", Value: 1}, {Key: "at", Value: 1}, {Key: "_id", Value: 1}}})
 	return err
 }
 
@@ -44,8 +51,12 @@ func (m *MongoStore) AllActive(ctx context.Context) ([]Game, error) {
 	return out, cur.All(ctx, &out)
 }
 
+// Insert returns ErrConflict when the cohort already has an active game.
 func (m *MongoStore) Insert(ctx context.Context, g *Game) error {
 	_, err := m.games.InsertOne(ctx, g)
+	if mongo.IsDuplicateKeyError(err) {
+		return ErrConflict
+	}
 	return err
 }
 
@@ -69,8 +80,9 @@ func (m *MongoStore) Messages(ctx context.Context, gameID, room, after string, l
 	if after != "" {
 		var cur Message
 		if err := m.messages.FindOne(ctx, bson.M{"_id": after, "game_id": gameID, "room": room}).Decode(&cur); err == nil {
-			filter["at"] = bson.M{"$gt": cur.At}
-			c, err := m.messages.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "at", Value: 1}}).SetLimit(int64(limit)))
+			// Messages in the same millisecond as the cursor are ordered by id.
+			filter["$or"] = bson.A{bson.M{"at": bson.M{"$gt": cur.At}}, bson.M{"at": cur.At, "_id": bson.M{"$gt": cur.ID}}}
+			c, err := m.messages.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "at", Value: 1}, {Key: "_id", Value: 1}}).SetLimit(int64(limit)))
 			if err != nil {
 				return nil, err
 			}
@@ -78,7 +90,7 @@ func (m *MongoStore) Messages(ctx context.Context, gameID, room, after string, l
 			return out, c.All(ctx, &out)
 		}
 	}
-	c, err := m.messages.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "at", Value: -1}}).SetLimit(int64(limit)))
+	c, err := m.messages.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "at", Value: -1}, {Key: "_id", Value: -1}}).SetLimit(int64(limit)))
 	if err != nil {
 		return nil, err
 	}
