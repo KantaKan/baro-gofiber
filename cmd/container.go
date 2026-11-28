@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"time"
+
 	"gofiber-baro/internal/service/calendar"
 	"gofiber-baro/internal/service/report"
 	"gofiber-baro/internal/service/slack"
@@ -14,6 +17,7 @@ import (
 	"gofiber-baro/internal/service/achievement"
 	"gofiber-baro/internal/service/attendance"
 	"gofiber-baro/internal/service/character"
+	"gofiber-baro/internal/service/chess"
 	cohortService "gofiber-baro/internal/service/cohort"
 	"gofiber-baro/internal/service/cup"
 	"gofiber-baro/internal/service/giftbox"
@@ -125,6 +129,9 @@ type Container struct {
 	ShowcaseHandler     *handler.ShowcaseHandler
 	GodEventHandler     *handler.GodEventHandler
 	StartupStoryHandler *handler.StartupStoryHandler
+	ChessStore          *chess.MongoStore
+	ChessService        *chess.Service
+	ChessHandler        *handler.ChessHandler
 
 	AuditMiddleware fiber.Handler
 }
@@ -257,6 +264,19 @@ func (c *Container) initHandlers() {
 	c.ShowcaseHandler = handler.NewShowcaseHandler(c.ShowcaseService)
 	c.GodEventHandler = handler.NewGodEventHandler(c.GodEventService)
 	c.StartupStoryHandler = handler.NewStartupStoryHandler(c.StartupStoryService)
+	c.ChessStore = chess.NewMongoStore(c.DB)
+	c.ChessService = chess.NewService(c.ChessStore, handler.ChessPeople{Users: c.UserService}, func(cohort int) (bool, string) {
+		s, err := c.CohortService.Get(cohort)
+		if err != nil {
+			return false, ""
+		}
+		return s.ChessEnabled, s.GraduatedOn
+	}, func() []int {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return c.ChessStore.EnabledCohorts(ctx)
+	})
+	c.ChessHandler = handler.NewChessHandler(c.ChessService)
 
 	c.AuditMiddleware = middleware.AuditMiddleware(c.AuditLogRepo)
 }

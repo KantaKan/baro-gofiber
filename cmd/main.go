@@ -130,6 +130,12 @@ func main() {
 		log.Fatal("Failed to ensure Startup Story indexes:", err)
 	}
 	cancelIndexes()
+	indexCtx, cancelIndexes = context.WithTimeout(context.Background(), 10*time.Second)
+	if err := container.ChessStore.EnsureIndexes(indexCtx); err != nil {
+		cancelIndexes()
+		log.Fatal("Failed to ensure chess indexes:", err)
+	}
+	cancelIndexes()
 
 	go jobs.RunCohortLockJob(context.Background(), config.DB, time.Hour)
 	go jobs.RunWeeklyReportJob(context.Background(), reportJob{slack: container.SlackService, rep: container.ReportService}, time.Minute)
@@ -156,6 +162,11 @@ func main() {
 			if err := cupRunner.RunDue(now); err != nil {
 				log.Printf("cup runner: %v", err)
 			}
+			chessCtx, cancelChess := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := container.ChessService.Tick(chessCtx); err != nil {
+				log.Printf("chess tick: %v", err)
+			}
+			cancelChess()
 			if container.StatsKeeper.DueForNightlyRebuild(now) {
 				go func() {
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -263,6 +274,7 @@ func main() {
 		Showcase:     container.ShowcaseHandler,
 		GodEvent:     container.GodEventHandler,
 		StartupStory: container.StartupStoryHandler,
+		Chess:        container.ChessHandler,
 		Audit:        container.AuditMiddleware,
 		Latency:      latency,
 	}

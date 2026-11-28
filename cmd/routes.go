@@ -41,6 +41,7 @@ type Handlers struct {
 	Showcase     *handler.ShowcaseHandler
 	GodEvent     *handler.GodEventHandler
 	StartupStory *handler.StartupStoryHandler
+	Chess        *handler.ChessHandler
 	Audit        fiber.Handler
 }
 
@@ -171,6 +172,15 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	startup.Post("/runs/active/office", h.StartupStory.MoveOffice)
 	startup.Delete("/runs/active/staff/:id", h.StartupStory.Dismiss)
 
+	chessGroup := app.Group("/chess", middleware.AuthMiddleware)
+	chessGroup.Get("/current", h.Chess.Current)
+	chessGroup.Get("/me", h.Chess.Me)
+	chessGroup.Post("/move", h.Chess.Move)
+	chessGroup.Post("/proposals", h.Chess.Propose)
+	chessGroup.Post("/proposals/:id/vote", h.Chess.Vote)
+	chessGroup.Get("/messages", h.Chess.Messages)
+	chessGroup.Post("/messages", h.Chess.Post)
+
 	adminLimiter := limiter.New(limiter.Config{
 		Max:        300,
 		Expiration: 1 * time.Minute,
@@ -282,6 +292,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	admin.Put("/cohorts/:cohort/settings", h.Cohort.UpdateSettings)
 	admin.Put("/cohorts/:cohort/groups", h.CohortAdmin.MoveGroups)
 	admin.Post("/cohorts", h.CohortAdmin.Create)
+	admin.Post("/chess/:cohort/end", h.Chess.End)
 
 	admin.Post("/cup/awards", h.Cup.Award)
 	admin.Delete("/cup/awards/:id", h.Cup.DeleteAward)
