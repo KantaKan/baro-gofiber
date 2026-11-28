@@ -93,6 +93,7 @@ func setupRoutes(app *fiber.App, h Handlers) {
 	protected.Get("/genmate-garden", h.User.GetGenmateGarden)
 	protected.Get("/:id", h.User.GetUserByID)
 	protected.Put("/me/password", passwordLimiter, h.User.ChangeMyPassword)
+	protected.Put("/me/reflections/:reflectionId", h.User.EditMyReflection)
 	protected.Put("/:id", h.User.UpdateUser)
 	protected.Post("/:id/reflections", h.User.CreateReflection)
 	protected.Get("/:id/reflections", h.User.GetUserReflections)

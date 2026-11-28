@@ -510,6 +510,24 @@ func (r *userRepository) UpdateReflectionFeedback(ctx interface{}, userID, refle
 	return nil
 }
 
+// EditOwnReflection replaces a reflection's content only while it has no TA reply, so a reply
+// that lands between the check and the write is never left answering different text.
+func (r *userRepository) EditOwnReflection(ctx interface{}, userID, reflectionID primitive.ObjectID, content domain.ReflectionContent) error {
+	c := ctx.(context.Context)
+	filter := bson.M{
+		"_id":         userID,
+		"reflections": bson.M{"$elemMatch": bson.M{"_id": reflectionID, "admin_feedback": bson.M{"$in": bson.A{nil, ""}}}},
+	}
+	res, err := r.collection.UpdateOne(c, filter, bson.M{"$set": bson.M{"reflections.$.reflection": content}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return errors.New("reflection was replied to or not found")
+	}
+	return nil
+}
+
 func (r *userRepository) buildFilter(filter domain.UserFilter) bson.M {
 	bsonFilter := bson.M{}
 

@@ -1205,6 +1205,37 @@ func (h *UserHandler) authenticateUser(email, password string) (string, string, 
 	return token, user.Role, user.ID.Hex(), user.MustChangePassword, nil
 }
 
+// EditMyReflection changes today's reflection while no TA has replied to it.
+// @Summary  Edit my reflection  @Tags users  @Security BearerAuth  @Router /users/me/reflections/{reflectionId} [put]
+func (h *UserHandler) EditMyReflection(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	uid, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid user ID")
+	}
+	rid, err := primitive.ObjectIDFromHex(c.Params("reflectionId"))
+	if err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid reflection ID")
+	}
+	var body domain.ReflectionContent
+	if err := c.BodyParser(&body); err != nil || attendance.ZoneOf(body.Barometer) == "" {
+		return utils.SendError(c, fiber.StatusBadRequest, "Pick a zone and fill in the reflection")
+	}
+	switch err := h.userService.EditReflection(uid, rid, body); {
+	case err == nil:
+		return utils.SendResponse(c, fiber.StatusOK, "Reflection updated", nil)
+	case errors.Is(err, user.ErrReflectionNotFound):
+		return utils.SendError(c, fiber.StatusNotFound, err.Error())
+	case errors.Is(err, user.ErrReflectionNotToday), errors.Is(err, user.ErrReflectionReplied):
+		return utils.SendError(c, fiber.StatusConflict, err.Error())
+	default:
+		return utils.SendError(c, fiber.StatusConflict, "This reflection can't be edited now")
+	}
+}
+
 // ChangeMyPassword lets a signed-in user replace their password (and clears a reset's "must change").
 // @Summary  Change my password  @Tags users  @Security BearerAuth  @Router /users/me/password [put]
 func (h *UserHandler) ChangeMyPassword(c *fiber.Ctx) error {

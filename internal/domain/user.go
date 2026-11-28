@@ -318,6 +318,7 @@ type UserRepository interface {
 	RescueCareEnergy(ctx interface{}, giverID, recipientID primitive.ObjectID, dateStr, note string) error
 	UpdateReflectionFeedback(ctx interface{}, userID, reflectionID primitive.ObjectID, feedback string, author FeedbackAuthor) error
 	CreateReflection(ctx interface{}, userID primitive.ObjectID, reflection Reflection) error
+	EditOwnReflection(ctx interface{}, userID, reflectionID primitive.ObjectID, content ReflectionContent) error
 	AddProfileComment(ctx interface{}, userID primitive.ObjectID, comment ProfileComment) error
 	DeleteProfileComment(ctx interface{}, userID primitive.ObjectID, commentID primitive.ObjectID) error
 	AddProfileReaction(ctx interface{}, userID primitive.ObjectID, reaction Reaction) error
