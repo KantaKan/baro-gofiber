@@ -73,6 +73,7 @@ var writes = []struct {
 	{"/plant", CapGifts},
 	{"/god-events", CapGifts},
 	{"/showcase-lawn", CapGifts},
+	{"/reset-password", CapCare},
 	{"/reflections/", CapCare},
 	{"/notes", CapCare},
 	{"/support", CapCare},

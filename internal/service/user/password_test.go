@@ -51,3 +51,10 @@ func TestCheckNewPassword(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckNewPasswordTooLong(t *testing.T) {
+	hash, _ := utils.HashPassword("oldpass12")
+	if err := CheckNewPassword(hash, "oldpass12", strings.Repeat("a", 73)); !errors.Is(err, ErrTooLong) {
+		t.Errorf("got %v, want ErrTooLong", err)
+	}
+}

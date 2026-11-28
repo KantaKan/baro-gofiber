@@ -377,7 +377,14 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 	}
 	body, ok = cleanUserUpdate(body)
 	if !ok {
-		return utils.SendError(c, fiber.StatusBadRequest, "Roles and team access are changed on the Team page, not here")
+		return utils.SendError(c, fiber.StatusBadRequest, "Roles, team access and passwords are not changed here")
+	}
+	target, terr := h.userService.GetUserByID(id)
+	if terr != nil || target == nil {
+		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+	if !mayEditTarget(caller, target) {
+		return utils.SendError(c, fiber.StatusForbidden, "Only the owner can edit staff accounts")
 	}
 
 	if err := h.userService.UpdateUser(id, body); err != nil {
@@ -1150,6 +1157,17 @@ func mayEditUsers(u *domain.User) bool {
 	return staff.Can(staff.Effective(u.Role, u.StaffRole), staff.CapCohortAdmin)
 }
 
+// mayEditTarget keeps staff accounts (email included) out of reach of everyone but the owner.
+func mayEditTarget(caller, target *domain.User) bool {
+	if caller == nil || target == nil {
+		return false
+	}
+	if target.Role == "admin" {
+		return staff.Effective(caller.Role, caller.StaffRole) == staff.Owner
+	}
+	return true
+}
+
 // cleanUserUpdate refuses an update that touches role or team fields (or the id) and an empty one.
 func cleanUserUpdate(body map[string]interface{}) (map[string]interface{}, bool) {
 	if len(body) == 0 {
@@ -1157,7 +1175,7 @@ func cleanUserUpdate(body map[string]interface{}) (map[string]interface{}, bool)
 	}
 	for k := range body {
 		switch strings.ToLower(k) {
-		case "role", "staff_role", "staff_cohorts", "staff_groups", "_id", "id":
+		case "role", "staff_role", "staff_cohorts", "staff_groups", "_id", "id", "password", "must_change_password", "deleted":
 			return nil, false
 		}
 	}

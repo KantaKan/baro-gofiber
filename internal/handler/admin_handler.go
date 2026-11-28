@@ -578,5 +578,6 @@ func (h *AdminHandler) ResetPassword(c *fiber.Ctx) error {
 	if err := h.userService.UpdateUser(id, bson.M{"password": hash, "must_change_password": true}); err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Could not reset the password")
 	}
+	c.Set(fiber.HeaderCacheControl, "no-store")
 	return utils.SendResponse(c, fiber.StatusOK, "Password reset", fiber.Map{"temporary_password": temp})
 }

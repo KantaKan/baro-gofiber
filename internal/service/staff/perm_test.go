@@ -115,3 +115,9 @@ func TestCohortScope(t *testing.T) {
 		t.Error("scope")
 	}
 }
+
+func TestTAsResetLearnerPasswords(t *testing.T) {
+	if c := RequiredCap("POST", "/api/admin/users/abc/reset-password"); c != CapCare {
+		t.Errorf("reset-password needs %q, want care", c)
+	}
+}

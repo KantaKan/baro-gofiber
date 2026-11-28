@@ -15,6 +15,7 @@ var (
 	ErrNotLearner   = errors.New("only learner passwords can be reset here")
 	ErrWrongCurrent = errors.New("current password is wrong")
 	ErrTooShort     = errors.New("new password must be at least 8 characters")
+	ErrTooLong      = errors.New("new password must be at most 72 bytes")
 	ErrSamePassword = errors.New("new password must be different from the current one")
 )
 
@@ -47,6 +48,9 @@ func CheckNewPassword(hash, current, next string) error {
 	}
 	if utf8.RuneCountInString(next) < 8 {
 		return ErrTooShort
+	}
+	if len(next) > 72 {
+		return ErrTooLong
 	}
 	if next == current {
 		return ErrSamePassword

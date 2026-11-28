@@ -31,3 +31,23 @@ func TestMayEditUsers(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanUserUpdateRefusesCredentials(t *testing.T) {
+	for _, k := range []string{"password", "must_change_password", "Password", "deleted"} {
+		if _, ok := cleanUserUpdate(map[string]interface{}{k: "x", "first_name": "x"}); ok {
+			t.Errorf("%q must be refused", k)
+		}
+	}
+}
+
+func TestMayEditTarget(t *testing.T) {
+	owner := &domain.User{Role: "admin"}
+	admin := &domain.User{Role: "admin", StaffRole: "admin"}
+	learner := &domain.User{Role: "learner"}
+	if !mayEditTarget(admin, learner) || !mayEditTarget(owner, admin) {
+		t.Error("admins edit learners; the owner edits staff")
+	}
+	if mayEditTarget(admin, owner) || mayEditTarget(admin, &domain.User{Role: "admin", StaffRole: "ta"}) {
+		t.Error("an admin must not edit staff accounts")
+	}
+}
