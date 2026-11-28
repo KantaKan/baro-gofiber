@@ -92,16 +92,17 @@ func (h *UserHandler) LoginUser(c *fiber.Ctx) error {
 		return utils.SendError(c, fiber.StatusBadRequest, "Email and password are required")
 	}
 
-	token, role, userId, err := h.authenticateUser(loginData.Email, loginData.Password)
+	token, role, userId, mustChange, err := h.authenticateUser(loginData.Email, loginData.Password)
 	if err != nil {
 		return utils.SendError(c, fiber.StatusUnauthorized, "Invalid credentials")
 	}
 	middleware.SetSession(c, token)
 
 	return utils.SendResponse(c, fiber.StatusOK, "Login successful", map[string]interface{}{
-		"token":  token,
-		"role":   role,
-		"userId": userId,
+		"token":                token,
+		"role":                 role,
+		"userId":               userId,
+		"must_change_password": mustChange,
 	})
 }
 
@@ -115,9 +116,14 @@ func (h *UserHandler) VerifyToken(c *fiber.Ctx) error {
 	if t, ok := c.Locals("token").(string); ok && t != "" {
 		middleware.SetSession(c, t)
 	}
-	return utils.SendResponse(c, fiber.StatusOK, "Token is valid", map[string]string{
-		"role":   claims.Role,
-		"userId": claims.UserID,
+	mustChange := false
+	if u, err := h.userService.GetUserByIDWithFields(claims.UserID, bson.M{"must_change_password": 1}); err == nil && u != nil {
+		mustChange = u.MustChangePassword
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Token is valid", fiber.Map{
+		"role":                 claims.Role,
+		"userId":               claims.UserID,
+		"must_change_password": mustChange,
 	})
 }
 
@@ -1163,22 +1169,53 @@ func canLogIn(u *domain.User, password string) bool {
 	return u.Role != "disabled" && utils.CheckPasswordHash(password, u.Password)
 }
 
-func (h *UserHandler) authenticateUser(email, password string) (string, string, string, error) {
+func (h *UserHandler) authenticateUser(email, password string) (string, string, string, bool, error) {
 	user, err := h.userService.GetUserByEmail(email)
 	if err != nil {
-		return "", "", "", errors.New("invalid credentials")
+		return "", "", "", false, errors.New("invalid credentials")
 	}
 
 	if !canLogIn(user, password) {
-		return "", "", "", errors.New("invalid credentials")
+		return "", "", "", false, errors.New("invalid credentials")
 	}
 
 	token, err := utils.GenerateJWT(user.ID, user.Role, user.CohortNumber, "")
 	if err != nil {
-		return "", "", "", errors.New("could not generate token")
+		return "", "", "", false, errors.New("could not generate token")
 	}
 
-	return token, user.Role, user.ID.Hex(), nil
+	return token, user.Role, user.ID.Hex(), user.MustChangePassword, nil
+}
+
+// ChangeMyPassword lets a signed-in user replace their password (and clears a reset's "must change").
+// @Summary  Change my password  @Tags users  @Security BearerAuth  @Router /users/me/password [put]
+func (h *UserHandler) ChangeMyPassword(c *fiber.Ctx) error {
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return utils.SendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+	var body struct {
+		Current string `json:"current"`
+		Next    string `json:"next"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+	u, err := h.userService.GetUserByID(userID)
+	if err != nil || u == nil {
+		return utils.SendError(c, fiber.StatusNotFound, "User not found")
+	}
+	if err := user.CheckNewPassword(u.Password, body.Current, body.Next); err != nil {
+		return utils.SendError(c, fiber.StatusBadRequest, err.Error())
+	}
+	hash, err := utils.HashPassword(body.Next)
+	if err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Could not save the password")
+	}
+	if err := h.userService.UpdateUser(userID, bson.M{"password": hash, "must_change_password": false}); err != nil {
+		return utils.SendError(c, fiber.StatusInternalServerError, "Could not save the password")
+	}
+	return utils.SendResponse(c, fiber.StatusOK, "Password changed", nil)
 }
 
 func (h *UserHandler) createReflection(userID primitive.ObjectID, reflection domain.Reflection) (*domain.Reflection, error) {

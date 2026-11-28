@@ -111,15 +111,16 @@ type ProfileComment struct {
 }
 
 type User struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
-	JSDNumber    string             `bson:"jsd_number" json:"jsd_number"`
-	FirstName    string             `bson:"first_name" json:"first_name"`
-	LastName     string             `bson:"last_name" json:"last_name"`
-	Email        string             `bson:"email" json:"email"`
-	CohortNumber int                `bson:"cohort_number" json:"cohort_number"`
-	Reflections  []Reflection       `bson:"reflections" json:"reflections"`
-	Password     string             `bson:"password,omitempty" json:"password,omitempty"`
-	Role         string             `bson:"role" json:"role"`
+	ID                 primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
+	JSDNumber          string             `bson:"jsd_number" json:"jsd_number"`
+	FirstName          string             `bson:"first_name" json:"first_name"`
+	LastName           string             `bson:"last_name" json:"last_name"`
+	Email              string             `bson:"email" json:"email"`
+	CohortNumber       int                `bson:"cohort_number" json:"cohort_number"`
+	Reflections        []Reflection       `bson:"reflections" json:"reflections"`
+	Password           string             `bson:"password,omitempty" json:"password,omitempty"`
+	MustChangePassword bool               `bson:"must_change_password,omitempty" json:"must_change_password,omitempty"`
+	Role               string             `bson:"role" json:"role"`
 	// Staff only (role "admin"): owner | admin | ta | viewer; empty = owner (accounts from before roles).
 	StaffRole          string               `bson:"staff_role,omitempty" json:"staff_role,omitempty"`
 	StaffCohorts       []int                `bson:"staff_cohorts,omitempty" json:"staff_cohorts,omitempty"`
