@@ -304,3 +304,16 @@ func TestJourneyForACohortThatGraduatedLongAgo(t *testing.T) {
 		t.Errorf("a cohort that graduated in 2024 must keep its class days: %s", body)
 	}
 }
+
+func TestClassNightsCountTodayFrom1630(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h := NewWellbeingViewsHandler(wbUsersFake{}, avRecords{}, avStats{}, avHolidays{}, careReadFake{})
+	h.now = func() time.Time { return time.Date(2026, 11, 26, 16, 35, 0, 0, loc) }
+	if got := h.classNights(1); len(got) != 1 || got[0] != "2026-11-26" {
+		t.Errorf("at 16:35 tonight's reflections are open, so last night is today: %v", got)
+	}
+	h.now = func() time.Time { return time.Date(2026, 11, 26, 16, 25, 0, 0, loc) }
+	if got := h.classNights(1); len(got) != 1 || got[0] != "2026-11-25" {
+		t.Errorf("before 16:30 last night is yesterday: %v", got)
+	}
+}
