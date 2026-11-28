@@ -287,3 +287,20 @@ func TestJourneyUnlocksAfterGraduation(t *testing.T) {
 		t.Errorf("admins have no journey, got %d", code)
 	}
 }
+
+func TestJourneyForACohortThatGraduatedLongAgo(t *testing.T) {
+	u := domain.User{ID: primitive.NewObjectID(), FirstName: "Old", CohortNumber: 5, Role: "learner",
+		Reflections: []domain.Reflection{{ID: primitive.NewObjectID(), Day: "2024-03-04", ReflectionData: domain.ReflectionContent{Barometer: "Comfort Zone"}}}}
+	loc, _ := time.LoadLocation("Asia/Bangkok")
+	h := NewWellbeingViewsHandler(wbUsersFake{[]domain.User{u}}, avRecords{}, avStats{}, avHolidays{}, careReadFake{})
+	h.now = func() time.Time { return time.Date(2026, 12, 20, 10, 0, 0, 0, loc) }
+	h.SetCohortSettings(func(int) (domain.CohortSettings, error) {
+		return domain.CohortSettings{StartDate: "2024-03-04", GraduatedOn: "2024-03-15"}, nil
+	})
+	app := fiber.New()
+	app.Get("/j", func(c *fiber.Ctx) error { c.Locals("userID", u.ID.Hex()); return c.Next() }, h.Journey)
+	_, body := send(app, "GET", "/j", "")
+	if !strings.Contains(body, `"class_days":10`) || !strings.Contains(body, `"first_day":"2024-03-04"`) {
+		t.Errorf("a cohort that graduated in 2024 must keep its class days: %s", body)
+	}
+}

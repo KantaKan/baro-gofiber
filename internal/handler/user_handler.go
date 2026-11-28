@@ -1328,7 +1328,7 @@ func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
 		set["tour_seen_at"] = time.Now()
 	}
 	if body.JourneyQuote != nil {
-		if !primitive.IsValidObjectID(*body.JourneyQuote) {
+		if *body.JourneyQuote != "" && !primitive.IsValidObjectID(*body.JourneyQuote) {
 			return utils.SendError(c, fiber.StatusBadRequest, "Invalid reflection")
 		}
 		set["journey_quote_id"] = *body.JourneyQuote

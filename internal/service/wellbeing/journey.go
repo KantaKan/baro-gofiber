@@ -27,10 +27,10 @@ type GridDay struct {
 }
 
 type HardestWeek struct {
-	Number int      `json:"number"`
-	From   string   `json:"from"`
-	To     string   `json:"to"`
-	Zones  []string `json:"zones"`
+	Number int       `json:"number"`
+	From   string    `json:"from"`
+	To     string    `json:"to"`
+	Zones  []*string `json:"zones"` // nil: not written; "": written, zone unknown
 }
 
 type DarkestNight struct {
@@ -163,7 +163,11 @@ func BuildJourney(in JourneyInput) Journey {
 		days := week[weeks[best]]
 		hw := &HardestWeek{Number: best + 1, From: days[0], To: days[len(days)-1]}
 		for _, d := range days {
-			hw.Zones = append(hw.Zones, zoneOf[d])
+			var z *string
+			if v, ok := zoneOf[d]; ok {
+				z = &v
+			}
+			hw.Zones = append(hw.Zones, z)
 		}
 		j.HardestWeek = hw
 		darkest = firstWhere(days, zoneOf, func(z string) bool { return z == "panic" })
@@ -183,7 +187,7 @@ func BuildJourney(in JourneyInput) Journey {
 		if text == "" {
 			text = joinText(r)
 		}
-		j.DarkestNight = &DarkestNight{Date: darkest, Zone: zoneOf[darkest], Text: text, Reply: clean(r.AdminFeedback), ReplyName: r.AdminFeedbackName}
+		j.DarkestNight = &DarkestNight{Date: darkest, Zone: zoneOf[darkest], Text: text, Reply: clean(r.AdminFeedback), ReplyName: clean(r.AdminFeedbackName)}
 	}
 
 	from := 0
@@ -192,10 +196,6 @@ func BuildJourney(in JourneyInput) Journey {
 	}
 	if run := longestRun(in.ClassDays[min(from, len(in.ClassDays)):], byDay); run >= 2 {
 		j.Comeback = &Comeback{Length: run, AfterDarkest: darkest != ""}
-	} else if darkest != "" {
-		if run := longestRun(in.ClassDays, byDay); run >= 2 {
-			j.Comeback = &Comeback{Length: run}
-		}
 	}
 	return j
 }
@@ -222,6 +222,27 @@ func longestRun(days []string, byDay map[string]domain.Reflection) int {
 	return best
 }
 
+// quoteFits is the longest a default quote may be and still read well on a 9:16 slide.
+const quoteFits = 140
+
+// better prefers the longest answer that fits a slide, and among ones that don't, the shortest.
+func better(t string, cur *Quote) bool {
+	if cur == nil {
+		return true
+	}
+	n, c := len([]rune(t)), len([]rune(cur.Text))
+	switch {
+	case n <= quoteFits && c <= quoteFits:
+		return n > c
+	case n <= quoteFits:
+		return true
+	case c <= quoteFits:
+		return false
+	default:
+		return n < c
+	}
+}
+
 // quotes is the chosen sentence (or the longest "went well" answer) and up to 30 options, newest first.
 func quotes(rs []domain.Reflection, chosen string) (*Quote, []Quote) {
 	var opts []Quote
@@ -235,7 +256,7 @@ func quotes(rs []domain.Reflection, chosen string) (*Quote, []Quote) {
 			}
 		}
 		for _, t := range []string{d.TechSessions.Happy, d.NonTechSessions.Happy} {
-			if t = clean(t); t != "" && (longest == nil || len([]rune(t)) > len([]rune(longest.Text))) {
+			if t = clean(t); t != "" && better(t, longest) {
 				longest = &Quote{ReflectionID: r.ID.Hex(), Date: dayOf(r), Text: t}
 			}
 		}

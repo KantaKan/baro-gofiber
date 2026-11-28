@@ -1,6 +1,7 @@
 package wellbeing
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +41,9 @@ func TestJourneyFullStory(t *testing.T) {
 	}
 	if j.HardestWeek == nil || j.HardestWeek.Number != 2 || j.HardestWeek.From != "2026-11-09" {
 		t.Errorf("hardest %+v", j.HardestWeek)
+	}
+	if z := j.HardestWeek.Zones; len(z) != 5 || z[0] == nil || *z[0] != "stretch-overwhelmed" {
+		t.Errorf("hardest week zones %v", z)
 	}
 	if j.DarkestNight == nil || j.DarkestNight.Date != "2026-11-11" || j.DarkestNight.Reply != "pair tomorrow" || j.DarkestNight.ReplyName != "Nan" {
 		t.Errorf("darkest %+v", j.DarkestNight)
@@ -115,5 +119,36 @@ func TestJourneyChosenQuote(t *testing.T) {
 	}
 	if q := BuildJourney(JourneyInput{ClassDays: twoWeeks, Reflections: rs, QuoteID: blank.ID.Hex()}).Quote; q == nil || q.Text != "a much longer went-well answer" {
 		t.Errorf("a chosen quote with no text falls back: %+v", q)
+	}
+}
+
+func TestJourneyHardestWeekTellsUnwrittenFromUnknown(t *testing.T) {
+	var rs []domain.Reflection
+	for _, d := range []string{"2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"} {
+		rs = append(rs, jrefl(d, "comfort", "ok", ""))
+	}
+	rs = append(rs, jrefl("2026-11-09", "over", "", "x"), jrefl("2026-11-10", "old", "", "y"))
+	w := BuildJourney(JourneyInput{ClassDays: twoWeeks, Reflections: rs}).HardestWeek
+	if w == nil || w.Zones[1] == nil || *w.Zones[1] != "" || w.Zones[2] != nil {
+		t.Errorf("unknown zone is \"\", unwritten is nil: %+v", w)
+	}
+}
+
+func TestJourneyComebackSkippedWhenNothingFollowsTheDarkestNight(t *testing.T) {
+	var rs []domain.Reflection
+	for _, d := range twoWeeks[:9] {
+		rs = append(rs, jrefl(d, "comfort", "ok", ""))
+	}
+	rs[8] = jrefl(twoWeeks[8], "panic", "", "worst")
+	if c := BuildJourney(JourneyInput{ClassDays: twoWeeks, Reflections: rs}).Comeback; c != nil {
+		t.Errorf("only one night after the darkest: no comeback slide, got %+v", c)
+	}
+}
+
+func TestJourneyPrefersAShortEnoughQuote(t *testing.T) {
+	long := strings.Repeat("ยาวมาก ", 40)
+	rs := []domain.Reflection{jrefl("2026-11-02", "comfort", long, ""), jrefl("2026-11-03", "comfort", "a good shareable sentence", "")}
+	if q := BuildJourney(JourneyInput{ClassDays: twoWeeks, Reflections: rs}).Quote; q == nil || q.Text != "a good shareable sentence" {
+		t.Errorf("default quote should fit a slide: %+v", q)
 	}
 }

@@ -260,7 +260,7 @@ type holidayRange interface {
 // courseDays lists class days from the course start up to today. A missing, malformed or
 // future start falls back to the learner's first record or reflection; the walk is capped
 // at 14 months and holidays come from one range lookup when the checker supports it.
-func (h *WellbeingViewsHandler) courseDays(start string, recs []domain.AttendanceRecord, refls []domain.Reflection) []string {
+func (h *WellbeingViewsHandler) courseDays(start, end string, recs []domain.AttendanceRecord, refls []domain.Reflection) []string {
 	earliest := ""
 	for _, r := range recs {
 		if earliest == "" || r.Date < earliest {
@@ -280,11 +280,14 @@ func (h *WellbeingViewsHandler) courseDays(start string, recs []domain.Attendanc
 	if err != nil {
 		return nil
 	}
-	now := h.now()
-	if floor := now.AddDate(0, -14, 0); first.Before(floor) {
+	last := h.now()
+	if t, err := utils.ParseDate(end); err == nil && t.Before(last) {
+		last = t
+	}
+	if floor := last.AddDate(0, -14, 0); first.Before(floor) {
 		first = floor
 	}
-	today := utils.FormatDate(now)
+	today := utils.FormatDate(last)
 	isClass := func(d time.Time) bool {
 		ok, err := attendance.IsClassDay(d, h.holidays)
 		return err == nil && ok
@@ -488,7 +491,7 @@ func (h *WellbeingViewsHandler) Overview(c *fiber.Ctx) error {
 		"reasons":           reasons,
 		"notes":             notes,
 		"support":           items,
-		"days":              overviewDays(h.courseDays(st.StartDate, recs, u.Reflections), recs, u.Reflections),
+		"days":              overviewDays(h.courseDays(st.StartDate, "", recs, u.Reflections), recs, u.Reflections),
 		"course":            fiber.Map{"week_number": week, "total_weeks": total, "day_number": dayN, "course_days": st.CourseDays},
 		"best_streak":       attendance.LongestOnTimeStreak(days),
 		"cohort_attendance": cohortRate,
@@ -520,12 +523,7 @@ func (h *WellbeingViewsHandler) Journey(c *fiber.Ctx) error {
 	if err != nil {
 		return utils.SendError(c, fiber.StatusInternalServerError, "Error loading attendance")
 	}
-	var days []string
-	for _, d := range h.courseDays(st.StartDate, recs, u.Reflections) {
-		if d <= st.GraduatedOn {
-			days = append(days, d)
-		}
-	}
+	days := h.courseDays(st.StartDate, st.GraduatedOn, recs, u.Reflections)
 	return utils.SendResponse(c, fiber.StatusOK, "Journey", wellbeing.BuildJourney(wellbeing.JourneyInput{
 		Name: u.FirstName, Cohort: strconv.Itoa(u.CohortNumber), ClassDays: days,
 		Reflections: u.Reflections, Records: recs, Badges: len(u.Badges), QuoteID: u.JourneyQuoteID,
