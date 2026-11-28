@@ -61,8 +61,9 @@ type ChessHandler struct{ svc *chess.Service }
 
 func NewChessHandler(svc *chess.Service) *ChessHandler { return &ChessHandler{svc: svc} }
 
-func chessCtx() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), 10*time.Second)
+func chessCtx(c *fiber.Ctx) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	return chess.WithCohort(ctx, c.QueryInt("cohort")), cancel
 }
 
 func chessError(c *fiber.Ctx, err error) error {
@@ -83,7 +84,7 @@ func uid(c *fiber.Ctx) string { s, _ := c.Locals("userID").(string); return s }
 
 // @Summary  Current team chess game  @Tags chess  @Security BearerAuth  @Router /chess/current [get]
 func (h *ChessHandler) Current(c *fiber.Ctx) error {
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	v, err := h.svc.View(ctx, uid(c))
 	if err != nil {
@@ -94,7 +95,7 @@ func (h *ChessHandler) Current(c *fiber.Ctx) error {
 
 // @Summary  Is it my turn  @Tags chess  @Security BearerAuth  @Router /chess/me [get]
 func (h *ChessHandler) Me(c *fiber.Ctx) error {
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	on, mine := h.svc.Me(ctx, uid(c))
 	return utils.SendResponse(c, fiber.StatusOK, "Chess", fiber.Map{"enabled": on, "my_turn": mine})
@@ -108,7 +109,7 @@ func (h *ChessHandler) Move(c *fiber.Ctx) error {
 	if err := c.BodyParser(&b); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	if err := h.svc.Move(ctx, uid(c), b.UCI); err != nil {
 		return chessError(c, err)
@@ -125,7 +126,7 @@ func (h *ChessHandler) Propose(c *fiber.Ctx) error {
 	if err := c.BodyParser(&b); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	if err := h.svc.Propose(ctx, uid(c), b.UCI, b.Note); err != nil {
 		return chessError(c, err)
@@ -135,7 +136,7 @@ func (h *ChessHandler) Propose(c *fiber.Ctx) error {
 
 // @Summary  Agree or un-agree with a proposal  @Tags chess  @Security BearerAuth  @Router /chess/proposals/{id}/vote [post]
 func (h *ChessHandler) Vote(c *fiber.Ctx) error {
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	if err := h.svc.Vote(ctx, uid(c), c.Params("id")); err != nil {
 		return chessError(c, err)
@@ -145,7 +146,7 @@ func (h *ChessHandler) Vote(c *fiber.Ctx) error {
 
 // @Summary  Room messages  @Tags chess  @Security BearerAuth  @Router /chess/messages [get]
 func (h *ChessHandler) Messages(c *fiber.Ctx) error {
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	ms, err := h.svc.Messages(ctx, uid(c), c.Query("room"), c.Query("after"))
 	if err != nil {
@@ -163,7 +164,7 @@ func (h *ChessHandler) Post(c *fiber.Ctx) error {
 	if err := c.BodyParser(&b); err != nil {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	m, err := h.svc.Post(ctx, uid(c), b.Room, b.Text)
 	if err != nil {
@@ -178,7 +179,7 @@ func (h *ChessHandler) End(c *fiber.Ctx) error {
 	if err != nil || n <= 0 {
 		return utils.SendError(c, fiber.StatusBadRequest, "Invalid cohort")
 	}
-	ctx, cancel := chessCtx()
+	ctx, cancel := chessCtx(c)
 	defer cancel()
 	if err := h.svc.End(ctx, n); err != nil {
 		return chessError(c, err)

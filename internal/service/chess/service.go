@@ -296,10 +296,20 @@ func (s *Service) announce(ctx context.Context, g *Game, text string) {
 	_ = s.store.AddMessage(ctx, Message{ID: primitive.NewObjectID().Hex(), GameID: g.ID.Hex(), Room: RoomAll, Text: text, System: true, At: s.now()})
 }
 
+type cohortKey struct{}
+
+// WithCohort lets staff look at another cohort's game; learners always get their own.
+func WithCohort(ctx context.Context, cohort int) context.Context {
+	return context.WithValue(ctx, cohortKey{}, cohort)
+}
+
 func (s *Service) gameFor(ctx context.Context, userID string) (*Person, *Game, error) {
 	p, err := s.people.Get(userID)
 	if err != nil || p == nil {
 		return nil, nil, ErrNoAccess
+	}
+	if n, _ := ctx.Value(cohortKey{}).(int); p.Staff && n > 0 {
+		p.Cohort = n
 	}
 	g, err := s.Ensure(ctx, p.Cohort)
 	if err != nil {
@@ -501,24 +511,32 @@ type View struct {
 }
 
 func (s *Service) View(ctx context.Context, userID string) (*View, error) {
-	_, g, err := s.gameFor(ctx, userID)
+	me, g, err := s.gameFor(ctx, userID)
 	if errors.Is(err, ErrNoGame) {
 		return &View{Proposals: []Proposal{}}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	v := &View{Game: g, MySide: sideOf(g, userID), YouArePicked: g.Turn.PickedUserID == userID, PickedName: s.name(g.Turn.PickedUserID), Teams: map[string]TeamView{}, Proposals: []Proposal{}}
+	learners, err := s.people.Learners(g.CohortNumber)
+	if err != nil {
+		return nil, err
+	}
+	byID := map[string]Person{}
+	for _, p := range learners {
+		byID[p.ID] = p
+	}
+	v := &View{Game: g, MySide: sideOf(g, userID), YouArePicked: g.Turn.PickedUserID == userID, PickedName: byID[g.Turn.PickedUserID].Name, Teams: map[string]TeamView{}, Proposals: []Proposal{}}
 	for side, t := range g.Teams {
-		tv := TeamView{Groups: t.Groups}
+		tv := TeamView{Groups: t.Groups, Members: []Member{}}
 		for _, id := range t.Members {
-			if p, err := s.people.Get(id); err == nil && p != nil {
+			if p, ok := byID[id]; ok {
 				tv.Members = append(tv.Members, Member{ID: id, Name: p.Name, Group: p.Group})
 			}
 		}
 		v.Teams[side] = tv
 	}
-	if v.MySide != "" && v.MySide == g.Turn.Side {
+	if me.Staff || (v.MySide != "" && v.MySide == g.Turn.Side) {
 		v.Proposals = g.Proposals
 	}
 	return v, nil

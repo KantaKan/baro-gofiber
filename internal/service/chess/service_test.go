@@ -192,6 +192,26 @@ func TestProposalsStayWithinTheTeam(t *testing.T) {
 	}
 }
 
+func TestStaffWatchesAnyCohort(t *testing.T) {
+	f := cohort13()
+	f["staff"] = Person{ID: "staff", Name: "TA", Staff: true}
+	s, _, _ := newSvc(f)
+	_, g := picked(t, s)
+	_ = s.Propose(context.Background(), g.Teams[White].Members[0], "d2d4", "")
+	ctx := WithCohort(context.Background(), 13)
+	v, err := s.View(ctx, "staff")
+	if err != nil || v.Game == nil || len(v.Proposals) != 1 || len(v.Teams[White].Members) == 0 {
+		t.Fatalf("staff view: %+v %v", v, err)
+	}
+	if _, err := s.Messages(ctx, "staff", RoomBlack, ""); err != nil {
+		t.Errorf("staff reads team rooms: %v", err)
+	}
+	f["a"] = Person{ID: "a", Group: "A", Cohort: 13}
+	if v, _ := s.View(WithCohort(context.Background(), 99), "a"); v.Game == nil {
+		t.Error("a learner's cohort override is ignored")
+	}
+}
+
 func TestTimeoutPlaysTheTopProposalOrRepicks(t *testing.T) {
 	s, st, now := newSvc(cohort13())
 	p, g := picked(t, s)
