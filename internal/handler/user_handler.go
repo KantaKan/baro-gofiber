@@ -1299,6 +1299,7 @@ func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
 		CheckinStyle  *string        `json:"checkin_style"`
 		CheckinRandom *bool          `json:"checkin_random"`
 		TourSeen      *bool          `json:"tour_seen"`
+		JourneyQuote  *string        `json:"journey_quote"`
 		Avatar        *domain.Avatar `json:"avatar"`
 		Skills        *[]string      `json:"skills"`
 	}
@@ -1325,6 +1326,12 @@ func (h *UserHandler) UpdateMyPreferences(c *fiber.Ctx) error {
 	}
 	if body.TourSeen != nil && *body.TourSeen {
 		set["tour_seen_at"] = time.Now()
+	}
+	if body.JourneyQuote != nil {
+		if *body.JourneyQuote != "" && !primitive.IsValidObjectID(*body.JourneyQuote) {
+			return utils.SendError(c, fiber.StatusBadRequest, "Invalid reflection")
+		}
+		set["journey_quote_id"] = *body.JourneyQuote
 	}
 	if body.Avatar != nil {
 		if err := user.AvatarAllowed(*body.Avatar, sum.Streak); err != nil {
