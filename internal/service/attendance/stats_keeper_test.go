@@ -48,7 +48,6 @@ func (k keeperRecords) FindRecords(_ interface{}, f domain.AttendanceRecordFilte
 	}
 	return out, nil
 }
-
 // ActiveCohorts returns the fixed cohorts if set, else every cohort with a record on or after since.
 func (k keeperRecords) ActiveCohorts(_ interface{}, since string) ([]int, error) {
 	if k.cohorts != nil {
